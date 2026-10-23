@@ -227,6 +227,7 @@ export function GeneralTab({
 	return (
 		<SettingsStack>
 			<FocusSections
+				rail
 				label="Compose configuration sections"
 				items={[
 					{ id: "compose-source", label: "Source", detail: "Repository and Compose file" },

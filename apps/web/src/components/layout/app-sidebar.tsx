@@ -6,108 +6,90 @@ import { usePathname } from "next/navigation";
 import { useBranding } from "@/components/branding-provider";
 import { isSidebarNavActive, sidebarNavGroups } from "@/components/layout/sidebar-data";
 import { OrgSwitcher } from "@/components/org-switcher";
-import { Logo } from "@/components/shell/logo";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import {
-	Sidebar,
-	SidebarContent,
-	SidebarFooter,
-	SidebarGroup,
-	SidebarGroupContent,
-	SidebarGroupLabel,
-	SidebarHeader,
-	SidebarMenu,
-	SidebarMenuButton,
-	SidebarMenuItem,
-	SidebarSeparator,
-	useSidebar,
-} from "@/components/ui/sidebar";
+	Sheet,
+	SheetContent,
+	SheetDescription,
+	SheetHeader,
+	SheetTitle,
+} from "@/components/ui/sheet";
+import { useSidebar } from "@/components/ui/sidebar";
 import { useCapabilities } from "@/hooks/use-capabilities";
 
-/** shadcn sidebar-07 composition, connected to Nixploy's real navigation and branding. */
+/** Mobile workspace navigation, using the standard shadcn Sheet. */
 export function AppSidebar() {
 	const pathname = usePathname();
 	const branding = useBranding();
 	const { can } = useCapabilities({ strict: true });
-	const { setOpenMobile } = useSidebar();
+	const { openMobile, setOpenMobile } = useSidebar();
 	const close = () => setOpenMobile(false);
 	return (
-		<Sidebar variant="sidebar" collapsible="offcanvas">
-			<SidebarHeader className="gap-4">
-				<Link
-					href="/dashboard"
-					aria-label={branding.productName}
-					onClick={close}
-					className="flex min-h-11 min-w-0 items-center overflow-hidden"
-				>
-					<Logo />
-				</Link>
-				<OrgSwitcher className="w-full max-w-full justify-between" />
-			</SidebarHeader>
-			<SidebarSeparator />
-			<SidebarContent>
-				<nav id="workspace-navigation" aria-label="Workspace navigation">
-					{sidebarNavGroups.map((group) => (
-						<SidebarGroup key={group.title}>
-							<SidebarGroupLabel>
-								{group.title === "Platform" ? "Workspace" : group.title}
-							</SidebarGroupLabel>
-							<SidebarGroupContent>
-								<SidebarMenu>
-									{group.items
-										.filter((item) => !item.capability || can(item.capability))
-										.map((item) => (
-											<SidebarMenuItem key={item.url}>
-												<SidebarMenuButton
-													asChild
-													isActive={isSidebarNavActive(pathname, item.url)}
-												>
-													<Link
-														href={item.url}
-														aria-current={
-															isSidebarNavActive(pathname, item.url) ? "page" : undefined
-														}
-														onClick={close}
-													>
-														<item.icon aria-hidden="true" />
-														<span>{item.title}</span>
-													</Link>
-												</SidebarMenuButton>
-											</SidebarMenuItem>
-										))}
-								</SidebarMenu>
-							</SidebarGroupContent>
-						</SidebarGroup>
-					))}
-				</nav>
-			</SidebarContent>
-			<SidebarFooter>
-				<SidebarMenu>
-					<SidebarMenuItem>
-						<SidebarMenuButton asChild>
-							<a
-								href={branding.docsUrl ?? "https://nixploy.com/docs"}
-								target="_blank"
-								rel="noreferrer"
-							>
-								<BookOpen aria-hidden="true" />
-								<span>Documentation</span>
+		<Sheet open={openMobile} onOpenChange={setOpenMobile}>
+			<SheetContent side="left" className="w-80 max-w-[calc(100vw-2rem)] overflow-y-auto">
+				<SheetHeader>
+					<SheetTitle>{branding.productName}</SheetTitle>
+					<SheetDescription>Workspace navigation</SheetDescription>
+				</SheetHeader>
+				<div className="flex min-w-0 flex-1 flex-col gap-4 px-4 pb-6">
+					<OrgSwitcher className="w-full justify-between" />
+					<Separator />
+					<nav
+						id="workspace-navigation"
+						aria-label="Mobile workspace navigation"
+						className="flex flex-col gap-5"
+					>
+						{sidebarNavGroups.map((group) => (
+							<div key={group.title} className="flex flex-col gap-1">
+								<p className="px-3 py-2 text-xs font-medium text-muted-foreground">
+									{group.title === "Platform" ? "Workspace" : group.title}
+								</p>
+								{group.items
+									.filter((item) => !item.capability || can(item.capability))
+									.map((item) => (
+										<Button
+											asChild
+											key={item.url}
+											variant={isSidebarNavActive(pathname, item.url) ? "secondary" : "ghost"}
+											className="w-full justify-start"
+										>
+											<Link
+												href={item.url}
+												onClick={close}
+												aria-current={isSidebarNavActive(pathname, item.url) ? "page" : undefined}
+											>
+												<item.icon aria-hidden="true" />
+												{item.title}
+											</Link>
+										</Button>
+									))}
+							</div>
+						))}
+					</nav>
+					<Separator />
+					<Button asChild variant="ghost" className="justify-start">
+						<a
+							href={branding.docsUrl ?? "https://nixploy.com/docs"}
+							target="_blank"
+							rel="noreferrer"
+						>
+							<BookOpen aria-hidden="true" />
+							Documentation
+							<ArrowUpRight className="ml-auto" aria-hidden="true" />
+						</a>
+					</Button>
+					{branding.supportUrl && (
+						<Button asChild variant="ghost" className="justify-start">
+							<a href={branding.supportUrl} target="_blank" rel="noreferrer">
+								<LifeBuoy aria-hidden="true" />
+								Support
 								<ArrowUpRight className="ml-auto" aria-hidden="true" />
 							</a>
-						</SidebarMenuButton>
-					</SidebarMenuItem>
-					{branding.supportUrl && (
-						<SidebarMenuItem>
-							<SidebarMenuButton asChild>
-								<a href={branding.supportUrl} target="_blank" rel="noreferrer">
-									<LifeBuoy aria-hidden="true" />
-									<span>Support</span>
-									<ArrowUpRight className="ml-auto" aria-hidden="true" />
-								</a>
-							</SidebarMenuButton>
-						</SidebarMenuItem>
+						</Button>
 					)}
-				</SidebarMenu>
-			</SidebarFooter>
-		</Sidebar>
+				</div>
+			</SheetContent>
+		</Sheet>
 	);
 }

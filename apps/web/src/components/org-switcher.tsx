@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronsUpDown, Plus } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -109,8 +110,8 @@ export function OrgSwitcher({ className }: { className?: string }) {
 					    shrink spilled over them between roughly 850 and 1000 px. */}
 					<Button
 						variant="ghost"
-						size="sm"
-						className={cn("h-10 min-w-0 shrink gap-2 px-2 font-normal", className)}
+						size="default"
+						className={cn("min-w-0 shrink gap-2 font-normal", className)}
 					>
 						{isPending ? (
 							<>
@@ -119,17 +120,15 @@ export function OrgSwitcher({ className }: { className?: string }) {
 							</>
 						) : (
 							<>
-								{logoUrl ? (
-									// biome-ignore lint/performance/noImgElement: user-supplied white-label URL
-									<img src={logoUrl} alt="" className="size-5 shrink-0 rounded object-cover" />
-								) : (
-									<span className="flex size-5 shrink-0 items-center justify-center rounded border bg-panel-inset text-xs font-medium text-foreground">
+								<Avatar className="size-6">
+									<AvatarImage src={logoUrl ?? undefined} alt="" />
+									<AvatarFallback className="text-xs">
 										{displayName?.charAt(0).toUpperCase() ?? "?"}
-									</span>
-								)}
+									</AvatarFallback>
+								</Avatar>
 								{/* A floor so the name ellipsises instead of shrinking to nothing;
 								    the search trigger next to it gives up the space instead. */}
-								<span className="min-w-12 max-w-24 truncate text-[13px] font-medium lg:max-w-48">
+								<span className="min-w-0 max-w-24 truncate text-sm font-medium lg:max-w-48">
 									{displayName ?? "Organization"}
 								</span>
 								<ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" />

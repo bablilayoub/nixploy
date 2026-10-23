@@ -31,8 +31,8 @@
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="apps/landing/public/screenshots/workspace-dark-590515bb09.png" />
-    <img src="apps/landing/public/screenshots/workspace-light-033ece53d2.png" alt="Nixploy project overview with environments, service health and deployment activity" width="960" />
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/app-workspace-dark.png" />
+    <img src="docs/images/app-workspace-light.png" alt="Nixploy project overview with environments, service health and deployment activity" width="960" />
   </picture>
 </p>
 
@@ -90,63 +90,26 @@ Product docs: [nixploy.com/docs](https://nixploy.com/docs) · API: [nixploy.com/
 
 ## Inside the workspace
 
-Projects bring environments and services together. Every service keeps its source,
-deployments, runtime, domains, environment and backups in a consistent navigation.
-The workspace and public website share monochrome light, dark and system themes.
-Navigation, forms and resource tables use shadcn/ui components. The website uses
-a centered product introduction, soft image panels and real workspace captures.
+Projects bring environments and services together. The app uses native shadcn/ui
+components and the standard New York/Zinc light, dark and system themes. A workspace
+header and route navigation lead into project cards, service configuration and
+settings. Editors, terminals, deployment activity, monitoring, templates and
+infrastructure tools remain connected to the same APIs and permissions.
 
 <details>
-<summary>Projects and environments</summary>
+<summary>Service configuration</summary>
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="apps/landing/public/screenshots/project-dark-9afe35cc6d.png" />
-  <img src="apps/landing/public/screenshots/project-light-53e51d0d56.png" alt="Project services organized by environment" width="960" />
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/app-service-dark.png" />
+  <img src="docs/images/app-service-light.png" alt="Service configuration with source, build and resource navigation" width="960" />
 </picture>
 
 </details>
 
-<details>
-<summary>Deployment history</summary>
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="apps/landing/public/screenshots/deployments-dark-e8b023aa23.png" />
-  <img src="apps/landing/public/screenshots/deployments-light-146b383060.png" alt="Deployment history with commit details and release status" width="960" />
-</picture>
-
-</details>
-
-<details>
-<summary>Fleet monitoring</summary>
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="apps/landing/public/screenshots/monitoring-dark-7ad8d9fc58.png" />
-  <img src="apps/landing/public/screenshots/monitoring-light-7b4fef7822.png" alt="Searchable service inventory and selected service monitoring" width="960" />
-</picture>
-
-</details>
-
-<details>
-<summary>Template catalog</summary>
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="apps/landing/public/screenshots/templates-dark-81822f729b.png" />
-  <img src="apps/landing/public/screenshots/templates-light-898f48a702.png" alt="Searchable catalog of applications and databases" width="960" />
-</picture>
-
-</details>
-
-<details>
-<summary>Servers</summary>
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="apps/landing/public/screenshots/servers-dark-f2b0fbc84d.png" />
-  <img src="apps/landing/public/screenshots/servers-light-60ff85d0b7.png" alt="Server inventory and infrastructure management" width="960" />
-</picture>
-
-</details>
-
-Screenshots show an example workspace, not live production data.
+The template catalog, fleet monitoring, deployment history and server management
+share the same component system. See the [workspace feature map and verification
+scope](.ui-craft/app-workspace.md) for coverage. Screenshots contain example records,
+not live production data.
 
 ## Architecture
 

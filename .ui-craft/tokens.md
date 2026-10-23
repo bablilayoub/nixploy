@@ -69,3 +69,10 @@ https://ui.shadcn.com/r/styles/new-york-v4/{component}.json. Do not introduce an
 palette, shadows, rounded pill skin, or override `data-slot` presentation globally.
 Existing legacy token names are aliases to stock semantic values, not a second theme.
 Only operational layout and accessibility rules remain outside the registry source.
+
+## Vercel composition correction
+
+This is an information-architecture and layout rebuild, not another token pass.
+Keep the official New York/Zinc palette, Geist, radius and primitive styling intact.
+Use native Card, Navigation Menu, Sheet, Tabs, Form and Empty compositions; layout
+utilities can size, align, scroll and wrap them. No new component skins or CSS files.

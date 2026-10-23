@@ -1,16 +1,12 @@
+import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
-/**
- * Tasks-page table chrome from shadcn-admin:
- * optional toolbar above, then optionally a bordered frame around the table,
- * optional footer (pagination) below — never a padded card with bg.
- */
+/** Shared data-table composition from the native shadcn Card and Table patterns. */
 export function TableCard({
 	className,
 	children,
 	toolbar,
 	footer,
-	/** When false, skip the rounded border frame (use inside SettingsSection). */
 	framed = true,
 	toolbarFramed = false,
 }: {
@@ -22,23 +18,26 @@ export function TableCard({
 	toolbarFramed?: boolean;
 }) {
 	return (
-		<div className={cn("flex min-w-0 flex-col gap-4", className)}>
-			{toolbar ? (
-				<div
+		<Card
+			className={cn(
+				"min-w-0 gap-0 overflow-hidden py-0",
+				!framed && "border-0 bg-transparent shadow-none",
+				className,
+			)}
+		>
+			{toolbar && (
+				<CardHeader
 					className={cn(
-						"flex flex-wrap items-center gap-2",
-						toolbarFramed && "rounded-lg bg-secondary px-3 py-2",
+						"flex flex-row flex-wrap items-center gap-2 border-b py-4",
+						toolbarFramed && "bg-muted/30",
+						!framed && "border-0 px-0 pt-0",
 					)}
 				>
 					{toolbar}
-				</div>
-			) : null}
-			{framed ? (
-				<div className="relative overflow-x-auto rounded-xl border bg-card">{children}</div>
-			) : (
-				children
+				</CardHeader>
 			)}
-			{footer}
-		</div>
+			<CardContent className="relative overflow-x-auto px-0">{children}</CardContent>
+			{footer && <CardFooter className="flex-wrap gap-3 border-t py-4">{footer}</CardFooter>}
+		</Card>
 	);
 }

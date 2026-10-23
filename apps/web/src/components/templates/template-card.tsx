@@ -1,6 +1,7 @@
 "use client";
 import { BookOpen, Code2, Globe, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader } from "@/components/ui/card";
 import { needsInstanceAdmin } from "./template-catalog";
 import { TemplateLogo } from "./template-logo";
 import type { TemplateSummary } from "./templates-view";
@@ -29,8 +30,8 @@ export function TemplateCard({
 		Boolean(link.href),
 	);
 	return (
-		<article className="group relative flex h-full min-w-0 flex-col [overflow-wrap:anywhere] rounded-xl border bg-card transition-colors hover:border-input">
-			<header className="flex items-start gap-3 px-5 pt-5">
+		<Card className="h-full min-w-0 gap-4 [overflow-wrap:anywhere]">
+			<CardHeader className="flex flex-row items-start gap-3">
 				<span className="flex size-11 shrink-0 items-center justify-center rounded-lg border bg-panel-inset">
 					<TemplateLogo name={template.name} logo={template.logo} className="size-7" />
 				</span>
@@ -55,11 +56,11 @@ export function TemplateCard({
 						aria-label="Needs the instance admin: host access or published ports"
 					/>
 				)}
-			</header>
-			<p className="mt-4 line-clamp-2 min-h-10 px-5 text-sm leading-5 text-muted-foreground">
-				{template.description}
-			</p>
-			<div className="mt-4 flex min-h-7 flex-wrap items-center gap-1.5 px-5">
+			</CardHeader>
+			<CardContent>
+				<CardDescription className="line-clamp-2 min-h-10">{template.description}</CardDescription>
+			</CardContent>
+			<div className="flex min-h-7 flex-wrap items-center gap-1.5 px-6">
 				{template.tags.slice(0, 3).map((tag) =>
 					onTag ? (
 						<Button
@@ -95,7 +96,7 @@ export function TemplateCard({
 					{template.source && <span className="truncate">{template.source.name}</span>}
 				</div>
 			</div>
-			<footer className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-b-xl px-4 pb-4 pt-1">
+			<CardFooter className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-t pt-4">
 				<div className="flex min-w-0 flex-wrap items-center gap-1">
 					{links.map((link) => (
 						<Button key={link.label} asChild variant="ghost" size="icon-sm">
@@ -115,14 +116,14 @@ export function TemplateCard({
 				<Button
 					size="sm"
 					variant="outline"
-					className="relative z-10 bg-card"
+					className="relative z-10"
 					onClick={onDeploy}
 					disabled={deployBlocker !== null}
 					title={deployBlocker ?? undefined}
 				>
 					Deploy
 				</Button>
-			</footer>
-		</article>
+			</CardFooter>
+		</Card>
 	);
 }

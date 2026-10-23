@@ -146,3 +146,13 @@ may repaint library slots. Keep feature-specific composition and accessibility/
 correctness guards (reflow, touch targets, semantic headings, modal focus return,
 deterministic SSR, draft retention). Preserve saved data/settings and branding
 configuration. No new library dependencies. Public marketing scope is unchanged.
+
+## Latest correction — Vercel structure, native shadcn (2026-10-23)
+
+Restoring stock colors alone did not satisfy the user. Rebuild the actual page
+composition: workspace header and route navigation, project card collection,
+service task navigation, deliberate settings hierarchy and centered authentication.
+Use existing shadcn components with their standard styles, not another global
+skin. Preserve all workflows, URLs, aliases, capabilities, confirmations, drafts
+and data. The existing stock palette remains authoritative. No extra visual
+flourishes, no new dependencies. Craft9, motion2, density5, variance3.

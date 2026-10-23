@@ -9,7 +9,6 @@ import { toast } from "sonner";
 import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
 	Form,
 	FormControl,
@@ -74,38 +73,36 @@ export function ForgotPasswordForm() {
 
 	if (sent) {
 		return (
-			<Card>
-				<CardHeader className="text-start">
-					<CardTitle as="h1" className="flex items-center justify-center gap-2 text-xl">
+			<section className="flex min-w-0 flex-col gap-8">
+				<header className="space-y-3 text-center">
+					<h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
 						<MailCheck className="size-5" />
 						Check your inbox
-					</CardTitle>
-					<CardDescription>
+					</h1>
+					<div className="text-sm text-muted-foreground">
 						If an account exists for that address, a reset link is on its way. It expires in one
 						hour.
-					</CardDescription>
-				</CardHeader>
-				<CardContent>
+					</div>
+				</header>
+				<div>
 					<Button asChild variant="outline" className="w-full">
 						<Link href="/login">Back to sign in</Link>
 					</Button>
-				</CardContent>
-			</Card>
+				</div>
+			</section>
 		);
 	}
 
 	return (
-		<Card>
-			<CardHeader className="text-start">
-				<CardTitle as="h1" className="text-[1.75rem] leading-tight tracking-tight">
-					Forgot your password?
-				</CardTitle>
-				<CardDescription>
+		<section className="flex min-w-0 flex-col gap-8">
+			<header className="space-y-3 text-center">
+				<h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Forgot your password?</h1>
+				<div className="text-sm text-muted-foreground">
 					We will email you a link to choose a new one. Your instance must have an email
 					notification channel configured.
-				</CardDescription>
-			</CardHeader>
-			<CardContent>
+				</div>
+			</header>
+			<div>
 				<Form {...form}>
 					<form
 						onSubmit={form.handleSubmit(onSubmit)}
@@ -143,7 +140,7 @@ export function ForgotPasswordForm() {
 						</Button>
 					</form>
 				</Form>
-			</CardContent>
-		</Card>
+			</div>
+		</section>
 	);
 }

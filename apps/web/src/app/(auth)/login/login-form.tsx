@@ -9,7 +9,6 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { useBranding } from "@/components/branding-provider";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
 	Form,
 	FormControl,
@@ -19,6 +18,7 @@ import {
 	FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
 import { authClient } from "@/lib/auth-client";
 import { describeError } from "@/lib/describe-error";
 import { safeNextPath } from "@/lib/safe-next-path";
@@ -158,14 +158,14 @@ export function LoginForm({
 	}
 
 	return (
-		<Card>
-			<CardHeader className="text-start">
-				<CardTitle as="h1" className="text-[1.75rem] leading-tight tracking-tight">
-					Welcome back
-				</CardTitle>
-				<CardDescription>Sign in to your {branding.productName} instance</CardDescription>
-			</CardHeader>
-			<CardContent>
+		<div className="flex flex-col gap-8">
+			<div className="space-y-3 text-center">
+				<h1 className="text-3xl font-semibold leading-tight tracking-tight">
+					Log in to {branding.productName}
+				</h1>
+				<p className="text-sm text-muted-foreground">Deploy and manage your services.</p>
+			</div>
+			<div className="space-y-6">
 				<Form {...form}>
 					<form
 						onSubmit={form.handleSubmit(onSubmit)}
@@ -213,7 +213,7 @@ export function LoginForm({
 						</Button>
 						<Link
 							href="/forgot-password"
-							className="inline-flex min-h-11 items-center text-center text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+							className="inline-flex min-h-11 items-center justify-center text-center text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
 						>
 							Forgot your password?
 						</Link>
@@ -223,9 +223,9 @@ export function LoginForm({
 				{(ssoProviders.length > 0 || passkeysAvailable) && (
 					<div className="mt-4 grid gap-4">
 						<div className="flex items-center gap-3">
-							<span className="h-px flex-1 bg-border" />
+							<Separator className="flex-1" />
 							<span className="text-xs leading-relaxed break-words text-muted-foreground">or</span>
-							<span className="h-px flex-1 bg-border" />
+							<Separator className="flex-1" />
 						</div>
 						{passkeysAvailable && (
 							<Button
@@ -256,7 +256,7 @@ export function LoginForm({
 						))}
 					</div>
 				)}
-			</CardContent>
-		</Card>
+			</div>
+		</div>
 	);
 }

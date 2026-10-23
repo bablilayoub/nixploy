@@ -26,7 +26,7 @@ export function PageHeader({
 		typeof description === "string" && description.length > 0 ? description : undefined;
 
 	return (
-		<header className={cn("mb-2 flex min-w-0 flex-col gap-3", className)}>
+		<header className={cn("mb-2 flex min-w-0 flex-col gap-4", className)}>
 			{breadcrumb && <div className="text-xs text-muted-foreground">{breadcrumb}</div>}
 			<div
 				className={cn(
@@ -35,7 +35,7 @@ export function PageHeader({
 				)}
 			>
 				<div className="flex min-w-0 flex-1 flex-col gap-1.5">
-					<h1 className="text-2xl leading-tight font-semibold tracking-tight break-words sm:text-[1.75rem]">
+					<h1 className="text-2xl leading-tight font-semibold tracking-tight break-words sm:text-3xl">
 						{title}
 					</h1>
 					{/* Wraps rather than truncates: page descriptions carry links and

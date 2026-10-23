@@ -19,7 +19,6 @@ import { z } from "zod";
 
 import { useBranding } from "@/components/branding-provider";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
 	Form,
 	FormControl,
@@ -247,17 +246,17 @@ export function SetupForm() {
 
 	if (status.isPending) {
 		return (
-			<Card>
-				<CardHeader className="text-start">
+			<section className="flex min-w-0 flex-col gap-8">
+				<header className="space-y-3 text-center">
 					<Skeleton className="mx-auto h-7 w-48" />
 					<Skeleton className="mx-auto mt-2 h-4 w-64" />
-				</CardHeader>
-				<CardContent className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
+				</header>
+				<div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
 					<Skeleton className="h-10 w-full" />
 					<Skeleton className="h-10 w-full" />
 					<Skeleton className="h-10 w-full" />
-				</CardContent>
-			</Card>
+				</div>
+			</section>
 		);
 	}
 
@@ -268,19 +267,19 @@ export function SetupForm() {
 	return (
 		<div className="flex flex-col gap-4">
 			<StepIndicator current={step} />
-			<Card>
+			<section className="flex min-w-0 flex-col gap-8">
 				{step === "welcome" && (
 					<>
-						<CardHeader className="text-start">
-							<CardTitle as="h1" className="text-[1.75rem] leading-tight tracking-tight">
+						<header className="space-y-3 text-center">
+							<h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
 								Welcome to {branding.productName}
-							</CardTitle>
-							<CardDescription>
+							</h1>
+							<div className="text-sm text-muted-foreground">
 								Self-hosted PaaS on this server. A short setup creates your owner account and
 								organization — public registration stays closed afterward.
-							</CardDescription>
-						</CardHeader>
-						<CardContent className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
+							</div>
+						</header>
+						<div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
 							<ul className="grid gap-2 text-sm text-muted-foreground">
 								<li className="flex gap-2">
 									<Check className="mt-0.5 size-4 shrink-0 text-foreground" />
@@ -299,21 +298,19 @@ export function SetupForm() {
 								Continue
 								<ArrowRight className="size-4" />
 							</Button>
-						</CardContent>
+						</div>
 					</>
 				)}
 
 				{step === "owner" && (
 					<>
-						<CardHeader className="text-start">
-							<CardTitle as="h1" className="text-[1.75rem] leading-tight tracking-tight">
-								Owner account
-							</CardTitle>
-							<CardDescription>
+						<header className="space-y-3 text-center">
+							<h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Owner account</h1>
+							<div className="text-sm text-muted-foreground">
 								This is the first admin. You will sign in with this email and password.
-							</CardDescription>
-						</CardHeader>
-						<CardContent>
+							</div>
+						</header>
+						<div>
 							<Form {...ownerForm}>
 								<form
 									onSubmit={ownerForm.handleSubmit(() => void goOrgFromOwner())}
@@ -448,21 +445,19 @@ export function SetupForm() {
 									</div>
 								</form>
 							</Form>
-						</CardContent>
+						</div>
 					</>
 				)}
 
 				{step === "org" && (
 					<>
-						<CardHeader className="text-start">
-							<CardTitle as="h1" className="text-[1.75rem] leading-tight tracking-tight">
-								Organization
-							</CardTitle>
-							<CardDescription>
+						<header className="space-y-3 text-center">
+							<h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Organization</h1>
+							<div className="text-sm text-muted-foreground">
 								Projects, services, and teammates live under this organization.
-							</CardDescription>
-						</CardHeader>
-						<CardContent>
+							</div>
+						</header>
+						<div>
 							<Form {...orgForm}>
 								<form
 									onSubmit={orgForm.handleSubmit(() => void goReadyFromOrg())}
@@ -512,21 +507,19 @@ export function SetupForm() {
 									</div>
 								</form>
 							</Form>
-						</CardContent>
+						</div>
 					</>
 				)}
 
 				{step === "ready" && !complete && (
 					<>
-						<CardHeader className="text-start">
-							<CardTitle as="h1" className="text-[1.75rem] leading-tight tracking-tight">
-								Ready to create
-							</CardTitle>
-							<CardDescription>
+						<header className="space-y-3 text-center">
+							<h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Ready to create</h1>
+							<div className="text-sm text-muted-foreground">
 								Confirm the details below. This creates your owner account and organization.
-							</CardDescription>
-						</CardHeader>
-						<CardContent className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
+							</div>
+						</header>
+						<div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
 							{formError && <FormError message={formError} />}
 							<dl className="grid gap-3 rounded-lg border bg-muted/40 p-4 text-sm">
 								<div className="grid gap-0.5">
@@ -562,21 +555,19 @@ export function SetupForm() {
 									{submitting ? "Creating…" : ownerCreated ? "Retry setup" : "Create instance"}
 								</Button>
 							</div>
-						</CardContent>
+						</div>
 					</>
 				)}
 
 				{step === "ready" && complete && (
 					<>
-						<CardHeader className="text-start">
-							<CardTitle as="h1" className="text-[1.75rem] leading-tight tracking-tight">
-								You&apos;re in
-							</CardTitle>
-							<CardDescription>
+						<header className="space-y-3 text-center">
+							<h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">You&apos;re in</h1>
+							<div className="text-sm text-muted-foreground">
 								{orgForm.getValues("orgName").trim()} is ready. Here&apos;s a sensible next path.
-							</CardDescription>
-						</CardHeader>
-						<CardContent className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
+							</div>
+						</header>
+						<div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
 							<ul className="grid gap-3 text-sm">
 								<li className="flex gap-3">
 									<LayoutTemplate className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
@@ -609,10 +600,10 @@ export function SetupForm() {
 							<Button type="button" className="w-full" onClick={openDashboard}>
 								Open dashboard
 							</Button>
-						</CardContent>
+						</div>
 					</>
 				)}
-			</Card>
+			</section>
 			<p className="text-center text-xs leading-relaxed break-words text-muted-foreground">
 				Step {Math.min(stepIndex + 1, STEPS.length)} of {STEPS.length}
 				{step !== "welcome" ? ` · ${STEP_LABELS[step]}` : null}

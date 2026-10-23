@@ -7,7 +7,6 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
 	Form,
 	FormControl,
@@ -79,18 +78,18 @@ export function TwoFactorForm() {
 	}
 
 	return (
-		<Card>
-			<CardHeader className="text-start">
-				<CardTitle as="h1" className="text-[1.75rem] leading-tight tracking-tight">
+		<section className="flex min-w-0 flex-col gap-8">
+			<header className="space-y-3 text-center">
+				<h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
 					Two-factor authentication
-				</CardTitle>
-				<CardDescription>
+				</h1>
+				<div className="text-sm text-muted-foreground">
 					{backupMode
 						? "Use an unused backup code saved when you enabled two-factor authentication."
 						: "Enter the 6-digit code from your authenticator app."}
-				</CardDescription>
-			</CardHeader>
-			<CardContent>
+				</div>
+			</header>
+			<div>
 				{backupMode ? (
 					<form onSubmit={verifyBackupCode} className="grid gap-4">
 						<div className="grid gap-2">
@@ -178,7 +177,7 @@ export function TwoFactorForm() {
 						<Link href={`/login?next=${encodeURIComponent(nextPath)}`}>Back to sign in</Link>
 					</Button>
 				</div>
-			</CardContent>
-		</Card>
+			</div>
+		</section>
 	);
 }

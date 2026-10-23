@@ -1,9 +1,10 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { Bell, KeyRound, LogOut, User } from "lucide-react";
+import { Bell, BookOpen, KeyRound, LifeBuoy, LogOut, User } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useBranding } from "@/components/branding-provider";
 import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
@@ -32,6 +33,7 @@ const settingsItems = [
 
 /** Compact avatar menu for the top header — shadcn-admin ProfileDropdown pattern. */
 export function ProfileDropdown({ onNavigate }: { onNavigate?: () => void }) {
+	const branding = useBranding();
 	const router = useRouter();
 	const queryClient = useQueryClient();
 	const { data: session, isPending } = useSession();
@@ -84,6 +86,21 @@ export function ProfileDropdown({ onNavigate }: { onNavigate?: () => void }) {
 						</DropdownMenuItem>
 					))}
 				</DropdownMenuGroup>
+				<DropdownMenuSeparator />
+				<DropdownMenuItem asChild>
+					<a href={branding.docsUrl ?? "https://nixploy.com/docs"} target="_blank" rel="noreferrer">
+						<BookOpen aria-hidden="true" />
+						Documentation
+					</a>
+				</DropdownMenuItem>
+				{branding.supportUrl && (
+					<DropdownMenuItem asChild>
+						<a href={branding.supportUrl} target="_blank" rel="noreferrer">
+							<LifeBuoy aria-hidden="true" />
+							Support
+						</a>
+					</DropdownMenuItem>
+				)}
 				<DropdownMenuSeparator />
 				<DropdownMenuItem variant="destructive" onSelect={handleSignOut}>
 					<LogOut className="size-4" />

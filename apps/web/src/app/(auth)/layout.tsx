@@ -3,12 +3,12 @@ import Link from "next/link";
 import { ModeToggle } from "@/components/mode-toggle";
 import { Logo } from "@/components/shell/logo";
 
-/** The shadcn login-03 composition; each auth flow retains its own Card and Form. */
+/** Centered shadcn authentication composition shared by every account flow. */
 export default async function AuthLayout({ children }: { children: React.ReactNode }) {
 	const branding = await publicBranding();
 	return (
 		<div className="flex auth-workspace min-h-svh flex-col bg-background">
-			<header className="flex min-h-20 items-center justify-between gap-4 px-5 py-4 sm:px-8">
+			<header className="flex min-h-16 items-center justify-between gap-4 px-5 py-4 sm:px-8">
 				<Link href="/" className="flex min-h-11 min-w-0 max-w-[calc(100%_-_56px)] items-center">
 					<Logo />
 				</Link>
@@ -16,7 +16,7 @@ export default async function AuthLayout({ children }: { children: React.ReactNo
 			</header>
 			<main
 				id="main-content"
-				className="flex flex-1 items-start justify-center sm:items-center px-4 py-10 sm:py-16"
+				className="flex flex-1 items-start justify-center px-6 py-16 sm:items-center sm:py-20"
 			>
 				<div className="w-full min-w-0 max-w-sm">{children}</div>
 			</main>

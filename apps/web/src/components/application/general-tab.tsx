@@ -16,6 +16,7 @@ export function GeneralTab() {
 	const buildsFromSource = application.sourceType !== "docker";
 	return (
 		<FocusSections
+			rail
 			label="Application configuration sections"
 			items={[
 				{

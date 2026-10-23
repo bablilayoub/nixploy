@@ -11,9 +11,9 @@ export function Main({ as: Tag = "main", fixed, fluid, className, ...props }: Ma
 		<Tag
 			data-layout={fixed ? "fixed" : "auto"}
 			className={cn(
-				"mx-auto w-full min-w-0 px-4 py-6 sm:px-6 lg:px-10 lg:py-9",
+				"mx-auto w-full min-w-0 px-4 py-8 sm:px-6 lg:px-10 lg:py-10",
 				fixed && "flex grow flex-col overflow-hidden",
-				!fluid && "max-w-[1280px]",
+				!fluid && "max-w-screen-2xl",
 				className,
 			)}
 			{...props}

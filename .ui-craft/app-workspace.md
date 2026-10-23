@@ -1,19 +1,38 @@
-# Actual app — stock shadcn/ui
+# Actual app — Vercel structure with native shadcn/ui
 
-The latest user instruction is authoritative: **pure shadcn, no custom theme**.
-The actual app uses its existing New York/Zinc configuration, official light/dark
-palette, radius scale, Card, Sidebar, Tabs, forms, menus and dialogs. Removed the
-789-line Fieldwork stylesheet and its custom surface, navigation and auth skins.
-This supersedes the previous app visual directions. The public Mobbin-reference
-website remains unchanged in this correction.
+The user rejected the previous theme-only correction and asked for a full app
+rebuild with Vercel-style structure and native shadcn components. The current
+implementation changes the compositions while retaining the official New York/
+Zinc palette, primitive styles, Geist typefaces and all existing feature wiring.
+No new dependency, server API, schema, migration or encryption change.
 
-No new dependency, server API, schema, migration or encryption change. Existing
-branding settings remain available and stored values are preserved. Specialized
-CodeMirror, Recharts and xterm engines remain inside shared shadcn surfaces.
+## Rebuilt compositions
+
+- Workspace: branded organization header, native Navigation Menu route links,
+  command search/account/theme controls, and a native Sheet menu on mobile. The
+  old permanent desktop sidebar is replaced. Docs/support links remain reachable.
+- Projects: searchable Card collection with environment links, truthful service
+  health, counts and creation times. Workspace metrics, deployment activity/trends
+  and setup guidance remain available below the collection.
+- Services: contextual header and canonical service tabs, then a desktop vertical
+  task rail for application/Compose/database configuration. Mobile uses a named
+  Select. Panels stay mounted and local drafts survive section changes.
+- Settings: dedicated grouped settings navigation, wider content area, consistent
+  Cards, related-task tabs, and clear action footers. Contextual hashes remain.
+- Data tools: native Card/Header/Content/Footer compositions for shared tables,
+  toolbars and pagination; native segmented Tabs for nested operational workspaces.
+- Templates: native Cards for identity, requirements, descriptions and actions,
+  retaining filters, external links, details and the full deployment wizard.
+- Auth: centered semantic forms across login, forgot/reset password, 2FA, invitations
+  and all setup steps. Standard shadcn controls and error messages remain. The old
+  outer Card around every auth form is removed.
+- States: shared query failures use the native Empty component with retry; loading
+  placeholders are width-bounded. Operational editors/charts/terminals retain their
+  engines inside the shared UI system.
 
 | Family | Preserved capabilities | Presentation |
 |---|---|---|
-| Shell and projects | Organization switch, capability filtering, command palette, profile/theme, connection/deploy/activity feedback, projects/environments/tags/upstreams/GitOps/recovery | Quiet sidebar, compact summary and project/service tables |
+| Shell and projects | Organization switch, capability filtering, command palette, profile/theme, connection/deploy/activity feedback, projects/environments/tags/upstreams/GitOps/recovery | Workspace header, project cards and mobile Sheet |
 | Application | Every source/provider and builder, uploads, resources, deploy/ref/start/stop/Copilot, canonical service tabs and aliases | Focused Source / Build / Resources, primary Deploy and labelled Actions menu |
 | Compose | Stored/repository files, editor, deployment/network/isolation flags, lifecycle commands, previews, schedules, mounts and rollback | Focused Source / Deployment / Lifecycle commands, shared draft retained |
 | Five databases | Identity, version/upgrade safeguards, credentials, external access, connections, runtime, backups where supported, environment, settings | Focused Identity / Engine / Credentials / External access |
@@ -24,86 +43,66 @@ CodeMirror, Recharts and xterm engines remain inside shared shadcn surfaces.
 | Platform/integrations | Servers/SSH/certs/Git/registries/storage/template sources; routing/DNS/proxy/egress/health/maintenance/updates/AI/users/SSO/branding | Open form layouts; legacy hashes and contextual links reach the right task |
 | Public/auth/failure | Login, reset/forgot password, 2FA, setup, invitations, status, maintenance, docs API, forbidden/not-found/error/retry | Quiet authentication shell, light/dark/system preserved |
 
-## Stock components and compatibility
+## Evidence and limits
 
-Restored 31 existing primitives from the official New York v4 registry. Theme
-values come directly from the official Zinc `inlineColors` light/dark records:
-[registry](https://ui.shadcn.com/r/styles/new-york-v4/button.json),
-[Zinc colors](https://ui.shadcn.com/r/colors/zinc.json).
-Legacy semantic names alias stock tokens; they do not introduce another palette.
+Private reproducible receipts and backups live under
+`.nixploy-data/verification/vercel-native/` (ignored). All ordinary browser checks
+use the isolated Postgres fixture on port 59580. First-run setup uses the separate
+`nixploy_fieldwork_vercel_setup` database there, never the primary on 54329.
 
-Preserved necessary behavior around those defaults: controlled-dialog focus
-return, viewport-bounded confirmations, inert collapsed navigation, announced
-validation, labelled sliders, reachable scrolling tabs, coarse-pointer targets,
-mobile input text size, deterministic skeleton widths, sticky table headings,
-reduced motion, scroll locking and wrapping under enlarged text. These safeguards
-are not an alternate visual theme. Settings use default Card composition, section
-navigation uses default Tabs, and authentication retains the standard Card.
+Current coverage: route/theme sweep, responsive layouts, dialog workflows, keyboard/
+focus/navigation, full template setup, existing control behavior, query failures,
+offline/reconnect and dirty-navigation cancel/discard. Tests use browser-only
+response fixtures for external import planning and AI suggestions; no import,
+deploy, external model call or user settings save is submitted. All 606 tracked
+query/mutation/key source occurrences match the pre-correction commit.
 
-## Product previews
+Review caught a clipped service rail caused by nested Tabs height selectors and
+route links incorrectly given tab semantics. Intrinsic rail sizing and native
+Navigation Menu links address those findings. Geometry checks assert every rail
+entry is actually inside the visible rail; checking element existence alone is
+insufficient. Auth checks now target the new form rather than an obsolete Card.
 
-Actual production fixture screens; demo records only, never user data.
+[Light app preview](../docs/images/app-workspace-light.png) ·
+[Dark app preview](../docs/images/app-workspace-dark.png)
 
-[Light workspace](../docs/images/app-workspace-light.png) ·
-[Dark workspace](../docs/images/app-workspace-dark.png)
+Production builds, typecheck, strict Biome, knip, web/server tests and rendered
+checks must pass before the live switch. Browser coverage is not a full screen-
+reader certification or a deployment of every service/source combination. Preserve
+the original runtime environment, data/config paths, database and encryption keys.
+Back up before the graceful switch, compare all table/settings/config hashes and
+retain the old build for rollback. The public website on 3373 is outside this app
+composition correction.
 
-## Verification and practical limits
+The shared TableCard keeps the same Card and Header mounted when data finishes
+loading and framing changes. A regression check holds real service queries, opens
+the tag dialog, edits its name/color, releases the queries, and verifies the dialog
+and unsaved values survive. No tag is saved. Loading/error/retry is also checked
+at 320px with 200% text.
 
-Private reproducible evidence is ignored under
-`.nixploy-data/verification/shadcn-defaults/`. Fixture checks use Postgres on
-59580; first-run setup uses a separate database there. The primary database on
-54329 is never reset, seeded, restored or migrated by this UI correction.
+## Verification receipts
 
-- 392 production route/theme captures cover canonical and legacy service tabs,
-  settings, focused sections, monitoring and public/auth routes. No page/hydration
-  errors, document overflow or unnamed visible controls detected.
-- 408 responsive captures cover 34 families at 320/390/768px, 100/200% text and
-  both themes. Additional populated migration and notification forms exposed
-  narrow-width issues; their grid/text wrapping was corrected and retested.
-- 216 dialog cases cover 36 workflows at desktop/mobile widths in both themes,
-  including focus containment, Escape and focus return. The final production
-  rerun includes the notification correction.
-- 104 route/control captures check builder keyboard operation and draft retention,
-  disclosures, file/color inputs, command palette and template details. Separate
-  28-control, four migration-sequence, 18 template-step, 16 deep-link/role-display,
-  12 real error-boundary and 14 accessibility/theme checks cover specific behavior.
-- 16 header cases cover four widths, enlarged text and both themes. A visual check
-  caught overlapping header tools that document-width checks alone did not; tools
-  now wrap and the existing ResizeObserver updates sticky offsets.
-- Dirty navigation cancel/discard, filter empty/reset, offline/reconnect, reduced
-  motion and query loading/error/retry recover in both modes. All five first-run
-  steps complete in the separate setup database; empty dashboards render in both
-  modes. Browser-only mocked responses exercise import planning, Copilot suggestions,
-  inherited variables and owner-only confirmations without external calls or saves.
-- All 606 query/mutation/key source occurrences match the pre-correction commit
-  (204 query options, 230 mutation options, 172 keys). This is a preservation
-  guard, not proof from a count alone.
-- Web typecheck/production build, strict workspace Biome, knip, 119 web tests and
-  3,353 server tests pass (137 optional server tests skipped). Independent design
-  and accessibility reviews closed their actionable findings. Browser coverage is
-  not a full assistive-technology certification or a live deployment of each service.
+Verification for the rebuild includes 392 route/theme captures, 408 responsive
+cases, 68 additional tablet cases, 216 dialogs, 104 selected routes/controls, 28
+focused controls, four migration sequences, 18 template steps, 16 deep-link/role
+cases, 12 real boundaries, six login and 12 navigation cases. Final fixes receive
+targeted rechecks. Four held-query transition cases preserve open tag dialogs and
+drafts. All five first-run steps complete in the dedicated setup DB. Production
+build/typecheck, strict Biome (1,196 files), knip, 119 web tests and 3,353 server
+tests pass (137 optional server tests skipped).
 
-One hydration warning occurred while an earlier test changed root font size before
-hydration; it did not recur in 40 follow-up visits or the later route/reflow checks.
-No application hydration suppression or speculative behavior patch was added.
+The running build is `.next-vercel-live` on 3000. Its restart compares all 72
+tables/240 rows, 62 config files and original settings/environment files against
+the backup. The previous `.next-vercel-final` and `.next-stock-ship` builds remain
+available. Main landmarks, native route-link semantics and visible active route
+state are covered by the final navigation checks. The first live check still used
+the removed sidebar's main landmark; the shell now renders its own semantic Main.
 
-## Live data preservation
+[Light service configuration](../docs/images/app-service-light.png) ·
+[Dark service configuration](../docs/images/app-service-dark.png)
 
-The final production build is `.next-stock-ship`, served by the original all-role
-custom server on localhost:3000. The existing runtime environment, config path,
-database URL and encryption keys are retained. A private custom-format database
-backup is validated with `pg_restore --list`; config files are backed up before
-the graceful switch. Restart comparisons cover 72 tables/240 rows, all 62 persistent
-config files and the original Desktop environment/type files. Post-start browser
-verification uses an existing session and submits no settings or deployment changes.
-The previous `.next-shadcn-release` build remains available for rollback. The public
-website stays on localhost:3373. Exact rollout results are recorded in private
-`launcher.json`, snapshots and the field-by-field settings comparison.
-
-Final restart hashes matched every table, all 62 config files and original settings
-files. After the read-only browser checks, all 72 table hashes and user settings
-still match; the only config change is the periodic platform health report's
-`checkedAt` timestamp. Its active alerts and cooldowns are unchanged. Existing-session
-verification passes 12 route/control and two saved-application checks in both modes.
-Health/readiness return 200, the public website returns 200 and test listeners are
-stopped. No user's stored setting or data was changed by the UI work.
+Final existing-session checks pass 12 route/control and two saved-application
+cases in both themes. Post-read verification preserves every other table/config
+hash; only the automatic `webServer.updateLastCheckedAt` field advances. Original
+environment/type files and stored user settings remain unchanged. The live server
+is ready on 3000, the website returns 200 on 3373, and test listeners are stopped.

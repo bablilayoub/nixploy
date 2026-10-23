@@ -3,6 +3,14 @@
 import { AlertTriangle } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import {
+	Empty,
+	EmptyContent,
+	EmptyDescription,
+	EmptyHeader,
+	EmptyMedia,
+	EmptyTitle,
+} from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import { describeError } from "@/lib/describe-error";
 
@@ -22,19 +30,22 @@ export function LoadError({
 	onRetry?: () => void;
 }) {
 	return (
-		<div
-			role="alert"
-			className="flex min-h-48 flex-col items-center justify-center gap-3 rounded-lg border border-destructive/25 bg-card px-5 py-10 text-center"
-		>
-			<AlertTriangle className="mb-1 size-8 text-muted-foreground" />
-			<p className="text-base font-semibold tracking-tight">{title}</p>
-			{message ? <p className="max-w-sm text-sm text-muted-foreground">{message}</p> : null}
-			{onRetry ? (
-				<Button variant="outline" size="sm" className="mt-2" onClick={onRetry}>
-					Retry
-				</Button>
-			) : null}
-		</div>
+		<Empty role="alert" className="border bg-card">
+			<EmptyHeader>
+				<EmptyMedia variant="icon">
+					<AlertTriangle aria-hidden="true" />
+				</EmptyMedia>
+				<EmptyTitle>{title}</EmptyTitle>
+				{message && <EmptyDescription>{message}</EmptyDescription>}
+			</EmptyHeader>
+			{onRetry && (
+				<EmptyContent>
+					<Button variant="outline" size="sm" onClick={onRetry}>
+						Retry
+					</Button>
+				</EmptyContent>
+			)}
+		</Empty>
 	);
 }
 

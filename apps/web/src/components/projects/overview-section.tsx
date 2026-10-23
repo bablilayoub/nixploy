@@ -54,8 +54,12 @@ export function OverviewCards({ onAttention }: { onAttention: () => void }) {
 		{ label: "Need attention", value: services?.error ?? 0, detail: "Services reporting an error" },
 	];
 	return (
-		<section aria-label="Workspace summary" aria-busy={isPending} className="border-y py-4">
-			<dl className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-4">
+		<section
+			aria-label="Workspace summary"
+			aria-busy={isPending}
+			className="rounded-xl border bg-card p-6"
+		>
+			<dl className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,10rem),1fr))] gap-x-6 gap-y-5">
 				{metrics.map((metric) => (
 					<div key={metric.label} className="min-w-0">
 						<dt className="text-xs text-muted-foreground">{metric.label}</dt>
@@ -64,7 +68,7 @@ export function OverviewCards({ onAttention }: { onAttention: () => void }) {
 								{isPending ? (
 									<Skeleton className="h-7 w-12" />
 								) : (
-									<span className="text-2xl font-medium tracking-tight tabular-nums">
+									<span className="text-xl font-semibold tracking-tight tabular-nums">
 										{metric.value}
 									</span>
 								)}
@@ -120,7 +124,7 @@ export function RecentDeployments() {
 							// biome-ignore lint/suspicious/noArrayIndexKey: static skeleton placeholders
 							<div key={index} className="flex items-center gap-3">
 								<Skeleton className="size-8 rounded-full" />
-								<div className="flex-1 space-y-1">
+								<div className="min-w-0 flex-1 space-y-1">
 									<Skeleton className="h-4 w-40" />
 									<Skeleton className="h-3 w-28" />
 								</div>

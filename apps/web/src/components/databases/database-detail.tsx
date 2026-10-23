@@ -655,6 +655,7 @@ function GeneralTab({
 
 	return (
 		<FocusSections
+			rail
 			label="Database configuration sections"
 			items={[
 				{ id: "database-identity", label: "Identity" },

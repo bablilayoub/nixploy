@@ -5,6 +5,44 @@ and move items between the backlog sections. Durable knowledge belongs in
 [`../CLAUDE.md`](../CLAUDE.md) / [`codebase-map.md`](./codebase-map.md); this
 file is for **state** and **tasks**.
 
+## Native shadcn app layout rebuild — 2026-10-23
+
+The latest request requires a structural app rebuild with Vercel-style layouts,
+using native shadcn components and no custom theme. The permanent desktop rail is
+replaced with a workspace header and native Navigation Menu links; mobile uses a
+Sheet. Projects use Cards with environment links and service health. Application,
+Compose and database configuration use a desktop task rail and mobile Select.
+Settings, shared table toolbars/pagination, templates, query states and every auth
+flow use consistent native compositions. The stock New York/Zinc palette remains;
+there are no new theme tokens, stylesheets, dependencies, server APIs or schemas.
+
+All 606 query/mutation/key source occurrences are unchanged. Routes, aliases,
+capabilities, lifecycle actions, confirmations, drafts and background-operation
+feedback remain. The shared table container keeps its root/header mounted while
+loading changes the frame, preventing open dialogs and unsaved toolbar edits from
+being discarded. Main-content landmarks and active route styling are verified.
+
+Rebuild verification: production build/typecheck, strict Biome (1,196 files), knip,
+119 web and 3,353 server tests pass (137 optional server tests skipped). Browser
+coverage includes 392 route/theme, 408 responsive, 68 additional tablet, 216 dialog,
+104 route/control, 28 focused controls, four migration, 18 template, 16 deep-link/
+role, 12 boundary, six login and 12 navigation cases. Four held-query regression
+cases prove tag drafts survive service loading. Enlarged loading/error/retry and
+all five fresh setup steps pass in isolated databases. Final fixes receive focused
+rechecks; counts describe the rebuild's verification, not a screen-reader or live
+service-deployment certification. Independent review findings are closed.
+
+The final build is `.next-vercel-live`, on localhost:3000 with the original all-role
+custom server, database, config path and encryption keys. Database/config backups
+and prior builds are retained. Restart hashes match 72 tables/240 rows, 62 config
+files and original environment/settings. Existing-session checks pass; later reads
+advance only the automatic `webServer.updateLastCheckedAt` field. No primary reset,
+seed, restore or schema
+migration is performed. README previews now show the actual native app composition.
+The public website remains on 3373. PR 34 stays a draft; the separate existing
+security CI baseline below is unchanged. [Coverage and limits](../.ui-craft/app-workspace.md).
+Private evidence/backups: `.nixploy-data/verification/vercel-native/`.
+
 ## Stock shadcn app, no custom theme — 2026-10-23
 
 Latest user correction supersedes earlier app themes: use **pure shadcn/ui**.

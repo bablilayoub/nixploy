@@ -56,7 +56,11 @@ export function SettingsSection({
 					</div>
 				</CardContent>
 			)}
-			{actions && <CardFooter>{actions}</CardFooter>}
+			{actions && (
+				<CardFooter className="flex-wrap justify-end gap-2 border-t bg-muted/30 py-4">
+					{actions}
+				</CardFooter>
+			)}
 		</Card>
 	);
 }
