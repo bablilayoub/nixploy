@@ -136,7 +136,10 @@ export function GettingStartedCard({ firstProjectId }: { firstProjectId?: string
 				)}
 				<ol className="divide-y">
 					{steps.map((step) => (
-						<li key={step.key} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
+						<li
+							key={step.key}
+							className="grid grid-cols-[1rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2 py-2.5 first:pt-0 last:pb-0 sm:flex sm:gap-3"
+						>
 							{step.done ? (
 								<Check className="size-4 shrink-0 text-success" aria-label="Done" />
 							) : (
@@ -145,18 +148,25 @@ export function GettingStartedCard({ firstProjectId }: { firstProjectId?: string
 							<div className="flex min-w-0 flex-1 flex-col">
 								<span
 									className={cn(
-										"truncate text-sm",
+										"text-sm break-words sm:truncate",
 										step.done ? "text-muted-foreground line-through" : "font-medium",
 									)}
 								>
 									{step.label}
 								</span>
 								{!step.done && (
-									<span className="truncate text-xs text-muted-foreground">{step.hint}</span>
+									<span className="text-xs break-words text-muted-foreground sm:truncate">
+										{step.hint}
+									</span>
 								)}
 							</div>
 							{!step.done && (
-								<Button asChild variant="outline" size="sm" className="shrink-0">
+								<Button
+									asChild
+									variant="outline"
+									size="sm"
+									className="col-start-2 justify-self-start sm:shrink-0"
+								>
 									<Link href={step.href}>{step.cta}</Link>
 								</Button>
 							)}

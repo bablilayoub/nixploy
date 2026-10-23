@@ -78,20 +78,20 @@ export function TopNav() {
 
 	return (
 		<header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-md">
-			<div className="mx-auto flex h-14 w-full max-w-[1400px] items-center gap-3 px-4 sm:px-6">
-				<div className="flex min-w-0 items-center gap-2">
+			<div className="mx-auto flex h-14 w-full max-w-[1400px] items-center gap-1 px-4 sm:gap-3 sm:px-6">
+				<div className="flex min-w-0 items-center gap-0 sm:gap-2">
 					<Link href="/dashboard" className="hidden shrink-0 sm:inline-flex">
 						<Logo />
 					</Link>
 					<Link
 						href="/dashboard"
-						className="inline-flex shrink-0 sm:hidden"
+						className="inline-flex size-11 shrink-0 items-center justify-center sm:hidden"
 						aria-label={branding.productName}
 					>
 						<LogoMark className="size-7" />
 					</Link>
 					<Separator orientation="vertical" className="hidden h-4 sm:block" />
-					<OrgSwitcher />
+					<OrgSwitcher className="h-11 gap-1 px-1 sm:h-8 sm:gap-2 sm:px-2" />
 				</div>
 
 				<nav className="ms-1 hidden items-center gap-0.5 xl:flex">
@@ -106,7 +106,7 @@ export function TopNav() {
 					))}
 				</nav>
 
-				<div className="ms-auto flex items-center gap-1.5">
+				<div className="ms-auto flex shrink-0 items-center gap-0 sm:gap-1.5">
 					{updateAvailable ? (
 						<Button
 							asChild
@@ -126,7 +126,12 @@ export function TopNav() {
 
 					<Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
 						<SheetTrigger asChild>
-							<Button variant="ghost" size="icon" className="xl:hidden" aria-label="Open menu">
+							<Button
+								variant="ghost"
+								size="icon"
+								className="size-11 sm:size-9 xl:hidden"
+								aria-label="Open menu"
+							>
 								<Menu className="size-5" />
 							</Button>
 						</SheetTrigger>

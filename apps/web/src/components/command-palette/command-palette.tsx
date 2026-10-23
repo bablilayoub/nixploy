@@ -739,7 +739,7 @@ export function CommandPalette({ className }: { className?: string }) {
 				onClick={() => setOpen(true)}
 				aria-label="Search"
 				className={cn(
-					"inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground sm:hidden",
+					"inline-flex size-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground sm:hidden",
 					className,
 				)}
 			>

@@ -5,6 +5,34 @@ and move items between the backlog sections. Durable knowledge belongs in
 [`../CLAUDE.md`](../CLAUDE.md) / [`codebase-map.md`](./codebase-map.md); this
 file is for **state** and **tasks**.
 
+## Reviewed original-design refinements — 2026-10-23
+
+Applied the four approved findings while retaining the restored visual direction:
+resource sliders have associated accessible labels; the project directory precedes
+analytics in DOM and visual order at every breakpoint; mobile setup instructions
+wrap with actions below; mobile header controls have separate 44px targets.
+Fixed slider thumb identity so repeated keyboard changes retain focus. Data-fetch,
+mutation, permission, draft and save behavior are unchanged.
+
+Production build/typecheck, strict Biome, 119 web tests and 3,353 server tests pass
+(137 optional server tests skipped). The focused browser pass has 32 light/dark
+captures and 57 passing checks at 320, 375, 768 and 1280px, including menu/search
+interactions and slider keyboard edits in an isolated database. The new
+`.next-original-polish` build runs on localhost:3000; the original website stays
+on3373. Backups precede restart and exact comparisons preserve 72 tables / 241
+rows, saved environment settings and 62 persistent configuration files. Previous
+build retained. Sixteen read-only live checks pass. Post-check snapshots preserve
+all 241 rows, environment settings and persistent files; only the automatic update
+check timestamp advances. Private receipts: `.nixploy-data/verification/original-polish/`.
+
+## Restored design critique — 2026-10-23
+
+Read-only UI Craft/Critique review: 48 captures across eight app/site surfaces,
+three viewports and both app themes. The original direction is coherent; confirmed
+priorities are unnamed resource sliders, desktop/tablet project-list hierarchy,
+truncated mobile setup instructions and small mobile header hit areas. No app
+code or saved configuration changed. [Findings and scope](design-review-2026-10-23.md).
+
 ## Original frontend restoration — 2026-10-23
 
 The user explicitly requested the original design from before all redesigns.

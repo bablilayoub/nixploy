@@ -75,23 +75,10 @@ export function DashboardView() {
 					</DisabledHint>
 				}
 			/>
-			{/* Phones keep the project directory ahead of the trend panels. */}
+			{/* Keep the project directory ahead of analytics at every width. */}
 			<div className="flex flex-col gap-6">
-				<div className="order-1 sm:order-none">
-					<GettingStartedCard firstProjectId={projects?.[0]?.projectId} />
-				</div>
-				<div className="order-3 sm:order-none">
-					<OverviewCards />
-				</div>
-				<div className="order-4 grid grid-cols-1 gap-4 sm:order-none lg:grid-cols-7">
-					<div className="col-span-1 lg:col-span-4">
-						<DeploymentsChart />
-					</div>
-					<div className="col-span-1 lg:col-span-3">
-						<RecentDeployments />
-					</div>
-				</div>
-				<section className="order-2 space-y-4 sm:order-none" aria-labelledby="project-list-heading">
+				<GettingStartedCard firstProjectId={projects?.[0]?.projectId} />
+				<section className="space-y-4" aria-labelledby="project-list-heading">
 					<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 						<div className="flex items-center gap-2">
 							<h2 id="project-list-heading" className="text-sm font-semibold">
@@ -228,6 +215,15 @@ export function DashboardView() {
 						</div>
 					</QueryState>
 				</section>
+				<OverviewCards />
+				<div className="grid grid-cols-1 gap-4 lg:grid-cols-7">
+					<div className="col-span-1 lg:col-span-4">
+						<DeploymentsChart />
+					</div>
+					<div className="col-span-1 lg:col-span-3">
+						<RecentDeployments />
+					</div>
+				</div>
 			</div>
 		</div>
 	);

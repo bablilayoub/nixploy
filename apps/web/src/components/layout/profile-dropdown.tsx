@@ -56,13 +56,17 @@ export function ProfileDropdown() {
 	};
 
 	if (!mounted || isPending) {
-		return <Skeleton className="size-8 rounded-full" />;
+		return <Skeleton className="size-11 rounded-full sm:size-8" />;
 	}
 
 	return (
 		<DropdownMenu modal={false}>
 			<DropdownMenuTrigger asChild>
-				<Button variant="ghost" className="relative size-8 rounded-full">
+				<Button
+					variant="ghost"
+					className="relative size-11 rounded-full sm:size-8"
+					aria-label="Account menu"
+				>
 					<UserAvatar user={user} className="size-8" fallbackClassName="text-xs" size={64} />
 				</Button>
 			</DropdownMenuTrigger>

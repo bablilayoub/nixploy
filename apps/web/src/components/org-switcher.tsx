@@ -110,6 +110,7 @@ export function OrgSwitcher({ className }: { className?: string }) {
 					<Button
 						variant="ghost"
 						size="sm"
+						aria-label={`Switch organization: ${displayName ?? "Organization"}`}
 						className={cn("h-8 min-w-0 shrink gap-2 px-2 font-normal", className)}
 					>
 						{isPending ? (
@@ -127,9 +128,9 @@ export function OrgSwitcher({ className }: { className?: string }) {
 										{displayName?.charAt(0).toUpperCase() ?? "?"}
 									</span>
 								)}
-								{/* A floor so the name ellipsises instead of shrinking to nothing;
-								    the search trigger next to it gives up the space instead. */}
-								<span className="min-w-12 max-w-24 truncate text-sm font-medium lg:max-w-36">
+								{/* Keep a name floor on desktop; phones can shrink the text
+								    while the logo and full accessible name identify the organization. */}
+								<span className="min-w-0 max-w-24 truncate text-sm font-medium sm:min-w-12 lg:max-w-36">
 									{displayName ?? "Organization"}
 								</span>
 								<ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" />
