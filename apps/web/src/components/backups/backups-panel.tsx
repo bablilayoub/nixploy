@@ -17,7 +17,6 @@ import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-
 import {
 	BackupRunsSheet,
 	LastRunBadge,
@@ -54,6 +53,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -856,17 +856,17 @@ export function BackupsPanel({ target }: { target: BackupsTarget }) {
 					>
 						{isVolume && (
 							<>
-								<div className="flex flex-col gap-2">
-									<Label htmlFor="backup-name">Name</Label>
+								<Field>
+									<FieldLabel htmlFor="backup-name">Name</FieldLabel>
 									<Input
 										id="backup-name"
 										placeholder="Nightly data backup"
 										value={form.name}
 										onChange={(event) => setForm({ ...form, name: event.target.value })}
 									/>
-								</div>
-								<div className="flex flex-col gap-2">
-									<Label htmlFor="backup-volume">Volume name</Label>
+								</Field>
+								<Field>
+									<FieldLabel htmlFor="backup-volume">Volume name</FieldLabel>
 									<Input
 										id="backup-volume"
 										className="font-mono text-sm"
@@ -874,13 +874,13 @@ export function BackupsPanel({ target }: { target: BackupsTarget }) {
 										value={form.volumeName}
 										onChange={(event) => setForm({ ...form, volumeName: event.target.value })}
 									/>
-								</div>
+								</Field>
 							</>
 						)}
-						<div className="flex flex-col gap-2">
-							<Label htmlFor="backup-cron">
+						<Field>
+							<FieldLabel htmlFor="backup-cron">
 								{isVolume ? "Cron expression (UTC)" : "Schedule (cron, UTC)"}
-							</Label>
+							</FieldLabel>
 							{isVolume && (
 								<Select
 									value={presetValue}
@@ -920,9 +920,9 @@ export function BackupsPanel({ target }: { target: BackupsTarget }) {
 									hours, <code>0 0 * * 0</code> weekly on Sunday. Times are UTC.
 								</p>
 							)}
-						</div>
-						<div className="flex flex-col gap-2">
-							<Label htmlFor="backup-destination">Destination</Label>
+						</Field>
+						<Field>
+							<FieldLabel htmlFor="backup-destination">Destination</FieldLabel>
 							<Select
 								value={form.destinationId}
 								onValueChange={(destinationId) => setForm({ ...form, destinationId })}
@@ -940,21 +940,21 @@ export function BackupsPanel({ target }: { target: BackupsTarget }) {
 									))}
 								</SelectContent>
 							</Select>
-						</div>
+						</Field>
 						<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
 							{!isVolume && (
-								<div className="flex flex-col gap-2">
-									<Label htmlFor="backup-database">Database</Label>
+								<Field>
+									<FieldLabel htmlFor="backup-database">Database</FieldLabel>
 									<Input
 										id="backup-database"
 										className="font-mono text-sm"
 										value={form.database}
 										onChange={(event) => setForm({ ...form, database: event.target.value })}
 									/>
-								</div>
+								</Field>
 							)}
-							<div className="flex flex-col gap-2">
-								<Label htmlFor="backup-prefix">Prefix</Label>
+							<Field>
+								<FieldLabel htmlFor="backup-prefix">Prefix</FieldLabel>
 								<Input
 									id="backup-prefix"
 									className="font-mono text-sm"
@@ -962,10 +962,10 @@ export function BackupsPanel({ target }: { target: BackupsTarget }) {
 									value={form.prefix}
 									onChange={(event) => setForm({ ...form, prefix: event.target.value })}
 								/>
-							</div>
+							</Field>
 							{isVolume && (
-								<div className="flex flex-col gap-2">
-									<Label htmlFor="backup-keep">Keep latest</Label>
+								<Field>
+									<FieldLabel htmlFor="backup-keep">Keep latest</FieldLabel>
 									<Input
 										id="backup-keep"
 										inputMode="numeric"
@@ -973,12 +973,12 @@ export function BackupsPanel({ target }: { target: BackupsTarget }) {
 										value={form.keepLatestCount}
 										onChange={(event) => setForm({ ...form, keepLatestCount: event.target.value })}
 									/>
-								</div>
+								</Field>
 							)}
 						</div>
 						{!isVolume && (
-							<div className="flex flex-col gap-2">
-								<Label htmlFor="backup-keep">Keep latest count (optional)</Label>
+							<Field>
+								<FieldLabel htmlFor="backup-keep">Keep latest count (optional)</FieldLabel>
 								<Input
 									id="backup-keep"
 									type="number"
@@ -990,7 +990,7 @@ export function BackupsPanel({ target }: { target: BackupsTarget }) {
 								{!keepValid && (
 									<p className="text-sm text-destructive">Enter a whole number of at least 1.</p>
 								)}
-							</div>
+							</Field>
 						)}
 						{(!editing || !isVolume) && (
 							<div className="flex items-center gap-2">
@@ -1104,7 +1104,7 @@ export function BackupsPanel({ target }: { target: BackupsTarget }) {
 							</Button>
 						)}
 						<Button
-							variant={isVolume ? "default" : "destructive"}
+							variant={isVolume ? "default" : "outline"}
 							disabled={!restoreKey || restore.isPending}
 							onClick={submitRestore}
 						>
@@ -1133,7 +1133,7 @@ export function BackupsPanel({ target }: { target: BackupsTarget }) {
 					<AlertDialogFooter>
 						<AlertDialogCancel disabled={remove.isPending}>Cancel</AlertDialogCancel>
 						<AlertDialogAction
-							variant={isVolume ? undefined : "destructive"}
+							variant={isVolume ? undefined : "outline"}
 							disabled={remove.isPending}
 							onClick={(event) => {
 								// Keep the dialog open (with its spinner) until the mutation settles.

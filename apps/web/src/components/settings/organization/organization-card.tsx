@@ -4,12 +4,12 @@ import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-
 import { SettingsSection } from "@/components/layout/settings-section";
 import { useSaveBar } from "@/components/services/save-bar";
 import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
 import { Button } from "@/components/ui/button";
 import { DisabledHint } from "@/components/ui/disabled-hint";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useCapabilities } from "@/hooks/use-capabilities";
@@ -122,8 +122,8 @@ export function OrganizationCard() {
 			{/* Named for what it holds; the page is already titled "Organization". */}
 			<SettingsSection title="Name" description="How this organization is addressed and routed.">
 				<form onSubmit={onNameSubmit} className="grid gap-5">
-					<div className="grid gap-2">
-						<Label htmlFor="org-name">Name</Label>
+					<Field>
+						<FieldLabel htmlFor="org-name">Name</FieldLabel>
 						<Input
 							id="org-name"
 							required
@@ -132,15 +132,15 @@ export function OrganizationCard() {
 							value={name}
 							onChange={(e) => nameDraft.set(e.target.value)}
 						/>
-					</div>
-					<div className="grid gap-2">
-						<Label htmlFor="org-slug">Slug</Label>
+					</Field>
+					<Field>
+						<FieldLabel htmlFor="org-slug">Slug</FieldLabel>
 						<Input id="org-slug" disabled value={activeOrganization?.slug ?? ""} />
 						<p className="text-xs text-muted-foreground">
 							Set when the organization was created and fixed afterwards — invitation links and API
 							references use it.
 						</p>
-					</div>
+					</Field>
 					<div className="flex flex-wrap items-center gap-3">
 						<DisabledHint hint={renameHint}>
 							<Button type="submit" disabled={nameSaveDisabled || isNamePending}>
@@ -168,8 +168,8 @@ export function OrganizationCard() {
 					</div>
 				)}
 				<form onSubmit={onBrandingSubmit} className="grid gap-5">
-					<div className="grid gap-2">
-						<Label htmlFor="org-display-name">Display name</Label>
+					<Field>
+						<FieldLabel htmlFor="org-display-name">Display name</FieldLabel>
 						<Input
 							id="org-display-name"
 							placeholder={(mounted && activeOrganization?.name) || "Shown in the shell"}
@@ -178,9 +178,9 @@ export function OrganizationCard() {
 							value={displayName}
 							onChange={(e) => brandingDraft.patch({ displayName: e.target.value })}
 						/>
-					</div>
-					<div className="grid gap-2">
-						<Label htmlFor="org-logo">Logo URL</Label>
+					</Field>
+					<Field>
+						<FieldLabel htmlFor="org-logo">Logo URL</FieldLabel>
 						<Input
 							id="org-logo"
 							type="url"
@@ -190,7 +190,7 @@ export function OrganizationCard() {
 							value={logoUrl}
 							onChange={(e) => brandingDraft.patch({ logoUrl: e.target.value })}
 						/>
-					</div>
+					</Field>
 					<div className="grid gap-2">
 						<Label htmlFor="org-accent">Accent color</Label>
 						<p className="text-sm text-muted-foreground">

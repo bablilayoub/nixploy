@@ -8,7 +8,7 @@ import { useSaveBar } from "@/components/services/save-bar";
 import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
 import { Button } from "@/components/ui/button";
 import { DisabledHint } from "@/components/ui/disabled-hint";
-import { Label } from "@/components/ui/label";
+import { Field, FieldLabel } from "@/components/ui/field";
 import {
 	Select,
 	SelectContent,
@@ -74,8 +74,8 @@ export function DeployCommandsCard({ application }: { application: Application }
 			description="Run a command around the rollout — a database migration before it, a cache warm-up after it."
 		>
 			<div className="flex min-w-0 flex-col gap-5">
-				<div className="flex flex-col gap-2">
-					<Label htmlFor="pre-deploy-command">Pre-deploy command</Label>
+				<Field>
+					<FieldLabel htmlFor="pre-deploy-command">Pre-deploy command</FieldLabel>
 					<Textarea
 						id="pre-deploy-command"
 						className="min-h-16 font-mono text-xs sm:max-w-lg"
@@ -90,10 +90,10 @@ export function DeployCommandsCard({ application }: { application: Application }
 						deployment and the current version keeps serving. Previews never run it. The image needs
 						a shell — a scratch or distroless image cannot run a hook.
 					</p>
-				</div>
+				</Field>
 
-				<div className="flex flex-col gap-2">
-					<Label htmlFor="post-deploy-command">Post-deploy command</Label>
+				<Field>
+					<FieldLabel htmlFor="post-deploy-command">Post-deploy command</FieldLabel>
 					<Textarea
 						id="post-deploy-command"
 						className="min-h-16 font-mono text-xs sm:max-w-lg"
@@ -106,10 +106,10 @@ export function DeployCommandsCard({ application }: { application: Application }
 						Runs inside one running container once the rollout has converged. A non-zero exit marks
 						the deployment failed.
 					</p>
-				</div>
+				</Field>
 
-				<div className="flex flex-col gap-2">
-					<Label htmlFor="push-registry">Push built image to</Label>
+				<Field>
+					<FieldLabel htmlFor="push-registry">Push built image to</FieldLabel>
 					<Select
 						value={pushRegistryId}
 						disabled={!canWrite}
@@ -132,7 +132,7 @@ export function DeployCommandsCard({ application }: { application: Application }
 						nodes — and rollbacks after a node swap — pull it. Only registries with an image prefix
 						can be a target.
 					</p>
-				</div>
+				</Field>
 
 				<div className="flex items-center justify-end gap-3">
 					<UnsavedChangesPill dirty={draft.dirty} />

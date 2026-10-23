@@ -1,7 +1,7 @@
-import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
-/** Shared data-table composition from the native shadcn Card and Table patterns. */
+/** Native data-table composition: controls, framed rows, then pagination. */
 export function TableCard({
 	className,
 	children,
@@ -17,27 +17,31 @@ export function TableCard({
 	framed?: boolean;
 	toolbarFramed?: boolean;
 }) {
+	// Keep all container types stable across loading transitions: toolbar dialogs
+	// can own unsaved form state while their table's first query is in flight.
 	return (
-		<Card
-			className={cn(
-				"min-w-0 gap-0 overflow-hidden py-0",
-				!framed && "border-0 bg-transparent shadow-none",
-				className,
-			)}
-		>
+		<div className={cn("min-w-0 space-y-4", className)}>
 			{toolbar && (
-				<CardHeader
+				<div
 					className={cn(
-						"flex flex-row flex-wrap items-center gap-2 border-b py-4",
-						toolbarFramed && "bg-muted/30",
-						!framed && "border-0 px-0 pt-0",
+						"flex min-w-0 flex-wrap items-center gap-2",
+						toolbarFramed && "justify-between",
 					)}
 				>
 					{toolbar}
-				</CardHeader>
+				</div>
 			)}
-			<CardContent className="relative overflow-x-auto px-0">{children}</CardContent>
-			{footer && <CardFooter className="flex-wrap gap-3 border-t py-4">{footer}</CardFooter>}
-		</Card>
+			<Card
+				className={cn(
+					"min-w-0 gap-0 overflow-hidden py-0",
+					!framed && "border-0 bg-transparent shadow-none",
+				)}
+			>
+				<CardContent className="relative overflow-x-auto px-0">{children}</CardContent>
+			</Card>
+			{footer && (
+				<div className="flex min-w-0 flex-wrap items-center justify-between gap-3">{footer}</div>
+			)}
+		</div>
 	);
 }

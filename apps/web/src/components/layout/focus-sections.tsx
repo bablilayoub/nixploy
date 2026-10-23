@@ -31,7 +31,7 @@ export function FocusSections({
 	children,
 	label = "Configuration sections",
 	className,
-	rail = false,
+	rail: _rail = false,
 }: {
 	items: FocusSection[];
 	children: ReactNode;
@@ -39,14 +39,6 @@ export function FocusSections({
 	className?: string;
 	rail?: boolean;
 }) {
-	const [desktop, setDesktop] = useState(false);
-	useEffect(() => {
-		const media = window.matchMedia("(min-width: 1024px)");
-		const update = () => setDesktop(media.matches);
-		update();
-		media.addEventListener("change", update);
-		return () => media.removeEventListener("change", update);
-	}, []);
 	const first = items[0]?.id ?? "";
 	const [selected, setSelected] = useState(first);
 	useEffect(() => {
@@ -74,17 +66,17 @@ export function FocusSections({
 	}>[];
 	return (
 		<Tabs
-			orientation={rail && desktop ? "vertical" : "horizontal"}
+			orientation="horizontal"
 			value={selected}
 			onValueChange={select}
 			activationMode="manual"
 			className={cn(
 				"focus-sections min-w-0 gap-6",
-				rail && "lg:grid lg:grid-cols-[11rem_minmax(0,1fr)] lg:items-start",
+
 				className,
 			)}
 		>
-			<div className={rail ? "lg:hidden" : "sm:hidden"}>
+			<div className="sm:hidden">
 				<Select value={selected} onValueChange={select}>
 					<SelectTrigger className="w-full" aria-label={label}>
 						<SelectValue />
@@ -98,23 +90,9 @@ export function FocusSections({
 					</SelectContent>
 				</Select>
 			</div>
-			<TabsList
-				aria-label={label}
-				className={cn(
-					"hidden h-auto sm:inline-flex",
-					rail &&
-						"sm:hidden lg:flex lg:min-h-fit lg:w-full lg:flex-col lg:items-stretch lg:sticky lg:top-[calc(var(--app-chrome-height,112px)+2rem)]",
-				)}
-			>
+			<TabsList aria-label={label} className="hidden h-auto max-w-full sm:inline-flex">
 				{items.map((item) => (
-					<TabsTrigger
-						key={item.id}
-						value={item.id}
-						className={cn(
-							"flex-none",
-							rail && "lg:h-auto lg:min-h-10 lg:justify-start lg:whitespace-normal lg:text-left",
-						)}
-					>
+					<TabsTrigger key={item.id} value={item.id} className="flex-none">
 						{item.label}
 					</TabsTrigger>
 				))}
@@ -125,10 +103,7 @@ export function FocusSections({
 					value={item.id}
 					forceMount
 					hidden={selected !== item.id}
-					className={cn(
-						"mt-0 data-[state=inactive]:hidden",
-						rail && "lg:col-start-2 lg:row-start-1",
-					)}
+					className={cn("mt-0 data-[state=inactive]:hidden")}
 				>
 					{panels.find((panel) => panel.props.id === item.id)}
 				</TabsContent>

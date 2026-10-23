@@ -4,7 +4,6 @@ import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-
 import { SettingsSection } from "@/components/layout/settings-section";
 import {
 	AlertDialog,
@@ -17,8 +16,8 @@ import {
 	AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { authClient, useSession } from "@/lib/auth-client";
 import { toastError } from "@/lib/describe-error";
 
@@ -117,21 +116,21 @@ export function DangerZoneCard() {
 							be undone.
 						</AlertDialogDescription>
 					</AlertDialogHeader>
-					<div className="grid gap-2 text-left">
-						<Label htmlFor="confirm-org-name">
+					<Field className="text-left">
+						<FieldLabel htmlFor="confirm-org-name">
 							Type <span className="font-semibold">{activeOrganization.name}</span> to confirm
-						</Label>
+						</FieldLabel>
 						<Input
 							id="confirm-org-name"
 							value={confirmName}
 							onChange={(event) => setConfirmName(event.target.value)}
 							autoComplete="off"
 						/>
-					</div>
+					</Field>
 					<AlertDialogFooter>
 						<AlertDialogCancel>Cancel</AlertDialogCancel>
 						<AlertDialogAction
-							variant="destructive"
+							variant="outline"
 							disabled={isDeleting || confirmName !== activeOrganization.name}
 							onClick={(event) => {
 								event.preventDefault();

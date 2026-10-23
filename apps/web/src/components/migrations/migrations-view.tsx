@@ -19,6 +19,7 @@ import { PageHeader } from "@/components/shell/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -384,8 +385,8 @@ export function MigrationsView() {
 							</CardDescription>
 						</CardHeader>
 						<CardContent className="space-y-5">
-							<div className="max-w-sm space-y-2">
-								<Label htmlFor="migration-provider">Source panel</Label>
+							<Field className="max-w-sm space-y-2">
+								<FieldLabel htmlFor="migration-provider">Source panel</FieldLabel>
 								<Select
 									value={provider}
 									disabled={apply.isPending}
@@ -406,7 +407,7 @@ export function MigrationsView() {
 										))}
 									</SelectContent>
 								</Select>
-							</div>
+							</Field>
 							<fieldset disabled={busy} className="flex flex-wrap gap-2">
 								<legend className="sr-only">Source connection</legend>
 								<Button
@@ -437,8 +438,8 @@ export function MigrationsView() {
 							</fieldset>
 							{mode === "live" ? (
 								<div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
-									<div className="min-w-0 space-y-2">
-										<Label htmlFor="migration-url">Source panel URL</Label>
+									<Field className="min-w-0 space-y-2">
+										<FieldLabel htmlFor="migration-url">Source panel URL</FieldLabel>
 										<Input
 											id="migration-url"
 											type="url"
@@ -454,9 +455,9 @@ export function MigrationsView() {
 										<p className="text-xs text-muted-foreground">
 											Private addresses require the instance's private-egress setting.
 										</p>
-									</div>
-									<div className="min-w-0 space-y-2">
-										<Label htmlFor="migration-key">Source API key</Label>
+									</Field>
+									<Field className="min-w-0 space-y-2">
+										<FieldLabel htmlFor="migration-key">Source API key</FieldLabel>
 										<Input
 											id="migration-key"
 											type="password"
@@ -471,11 +472,11 @@ export function MigrationsView() {
 										<p className="text-xs text-muted-foreground">
 											Sent in request bodies; never saved in the browser or reports.
 										</p>
-									</div>
+									</Field>
 								</div>
 							) : (
-								<div className="min-w-0 space-y-2">
-									<Label htmlFor="migration-file">PostgreSQL dump</Label>
+								<Field className="min-w-0 space-y-2">
+									<FieldLabel htmlFor="migration-file">PostgreSQL dump</FieldLabel>
 									<Input
 										id="migration-file"
 										ref={uploadInput}
@@ -501,7 +502,7 @@ export function MigrationsView() {
 											reupload after expiry.
 										</p>
 									)}
-								</div>
+								</Field>
 							)}
 							<Button
 								disabled={
@@ -553,8 +554,8 @@ export function MigrationsView() {
 						) : (
 							<>
 								<div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
-									<div className="min-w-0 space-y-2">
-										<Label htmlFor="migration-project">Source project</Label>
+									<Field className="min-w-0 space-y-2">
+										<FieldLabel htmlFor="migration-project">Source project</FieldLabel>
 										<Select
 											value={sourceProjectId}
 											disabled={apply.isPending}
@@ -574,9 +575,9 @@ export function MigrationsView() {
 												))}
 											</SelectContent>
 										</Select>
-									</div>
-									<div className="min-w-0 space-y-2">
-										<Label htmlFor="migration-environment">Source environment</Label>
+									</Field>
+									<Field className="min-w-0 space-y-2">
+										<FieldLabel htmlFor="migration-environment">Source environment</FieldLabel>
 										<Select
 											value={sourceEnvironment}
 											disabled={apply.isPending || !currentProject?.environments.length}
@@ -595,7 +596,7 @@ export function MigrationsView() {
 												))}
 											</SelectContent>
 										</Select>
-									</div>
+									</Field>
 								</div>
 								{currentEnvironment && (
 									<section className="min-w-0 space-y-2">
@@ -673,8 +674,8 @@ export function MigrationsView() {
 									/>
 								) : (
 									<div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
-										<div className="min-w-0 space-y-2">
-											<Label htmlFor="migration-target">Target project</Label>
+										<Field className="min-w-0 space-y-2">
+											<FieldLabel htmlFor="migration-target">Target project</FieldLabel>
 											<Select
 												value={projectId || MATCH_SOURCE_PROJECT}
 												disabled={apply.isPending || projects.isPending}
@@ -700,9 +701,11 @@ export function MigrationsView() {
 											<p className="text-xs text-muted-foreground">
 												Only projects visible to your organization and teams are listed.
 											</p>
-										</div>
-										<div className="min-w-0 space-y-2">
-											<Label htmlFor="migration-target-environment">Target environment name</Label>
+										</Field>
+										<Field className="min-w-0 space-y-2">
+											<FieldLabel htmlFor="migration-target-environment">
+												Target environment name
+											</FieldLabel>
 											<Input
 												id="migration-target-environment"
 												value={environmentName}
@@ -716,7 +719,7 @@ export function MigrationsView() {
 											<p className="text-xs text-muted-foreground">
 												An existing name is updated; a missing environment is created.
 											</p>
-										</div>
+										</Field>
 									</div>
 								)}
 								{provider === "dokploy" && (

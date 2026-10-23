@@ -40,8 +40,8 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@/components/ui/dialog";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
 	Select,
 	SelectContent,
@@ -267,8 +267,8 @@ export function PreviewDeploymentsPanel({
 								<DialogDescription>{createDescription}</DialogDescription>
 							</DialogHeader>
 							<div className="flex flex-col gap-4">
-								<div className="flex flex-col gap-2">
-									<Label htmlFor="preview-source">Source</Label>
+								<Field>
+									<FieldLabel htmlFor="preview-source">Source</FieldLabel>
 									<Select
 										value={sourceKind}
 										onValueChange={(value) =>
@@ -293,10 +293,10 @@ export function PreviewDeploymentsPanel({
 												? "Runs a prebuilt image — no build at all. It expires on the TTL or when you delete it."
 												: "Any git ref, no pull request needed. It expires on the TTL or when you delete it."}
 									</p>
-								</div>
+								</Field>
 								{sourceKind === "image" ? (
-									<div className="flex flex-col gap-2">
-										<Label htmlFor="preview-image">Image</Label>
+									<Field>
+										<FieldLabel htmlFor="preview-image">Image</FieldLabel>
 										<Input
 											id="preview-image"
 											placeholder="ghcr.io/acme/shop:pr-42"
@@ -304,10 +304,10 @@ export function PreviewDeploymentsPanel({
 											onChange={(e) => setImage(e.target.value)}
 											className="font-mono"
 										/>
-									</div>
+									</Field>
 								) : sourceKind === "branch" ? (
-									<div className="flex flex-col gap-2">
-										<Label htmlFor="preview-ref">Ref</Label>
+									<Field>
+										<FieldLabel htmlFor="preview-ref">Ref</FieldLabel>
 										<Input
 											id="preview-ref"
 											placeholder="feat/cart, v1.4.0 or a commit sha"
@@ -315,53 +315,53 @@ export function PreviewDeploymentsPanel({
 											onChange={(e) => setRef(e.target.value)}
 											className="font-mono"
 										/>
-									</div>
+									</Field>
 								) : (
 									<>
-										<div className="flex flex-col gap-2">
-											<Label htmlFor="pr-number">Pull request number</Label>
+										<Field>
+											<FieldLabel htmlFor="pr-number">Pull request number</FieldLabel>
 											<Input
 												id="pr-number"
 												placeholder="123"
 												value={prNumber}
 												onChange={(e) => setPrNumber(e.target.value)}
 											/>
-										</div>
-										<div className="flex flex-col gap-2">
-											<Label htmlFor="pr-branch">Branch (optional)</Label>
+										</Field>
+										<Field>
+											<FieldLabel htmlFor="pr-branch">Branch (optional)</FieldLabel>
 											<Input
 												id="pr-branch"
 												placeholder="feature/my-branch"
 												value={branch}
 												onChange={(e) => setBranch(e.target.value)}
 											/>
-										</div>
+										</Field>
 									</>
 								)}
 								{sourceKind === "pull_request" && (
 									<>
-										<div className="flex flex-col gap-2">
-											<Label htmlFor="pr-title">Title (optional)</Label>
+										<Field>
+											<FieldLabel htmlFor="pr-title">Title (optional)</FieldLabel>
 											<Input
 												id="pr-title"
 												placeholder="Add new feature"
 												value={prTitle}
 												onChange={(e) => setPrTitle(e.target.value)}
 											/>
-										</div>
-										<div className="flex flex-col gap-2">
-											<Label htmlFor="pr-url">Pull request URL (optional)</Label>
+										</Field>
+										<Field>
+											<FieldLabel htmlFor="pr-url">Pull request URL (optional)</FieldLabel>
 											<Input
 												id="pr-url"
 												placeholder="https://github.com/org/repo/pull/123"
 												value={prUrl}
 												onChange={(e) => setPrUrl(e.target.value)}
 											/>
-										</div>
+										</Field>
 									</>
 								)}
-								<div className="flex flex-col gap-2">
-									<Label htmlFor="pr-expires">Expires in (days, optional)</Label>
+								<Field>
+									<FieldLabel htmlFor="pr-expires">Expires in (days, optional)</FieldLabel>
 									<Input
 										id="pr-expires"
 										type="number"
@@ -376,7 +376,7 @@ export function PreviewDeploymentsPanel({
 										{sourceKind === "pull_request" ? "the pull request closes or " : ""}you delete
 										it.
 									</p>
-								</div>
+								</Field>
 							</div>
 							<DialogFooter>
 								<Button
@@ -604,7 +604,7 @@ export function PreviewDeploymentsPanel({
 						<AlertDialogFooter>
 							<AlertDialogCancel disabled={remove.isPending}>Cancel</AlertDialogCancel>
 							<AlertDialogAction
-								variant="destructive"
+								variant="outline"
 								onClick={(event) => {
 									// Keep the dialog open (with its spinner) until the mutation settles.
 									event.preventDefault();

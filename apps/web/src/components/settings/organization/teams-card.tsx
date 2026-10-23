@@ -18,6 +18,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -371,24 +372,24 @@ export function TeamsCard() {
 						</DialogDescription>
 					</DialogHeader>
 					<div className="space-y-4">
-						<div className="space-y-2">
-							<Label htmlFor="team-name">Name</Label>
+						<Field className="space-y-2">
+							<FieldLabel htmlFor="team-name">Name</FieldLabel>
 							<Input
 								id="team-name"
 								value={name}
 								onChange={(event) => setName(event.target.value)}
 								placeholder="Platform"
 							/>
-						</div>
-						<div className="space-y-2">
-							<Label htmlFor="team-description">Description</Label>
+						</Field>
+						<Field className="space-y-2">
+							<FieldLabel htmlFor="team-description">Description</FieldLabel>
 							<Input
 								id="team-description"
 								value={description}
 								onChange={(event) => setDescription(event.target.value)}
 								placeholder="Optional"
 							/>
-						</div>
+						</Field>
 					</div>
 					<DialogFooter>
 						<Button variant="outline" onClick={() => setCreateOpen(false)}>
@@ -499,14 +500,14 @@ function EditTeamDialog({
 					</DialogDescription>
 				</DialogHeader>
 				<div className="space-y-4">
-					<div className="space-y-2">
-						<Label htmlFor="edit-team-name">Name</Label>
+					<Field className="space-y-2">
+						<FieldLabel htmlFor="edit-team-name">Name</FieldLabel>
 						<Input
 							id="edit-team-name"
 							value={name}
 							onChange={(event) => setName(event.target.value)}
 						/>
-					</div>
+					</Field>
 					<div className="grid gap-4 sm:grid-cols-2">
 						<div className="space-y-2">
 							<Label className="flex items-center gap-2">

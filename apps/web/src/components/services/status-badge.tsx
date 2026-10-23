@@ -8,7 +8,7 @@ type ServiceStatus = "idle" | "running" | "done" | "error" | null | undefined;
 type ServiceStatusStyle = {
 	label: string;
 	status: StatusDotStatus;
-	variant: "secondary" | "default" | "destructive";
+	variant: "secondary" | "default" | "outline";
 };
 
 /** Also the fallback for a status the panel does not know yet. */
@@ -23,7 +23,7 @@ const serviceStatusConfig: Record<string, ServiceStatusStyle> = {
 	running: { label: "Running", status: "success", variant: "default" },
 	// Legacy post-deploy status — treat as healthy/running in the UI.
 	done: { label: "Running", status: "success", variant: "default" },
-	error: { label: "Error", status: "error", variant: "destructive" },
+	error: { label: "Error", status: "error", variant: "outline" },
 };
 
 export function ServiceStatusBadge({ status }: { status: ServiceStatus }) {
@@ -39,7 +39,7 @@ export function ServiceStatusBadge({ status }: { status: ServiceStatus }) {
 
 type DeploymentStatus = "queued" | "running" | "done" | "error" | "cancelled" | null | undefined;
 
-type BadgeVariant = "secondary" | "default" | "destructive";
+type BadgeVariant = "secondary" | "default" | "outline";
 
 /**
  * Only the badge treatment lives here — the words come from
@@ -52,7 +52,7 @@ const deploymentBadgeVariant: Record<string, BadgeVariant> = {
 	// Neutral tones and explicit labels keep the same status vocabulary as the dashboard.
 	running: "secondary",
 	done: "default",
-	error: "destructive",
+	error: "outline",
 	cancelled: "secondary",
 };
 

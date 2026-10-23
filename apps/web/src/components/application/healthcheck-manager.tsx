@@ -6,6 +6,7 @@ import { SettingsSection } from "@/components/layout/settings-section";
 import { capabilityHint } from "@/components/services/capability-hint";
 import { useSaveBar } from "@/components/services/save-bar";
 import { Button } from "@/components/ui/button";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -145,17 +146,17 @@ export function HealthcheckManager({ application }: { application: Application }
 				{enabled && (
 					<>
 						<div className="grid grid-cols-2 gap-3">
-							<div className="space-y-1.5">
-								<Label htmlFor="hc-path">Path</Label>
+							<Field className="space-y-1.5">
+								<FieldLabel htmlFor="hc-path">Path</FieldLabel>
 								<Input
 									id="hc-path"
 									placeholder="/health"
 									value={path}
 									onChange={(e) => draft.patch({ path: e.target.value })}
 								/>
-							</div>
-							<div className="space-y-1.5">
-								<Label htmlFor="hc-port">Container port</Label>
+							</Field>
+							<Field className="space-y-1.5">
+								<FieldLabel htmlFor="hc-port">Container port</FieldLabel>
 								<Input
 									id="hc-port"
 									inputMode="numeric"
@@ -163,45 +164,45 @@ export function HealthcheckManager({ application }: { application: Application }
 									value={port}
 									onChange={(e) => draft.patch({ port: e.target.value })}
 								/>
-							</div>
+							</Field>
 						</div>
 						<div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-							<div className="space-y-1.5">
-								<Label htmlFor="hc-interval">Interval (s)</Label>
+							<Field className="space-y-1.5">
+								<FieldLabel htmlFor="hc-interval">Interval (s)</FieldLabel>
 								<Input
 									id="hc-interval"
 									inputMode="numeric"
 									value={interval}
 									onChange={(e) => draft.patch({ interval: e.target.value })}
 								/>
-							</div>
-							<div className="space-y-1.5">
-								<Label htmlFor="hc-timeout">Timeout (s)</Label>
+							</Field>
+							<Field className="space-y-1.5">
+								<FieldLabel htmlFor="hc-timeout">Timeout (s)</FieldLabel>
 								<Input
 									id="hc-timeout"
 									inputMode="numeric"
 									value={timeout}
 									onChange={(e) => draft.patch({ timeout: e.target.value })}
 								/>
-							</div>
-							<div className="space-y-1.5">
-								<Label htmlFor="hc-retries">Retries</Label>
+							</Field>
+							<Field className="space-y-1.5">
+								<FieldLabel htmlFor="hc-retries">Retries</FieldLabel>
 								<Input
 									id="hc-retries"
 									inputMode="numeric"
 									value={retries}
 									onChange={(e) => draft.patch({ retries: e.target.value })}
 								/>
-							</div>
-							<div className="space-y-1.5">
-								<Label htmlFor="hc-start">Start period (s)</Label>
+							</Field>
+							<Field className="space-y-1.5">
+								<FieldLabel htmlFor="hc-start">Start period (s)</FieldLabel>
 								<Input
 									id="hc-start"
 									inputMode="numeric"
 									value={startPeriod}
 									onChange={(e) => draft.patch({ startPeriod: e.target.value })}
 								/>
-							</div>
+							</Field>
 						</div>
 					</>
 				)}

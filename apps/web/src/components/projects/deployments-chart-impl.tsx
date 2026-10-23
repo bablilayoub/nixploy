@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { QueryState } from "@/components/query-state";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import {
 	type ChartConfig,
 	ChartContainer,
@@ -28,7 +29,7 @@ const chartConfig = {
 } satisfies ChartConfig;
 
 /** Deployments per day (14d), done vs error — dashboard trend panel. */
-export function DeploymentsChart() {
+export function DeploymentsChart({ framed = true }: { framed?: boolean }) {
 	const trpc = useTRPC();
 	const [days, setDays] = useState(14);
 	const { data, isPending, isError, error, refetch } = useQuery(
@@ -46,15 +47,15 @@ export function DeploymentsChart() {
 	// gets a sentence instead.
 	const hasDeployments = rows.some((row) => row.done > 0 || row.error > 0);
 
-	return (
-		<section className="surface flex h-full min-w-0 flex-col p-5 sm:p-6">
+	const content = (
+		<div className="flex h-full min-w-0 flex-col">
 			<div className="mb-6 flex flex-wrap items-start justify-between gap-4">
 				<div className="space-y-1">
 					<h2 className="text-base font-medium tracking-tight">Deployment activity</h2>
 					<p className="text-xs text-muted-foreground">Successful and failed builds by day.</p>
 				</div>
 				<fieldset
-					className="flex min-w-0 max-w-full flex-wrap gap-1 rounded-md border bg-panel-inset p-1"
+					className="flex min-w-0 max-w-full flex-wrap gap-1 rounded-md border bg-muted p-1"
 					aria-label="Activity period"
 				>
 					{[7, 14, 30].map((period) => (
@@ -137,6 +138,13 @@ export function DeploymentsChart() {
 					</ChartContainer>
 				)}
 			</div>
-		</section>
+		</div>
+	);
+	return framed ? (
+		<Card className="min-w-0">
+			<CardContent>{content}</CardContent>
+		</Card>
+	) : (
+		content
 	);
 }

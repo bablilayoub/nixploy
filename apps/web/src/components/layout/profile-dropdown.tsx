@@ -102,7 +102,7 @@ export function ProfileDropdown({ onNavigate }: { onNavigate?: () => void }) {
 					</DropdownMenuItem>
 				)}
 				<DropdownMenuSeparator />
-				<DropdownMenuItem variant="destructive" onSelect={handleSignOut}>
+				<DropdownMenuItem variant="default" onSelect={handleSignOut}>
 					<LogOut className="size-4" />
 					Sign out
 				</DropdownMenuItem>

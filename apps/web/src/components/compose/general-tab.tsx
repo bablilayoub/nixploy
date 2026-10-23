@@ -15,6 +15,7 @@ import { useSaveBar } from "@/components/services/save-bar";
 import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
 import { Button } from "@/components/ui/button";
 import { DisabledHint } from "@/components/ui/disabled-hint";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -249,8 +250,8 @@ export function GeneralTab({
 						description="Choose the repository or stored Compose file to deploy."
 					>
 						<div className="flex min-w-0 flex-col gap-5">
-							<div className="flex flex-col gap-2">
-								<Label htmlFor="source-type">Source type</Label>
+							<Field>
+								<FieldLabel htmlFor="source-type">Source type</FieldLabel>
 								<Select
 									value={sourceType}
 									onValueChange={(value) => changeSourceType(value as SourceType)}
@@ -267,7 +268,7 @@ export function GeneralTab({
 										<SelectItem value="gitea">Gitea</SelectItem>
 									</SelectContent>
 								</Select>
-							</div>
+							</Field>
 
 							{sourceType === "raw" && (
 								<p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
@@ -292,31 +293,31 @@ export function GeneralTab({
 
 							{sourceType === "git" && (
 								<>
-									<div className="flex flex-col gap-2">
-										<Label htmlFor="git-url">Repository URL</Label>
+									<Field>
+										<FieldLabel htmlFor="git-url">Repository URL</FieldLabel>
 										<Input
 											id="git-url"
 											placeholder="https://github.com/org/repo.git"
 											value={gitUrl}
 											onChange={(e) => draft.patch({ gitUrl: e.target.value })}
 										/>
-									</div>
-									<div className="flex flex-col gap-2">
-										<Label htmlFor="git-branch">Branch</Label>
+									</Field>
+									<Field>
+										<FieldLabel htmlFor="git-branch">Branch</FieldLabel>
 										<Input
 											id="git-branch"
 											placeholder="main"
 											value={gitBranch}
 											onChange={(e) => draft.patch({ gitBranch: e.target.value })}
 										/>
-									</div>
+									</Field>
 								</>
 							)}
 
 							{isGitProviderSource(sourceType) && (
 								<>
-									<div className="flex flex-col gap-2">
-										<Label htmlFor="provider">Provider</Label>
+									<Field>
+										<FieldLabel htmlFor="provider">Provider</FieldLabel>
 										<Select
 											value={providerId}
 											onValueChange={(value) => draft.patch({ providerId: value })}
@@ -365,7 +366,7 @@ export function GeneralTab({
 												Settings → Git providers.
 											</p>
 										)}
-									</div>
+									</Field>
 									<GitProviderRepoPicker
 										sourceType={sourceType}
 										providerId={providerId}
@@ -378,15 +379,15 @@ export function GeneralTab({
 							)}
 
 							{sourceType !== "raw" && (
-								<div className="flex flex-col gap-2">
-									<Label htmlFor="compose-path">Compose path</Label>
+								<Field>
+									<FieldLabel htmlFor="compose-path">Compose path</FieldLabel>
 									<Input
 										id="compose-path"
 										placeholder="./docker-compose.yml"
 										value={composePath}
 										onChange={(e) => draft.patch({ composePath: e.target.value })}
 									/>
-								</div>
+								</Field>
 							)}
 						</div>
 					</SettingsSection>
@@ -398,8 +399,8 @@ export function GeneralTab({
 						description="Choose how the stack is built, isolated and exposed."
 					>
 						<div className="flex min-w-0 flex-col gap-2">
-							<div className="flex flex-col gap-2">
-								<Label htmlFor="compose-type">Compose type</Label>
+							<Field>
+								<FieldLabel htmlFor="compose-type">Compose type</FieldLabel>
 								<Select
 									value={composeType}
 									onValueChange={(value) =>
@@ -418,7 +419,7 @@ export function GeneralTab({
 									Stack mode deploys with <code>docker stack deploy</code> instead of{" "}
 									<code>docker compose up</code>. <HelpLink slug="deploy" />
 								</p>
-							</div>
+							</Field>
 							<div className="flex flex-wrap items-start justify-between gap-4 border-b py-4">
 								<div>
 									<Label htmlFor="isolated-deployment">Isolated deployment</Label>
@@ -463,8 +464,8 @@ export function GeneralTab({
 								/>
 							</div>
 							{buildEnabled && (
-								<div className="flex flex-col gap-2">
-									<Label htmlFor="compose-build-args">Build args</Label>
+								<Field>
+									<FieldLabel htmlFor="compose-build-args">Build args</FieldLabel>
 									<Textarea
 										id="compose-build-args"
 										className="min-h-16 font-mono text-base sm:max-w-lg sm:text-xs"
@@ -478,7 +479,7 @@ export function GeneralTab({
 										Credential-shaped keys are passed as BuildKit secrets instead of build args, so
 										they stay out of the image history.
 									</p>
-								</div>
+								</Field>
 							)}
 							<div className="flex flex-wrap items-start justify-between gap-4 border-b py-4">
 								<div>
@@ -505,8 +506,8 @@ export function GeneralTab({
 						description="Optional commands around a deployment. Save these with the rest of the configuration."
 					>
 						<div className="grid gap-6 xl:grid-cols-2">
-							<div className="flex flex-col gap-2">
-								<Label htmlFor="compose-pre-deploy">Pre-deploy command</Label>
+							<Field>
+								<FieldLabel htmlFor="compose-pre-deploy">Pre-deploy command</FieldLabel>
 								<Textarea
 									id="compose-pre-deploy"
 									className="min-h-16 font-mono text-base sm:max-w-lg sm:text-xs"
@@ -520,9 +521,9 @@ export function GeneralTab({
 									replaced (skipped on the first deploy). A non-zero exit aborts the deployment and
 									leaves the running project untouched.
 								</p>
-							</div>
-							<div className="flex flex-col gap-2">
-								<Label htmlFor="compose-post-deploy">Post-deploy command</Label>
+							</Field>
+							<Field>
+								<FieldLabel htmlFor="compose-post-deploy">Post-deploy command</FieldLabel>
 								<Textarea
 									id="compose-post-deploy"
 									className="min-h-16 font-mono text-base sm:max-w-lg sm:text-xs"
@@ -535,7 +536,7 @@ export function GeneralTab({
 									Runs in a container of the project that was just brought up. A non-zero exit marks
 									the deployment failed.
 								</p>
-							</div>
+							</Field>
 						</div>
 					</SettingsSection>
 				</div>

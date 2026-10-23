@@ -15,6 +15,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { Label } from "@/components/ui/label";
@@ -161,15 +162,15 @@ export function TwoFactorCard() {
 					</DialogHeader>
 
 					{!totpURI && (
-						<div className="grid gap-2">
-							<Label htmlFor="twofa-password">Password</Label>
+						<Field>
+							<FieldLabel htmlFor="twofa-password">Password</FieldLabel>
 							<Input
 								id="twofa-password"
 								type="password"
 								value={password}
 								onChange={(e) => setPassword(e.target.value)}
 							/>
-						</div>
+						</Field>
 					)}
 
 					{totpURI && !enabled && (
@@ -237,7 +238,7 @@ export function TwoFactorCard() {
 
 					<DialogFooter>
 						{enabled ? (
-							<Button variant="destructive" disabled={isPending || !password} onClick={disable}>
+							<Button variant="outline" disabled={isPending || !password} onClick={disable}>
 								{isPending && <Loader2 className="size-4 animate-spin" />}
 								Disable
 							</Button>

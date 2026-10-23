@@ -3,16 +3,11 @@ import { SaveBarProvider } from "@/components/services/save-bar";
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
 	return (
-		<div className="mx-auto flex w-full max-w-7xl flex-col gap-6 lg:flex-row lg:items-start lg:gap-10">
-			<NavSettings className="lg:sticky lg:top-[calc(var(--app-chrome-height,112px)+2rem)] lg:w-48 lg:shrink-0 lg:max-h-[calc(100svh-8rem)] lg:overflow-y-auto" />
-			{/*
-			 * One save bar for the settings page being viewed: the cards of the
-			 * other routes are unmounted, so only this page's dirty forms can
-			 * register (UX audit F12).
-			 */}
-			<div className="min-w-0 flex-1">
-				<SaveBarProvider>{children}</SaveBarProvider>
+		<div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
+			<div className="md:hidden">
+				<NavSettings />
 			</div>
+			<SaveBarProvider>{children}</SaveBarProvider>
 		</div>
 	);
 }

@@ -8,8 +8,8 @@ import { SettingsSection } from "@/components/layout/settings-section";
 import { useSaveBar } from "@/components/services/save-bar";
 import { SESSIONS_QUERY_KEY } from "@/components/settings/profile/sessions-card";
 import { Button } from "@/components/ui/button";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { UserAvatar } from "@/components/user-avatar";
 import { useDraft } from "@/hooks/use-draft";
 import { useMounted } from "@/hooks/use-mounted";
@@ -99,8 +99,8 @@ export function ProfileCard() {
 				</div>
 
 				<form onSubmit={onNameSubmit} className="grid max-w-sm gap-3">
-					<div className="grid gap-2">
-						<Label htmlFor="profile-name">Display name</Label>
+					<Field>
+						<FieldLabel htmlFor="profile-name">Display name</FieldLabel>
 						<Input
 							id="profile-name"
 							value={name}
@@ -108,7 +108,7 @@ export function ProfileCard() {
 							disabled={pending}
 							required
 						/>
-					</div>
+					</Field>
 					<div>
 						<Button type="submit" size="sm" disabled={pending || nameUnchanged}>
 							{pending && <Loader2 className="size-4 animate-spin" />}
@@ -217,8 +217,8 @@ export function ChangePasswordCard() {
 			description="Update your password. Other sessions will be signed out."
 		>
 			<form onSubmit={onSubmit} className="grid max-w-sm gap-4">
-				<div className="grid gap-2">
-					<Label htmlFor="current-password">Current password</Label>
+				<Field>
+					<FieldLabel htmlFor="current-password">Current password</FieldLabel>
 					<Input
 						id="current-password"
 						type="password"
@@ -226,9 +226,9 @@ export function ChangePasswordCard() {
 						value={currentPassword}
 						onChange={(e) => setCurrentPassword(e.target.value)}
 					/>
-				</div>
-				<div className="grid gap-2">
-					<Label htmlFor="new-password">New password</Label>
+				</Field>
+				<Field>
+					<FieldLabel htmlFor="new-password">New password</FieldLabel>
 					<Input
 						id="new-password"
 						type="password"
@@ -237,9 +237,9 @@ export function ChangePasswordCard() {
 						value={newPassword}
 						onChange={(e) => setNewPassword(e.target.value)}
 					/>
-				</div>
-				<div className="grid gap-2">
-					<Label htmlFor="confirm-password">Confirm new password</Label>
+				</Field>
+				<Field>
+					<FieldLabel htmlFor="confirm-password">Confirm new password</FieldLabel>
 					<Input
 						id="confirm-password"
 						type="password"
@@ -248,7 +248,7 @@ export function ChangePasswordCard() {
 						value={confirmPassword}
 						onChange={(e) => setConfirmPassword(e.target.value)}
 					/>
-				</div>
+				</Field>
 				<div>
 					<Button type="submit" disabled={isPending}>
 						{isPending && <Loader2 className="size-4 animate-spin" />}

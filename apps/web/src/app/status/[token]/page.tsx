@@ -6,6 +6,7 @@ import { notFound } from "next/navigation";
 import { ModeToggle } from "@/components/mode-toggle";
 import { PublicStatusRefresh } from "@/components/monitoring/public-status-refresh";
 import { Logo } from "@/components/shell/logo";
+import { Card, CardContent } from "@/components/ui/card";
 
 /**
  * Public status page — the only unauthenticated view of organization data in
@@ -93,48 +94,51 @@ export default async function StatusPage({ params }: { params: Promise<{ token: 
 				<Logo />
 				<ModeToggle />
 			</div>
-			<header className="surface flex flex-col gap-4 p-6 sm:p-8">
-				<p className="text-xs text-muted-foreground normal-case">Service status</p>
-				<h1 className="text-3xl leading-tight font-semibold tracking-[-0.04em]">{status.title}</h1>
-				<p className="text-sm text-muted-foreground">
-					{status.probes.length === 0
-						? "No services are published on this status page."
-						: anyDown
-							? "Some services are down."
-							: allUp
-								? "All services are operational."
-								: "Service state is being determined."}
-				</p>
-				<PublicStatusRefresh generatedAt={status.generatedAt.toISOString()} />
-			</header>
-
-			<section
-				aria-label="Published service availability"
-				className="surface flex flex-col divide-y overflow-hidden"
-			>
-				{status.probes.map((probe) => (
-					<div
-						key={probe.name}
-						className="flex flex-wrap items-center justify-between gap-3 bg-card px-5 py-5"
-					>
-						<div className="flex min-w-0 items-center gap-2.5">
-							<StateDot status={probe.status} />
-							<span className="break-words text-sm font-medium">{probe.name}</span>
-						</div>
-						<div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-							<span className="tabular-nums">
-								{probe.uptimePercent.toFixed(2)}% uptime over {status.uptimeDays} days
-							</span>
-							<span>{STATE_LABEL[probe.status] ?? probe.status}</span>
-						</div>
-					</div>
-				))}
-				{status.probes.length === 0 ? (
-					<p className="bg-card px-4 py-8 text-center text-sm text-muted-foreground">
-						Nothing published yet.
+			<Card>
+				<header className="flex flex-col gap-4 p-6 sm:p-8">
+					<p className="text-xs text-muted-foreground normal-case">Service status</p>
+					<h1 className="text-3xl leading-tight font-semibold tracking-[-0.04em]">
+						{status.title}
+					</h1>
+					<p className="text-sm text-muted-foreground">
+						{status.probes.length === 0
+							? "No services are published on this status page."
+							: anyDown
+								? "Some services are down."
+								: allUp
+									? "All services are operational."
+									: "Service state is being determined."}
 					</p>
-				) : null}
-			</section>
+					<PublicStatusRefresh generatedAt={status.generatedAt.toISOString()} />
+				</header>
+			</Card>
+
+			<Card role="region" aria-label="Published service availability" className="min-w-0">
+				<CardContent className="flex flex-col divide-y overflow-hidden">
+					{status.probes.map((probe) => (
+						<div
+							key={probe.name}
+							className="flex flex-wrap items-center justify-between gap-3 bg-card px-5 py-5"
+						>
+							<div className="flex min-w-0 items-center gap-2.5">
+								<StateDot status={probe.status} />
+								<span className="break-words text-sm font-medium">{probe.name}</span>
+							</div>
+							<div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+								<span className="tabular-nums">
+									{probe.uptimePercent.toFixed(2)}% uptime over {status.uptimeDays} days
+								</span>
+								<span>{STATE_LABEL[probe.status] ?? probe.status}</span>
+							</div>
+						</div>
+					))}
+					{status.probes.length === 0 ? (
+						<p className="bg-card px-4 py-8 text-center text-sm text-muted-foreground">
+							Nothing published yet.
+						</p>
+					) : null}
+				</CardContent>
+			</Card>
 
 			{status.incidents.length > 0 ? (
 				<section className="flex flex-col gap-3">

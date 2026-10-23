@@ -20,8 +20,8 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@/components/ui/dialog";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
 	Select,
 	SelectContent,
@@ -144,8 +144,8 @@ export function DestinationsView() {
 								</DialogDescription>
 							</DialogHeader>
 							<div className="grid gap-5">
-								<div className="grid gap-2">
-									<Label htmlFor="dest-provider">Storage</Label>
+								<Field>
+									<FieldLabel htmlFor="dest-provider">Storage</FieldLabel>
 									<Select
 										value={provider}
 										onValueChange={(value) => setProvider(value as Provider)}
@@ -173,63 +173,63 @@ export function DestinationsView() {
 											</p>
 										)
 									)}
-								</div>
-								<div className="grid gap-2">
-									<Label htmlFor="dest-name">Name</Label>
+								</Field>
+								<Field>
+									<FieldLabel htmlFor="dest-name">Name</FieldLabel>
 									<Input
 										id="dest-name"
 										placeholder={provider === "local" ? "e.g. local-disk" : "e.g. backups-s3"}
 										value={name}
 										onChange={(e) => setName(e.target.value)}
 									/>
-								</div>
+								</Field>
 								{provider === "s3" && (
 									<>
 										<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-											<div className="grid gap-2">
-												<Label htmlFor="dest-bucket">Bucket</Label>
+											<Field>
+												<FieldLabel htmlFor="dest-bucket">Bucket</FieldLabel>
 												<Input
 													id="dest-bucket"
 													value={bucket}
 													onChange={(e) => setBucket(e.target.value)}
 												/>
-											</div>
-											<div className="grid gap-2">
-												<Label htmlFor="dest-region">Region</Label>
+											</Field>
+											<Field>
+												<FieldLabel htmlFor="dest-region">Region</FieldLabel>
 												<Input
 													id="dest-region"
 													placeholder="us-east-1"
 													value={region}
 													onChange={(e) => setRegion(e.target.value)}
 												/>
-											</div>
+											</Field>
 										</div>
-										<div className="grid gap-2">
-											<Label htmlFor="dest-endpoint">Endpoint</Label>
+										<Field>
+											<FieldLabel htmlFor="dest-endpoint">Endpoint</FieldLabel>
 											<Input
 												id="dest-endpoint"
 												placeholder="https://s3.us-east-1.amazonaws.com"
 												value={endpoint}
 												onChange={(e) => setEndpoint(e.target.value)}
 											/>
-										</div>
-										<div className="grid gap-2">
-											<Label htmlFor="dest-access-key">Access key ID</Label>
+										</Field>
+										<Field>
+											<FieldLabel htmlFor="dest-access-key">Access key ID</FieldLabel>
 											<Input
 												id="dest-access-key"
 												value={accessKey}
 												onChange={(e) => setAccessKey(e.target.value)}
 											/>
-										</div>
-										<div className="grid gap-2">
-											<Label htmlFor="dest-secret-key">Secret access key</Label>
+										</Field>
+										<Field>
+											<FieldLabel htmlFor="dest-secret-key">Secret access key</FieldLabel>
 											<Input
 												id="dest-secret-key"
 												type="password"
 												value={secretAccessKey}
 												onChange={(e) => setSecretAccessKey(e.target.value)}
 											/>
-										</div>
+										</Field>
 									</>
 								)}
 							</div>
@@ -402,52 +402,52 @@ export function DestinationsView() {
 						}}
 						className="grid gap-5"
 					>
-						<div className="grid gap-2">
-							<Label htmlFor="edit-dest-name">Name</Label>
+						<Field>
+							<FieldLabel htmlFor="edit-dest-name">Name</FieldLabel>
 							<Input
 								id="edit-dest-name"
 								value={editName}
 								onChange={(e) => setEditName(e.target.value)}
 							/>
-						</div>
+						</Field>
 						{!(editing && isLocal(editing)) && (
 							<>
 								<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-									<div className="grid gap-2">
-										<Label htmlFor="edit-dest-bucket">Bucket</Label>
+									<Field>
+										<FieldLabel htmlFor="edit-dest-bucket">Bucket</FieldLabel>
 										<Input
 											id="edit-dest-bucket"
 											value={editBucket}
 											onChange={(e) => setEditBucket(e.target.value)}
 										/>
-									</div>
-									<div className="grid gap-2">
-										<Label htmlFor="edit-dest-region">Region</Label>
+									</Field>
+									<Field>
+										<FieldLabel htmlFor="edit-dest-region">Region</FieldLabel>
 										<Input
 											id="edit-dest-region"
 											value={editRegion}
 											onChange={(e) => setEditRegion(e.target.value)}
 										/>
-									</div>
+									</Field>
 								</div>
-								<div className="grid gap-2">
-									<Label htmlFor="edit-dest-endpoint">Endpoint</Label>
+								<Field>
+									<FieldLabel htmlFor="edit-dest-endpoint">Endpoint</FieldLabel>
 									<Input
 										id="edit-dest-endpoint"
 										value={editEndpoint}
 										onChange={(e) => setEditEndpoint(e.target.value)}
 									/>
-								</div>
-								<div className="grid gap-2">
-									<Label htmlFor="edit-dest-access-key">Access key ID</Label>
+								</Field>
+								<Field>
+									<FieldLabel htmlFor="edit-dest-access-key">Access key ID</FieldLabel>
 									<Input
 										id="edit-dest-access-key"
 										value={editAccessKey}
 										onChange={(e) => setEditAccessKey(e.target.value)}
 									/>
-								</div>
-								<div className="grid gap-2">
-									<Label htmlFor="edit-dest-secret-key">Secret access key</Label>
+								</Field>
+								<Field>
+									<FieldLabel htmlFor="edit-dest-secret-key">Secret access key</FieldLabel>
 									<Input
 										id="edit-dest-secret-key"
 										type="password"
@@ -455,7 +455,7 @@ export function DestinationsView() {
 										value={editSecretAccessKey}
 										onChange={(e) => setEditSecretAccessKey(e.target.value)}
 									/>
-								</div>
+								</Field>
 							</>
 						)}
 						<DialogFooter>

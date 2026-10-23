@@ -4,10 +4,10 @@ import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { ChevronRight, Loader2, Rocket } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
-
 import { QueryState } from "@/components/query-state";
 import { StatusDot, type StatusDotStatus } from "@/components/shell";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { DateTime } from "@/components/ui/date-time";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
@@ -29,17 +29,19 @@ function StatCard({
 	isPending?: boolean;
 }) {
 	return (
-		<div className="flex flex-col gap-1 surface p-5">
-			<span className="flex items-center gap-2 text-sm text-muted-foreground">
-				<StatusDot status={dot} />
-				{label}
-			</span>
-			{isPending ? (
-				<Skeleton className="h-8 w-12" />
-			) : (
-				<span className="text-2xl font-semibold tabular-nums">{value ?? 0}</span>
-			)}
-		</div>
+		<Card className="min-w-0">
+			<CardContent className="flex flex-col gap-1">
+				<span className="flex items-center gap-2 text-sm text-muted-foreground">
+					<StatusDot status={dot} />
+					{label}
+				</span>
+				{isPending ? (
+					<Skeleton className="h-8 w-12" />
+				) : (
+					<span className="text-2xl font-semibold tabular-nums">{value ?? 0}</span>
+				)}
+			</CardContent>
+		</Card>
 	);
 }
 

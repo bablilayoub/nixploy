@@ -3,7 +3,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Loader2, Plus } from "lucide-react";
 import { useState } from "react";
-
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -14,9 +13,9 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@/components/ui/dialog";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
 	Select,
 	SelectContent,
@@ -93,8 +92,8 @@ export function CreateServerDialog({
 						});
 					}}
 				>
-					<div className="grid gap-2">
-						<Label htmlFor="server-name">Name</Label>
+					<Field>
+						<FieldLabel htmlFor="server-name">Name</FieldLabel>
 						<Input
 							id="server-name"
 							required
@@ -102,18 +101,18 @@ export function CreateServerDialog({
 							value={name}
 							onChange={(e) => setName(e.target.value)}
 						/>
-					</div>
-					<div className="grid gap-2">
-						<Label htmlFor="server-description">Description (optional)</Label>
+					</Field>
+					<Field>
+						<FieldLabel htmlFor="server-description">Description (optional)</FieldLabel>
 						<Input
 							id="server-description"
 							value={description}
 							onChange={(e) => setDescription(e.target.value)}
 						/>
-					</div>
+					</Field>
 					<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-						<div className="grid gap-2">
-							<Label htmlFor="server-ip">IP address</Label>
+						<Field>
+							<FieldLabel htmlFor="server-ip">IP address</FieldLabel>
 							<Input
 								id="server-ip"
 								required
@@ -121,9 +120,9 @@ export function CreateServerDialog({
 								value={ipAddress}
 								onChange={(e) => setIpAddress(e.target.value)}
 							/>
-						</div>
-						<div className="grid gap-2">
-							<Label htmlFor="server-port">SSH port</Label>
+						</Field>
+						<Field>
+							<FieldLabel htmlFor="server-port">SSH port</FieldLabel>
 							<Input
 								id="server-port"
 								required
@@ -133,18 +132,18 @@ export function CreateServerDialog({
 								value={port}
 								onChange={(e) => setPort(e.target.value)}
 							/>
-						</div>
+						</Field>
 					</div>
-					<div className="grid gap-2">
-						<Label htmlFor="server-username">Username</Label>
+					<Field>
+						<FieldLabel htmlFor="server-username">Username</FieldLabel>
 						<Input
 							id="server-username"
 							value={username}
 							onChange={(e) => setUsername(e.target.value)}
 						/>
-					</div>
-					<div className="grid gap-2">
-						<Label>SSH key</Label>
+					</Field>
+					<Field>
+						<FieldLabel>SSH key</FieldLabel>
 						<Select
 							value={sshKeyId ?? "none"}
 							onValueChange={(value) => setSshKeyId(value === "none" ? null : value)}
@@ -174,9 +173,9 @@ export function CreateServerDialog({
 								</Button>
 							</div>
 						)}
-					</div>
-					<div className="grid gap-2">
-						<Label>Swarm role</Label>
+					</Field>
+					<Field>
+						<FieldLabel>Swarm role</FieldLabel>
 						<Select
 							value={swarmRole}
 							onValueChange={(value) => setSwarmRole(value as "worker" | "manager")}
@@ -193,7 +192,7 @@ export function CreateServerDialog({
 							Setup joins this host to the primary Swarm. Workers run workloads; managers can also
 							schedule Traefik. <HelpLink slug="servers" />
 						</p>
-					</div>
+					</Field>
 				</form>
 				<DialogFooter>
 					<Button

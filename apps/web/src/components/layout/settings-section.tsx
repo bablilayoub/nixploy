@@ -7,6 +7,7 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
+import { FieldGroup } from "@/components/ui/field";
 import { cn } from "@/lib/utils";
 
 /** Shared settings composition using the standard shadcn Card. */
@@ -41,7 +42,7 @@ export function SettingsSection({
 			className={cn(
 				"scroll-mt-24 min-w-0",
 				bare && "border-0 p-0 shadow-none",
-				danger && "border-destructive/50",
+
 				className,
 			)}
 		>
@@ -51,15 +52,13 @@ export function SettingsSection({
 			</CardHeader>
 			{children && (
 				<CardContent>
-					<div className={cn("flex min-w-0 flex-col gap-4", !wide && !bare && "max-w-3xl")}>
+					<FieldGroup className={cn("min-w-0", !wide && !bare && "max-w-3xl")}>
 						{children}
-					</div>
+					</FieldGroup>
 				</CardContent>
 			)}
 			{actions && (
-				<CardFooter className="flex-wrap justify-end gap-2 border-t bg-muted/30 py-4">
-					{actions}
-				</CardFooter>
+				<CardFooter className="flex-wrap justify-end gap-2 border-t">{actions}</CardFooter>
 			)}
 		</Card>
 	);

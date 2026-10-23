@@ -10,6 +10,7 @@ import { useSaveBar } from "@/components/services/save-bar";
 import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
 import { Button } from "@/components/ui/button";
 import { DisabledHint } from "@/components/ui/disabled-hint";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -145,8 +146,8 @@ function PreviewSettingsCard({ compose }: { compose: ComposeService }) {
 					/>
 				</div>
 
-				<div className="flex flex-col gap-2">
-					<Label htmlFor="compose-preview-env">Preview environment variables</Label>
+				<Field>
+					<FieldLabel htmlFor="compose-preview-env">Preview environment variables</FieldLabel>
 					<Textarea
 						id="compose-preview-env"
 						className="min-h-24 font-mono text-xs sm:max-w-lg"
@@ -159,11 +160,11 @@ function PreviewSettingsCard({ compose }: { compose: ComposeService }) {
 						Merged over the inherited project, environment and service variables when a preview
 						renders — point a preview stack at a scratch database instead of production.
 					</p>
-				</div>
+				</Field>
 
 				<div className="grid gap-4 sm:max-w-lg sm:grid-cols-2">
-					<div className="flex flex-col gap-2">
-						<Label htmlFor="compose-preview-limit">Maximum previews</Label>
+					<Field>
+						<FieldLabel htmlFor="compose-preview-limit">Maximum previews</FieldLabel>
 						<Input
 							id="compose-preview-limit"
 							inputMode="numeric"
@@ -172,9 +173,9 @@ function PreviewSettingsCard({ compose }: { compose: ComposeService }) {
 							onChange={(event) => draft.patch({ limit: event.target.value })}
 						/>
 						<p className="text-xs text-muted-foreground">0 means no limit.</p>
-					</div>
-					<div className="flex flex-col gap-2">
-						<Label htmlFor="compose-preview-ttl">Expire after (hours)</Label>
+					</Field>
+					<Field>
+						<FieldLabel htmlFor="compose-preview-ttl">Expire after (hours)</FieldLabel>
 						<Input
 							id="compose-preview-ttl"
 							inputMode="numeric"
@@ -186,7 +187,7 @@ function PreviewSettingsCard({ compose }: { compose: ComposeService }) {
 						<p className="text-xs text-muted-foreground">
 							Applied when a pull request creates the preview.
 						</p>
-					</div>
+					</Field>
 				</div>
 
 				<PreviewDatabaseFields

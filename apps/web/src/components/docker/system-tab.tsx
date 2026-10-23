@@ -148,7 +148,7 @@ export function SystemTab({ serverId }: DockerTabProps) {
 					<AlertDialogFooter>
 						<AlertDialogCancel>Cancel</AlertDialogCancel>
 						<AlertDialogAction
-							variant="destructive"
+							variant="outline"
 							disabled={pruneMutation.isPending}
 							onClick={() =>
 								pruneMutation.mutate({

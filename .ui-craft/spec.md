@@ -1,14 +1,17 @@
-# Selected Fieldwork implementation
+# Native app rebuild
 
-## Before → after
-- Persistent workspace rail + compact bar → horizontal identity/organization header and primary route navigation; compact mobile sheet with all existing destinations.
-- Project rows beneath equal KPI cards → truthful inline summary, project objects with real environment/service summaries, then deployment evidence.
-- Boxed service header + card stack → open identity/actions, ordered URL-synced tabs, aligned sections; contained console/editor tools.
-- Settings card stacks → contextual settings navigation, divided label/control sections and well-framed data tables; existing save/dirty/confirmation contracts.
-- Dark operator auth/marketing → approved Fieldwork split auth and a neutral product-first public site with real updated application captures and a matching documentation frame.
+Current authority: [brief.md](brief.md). Earlier Fieldwork/Mobbin compositions are retired.
 
 ## Layout
-Desktop header72px + navigation48px; content max1440px with40/48px gutters, responsive24/16px. Primary page headings32px medium; description14px. Projects use two columns on wide screens, one on phones; no fake dependency edges. Contextual settings rail stays inside the content, not global chrome. Service tabs remain scrollable and focus-visible. Marketing preserves all URLs, factual claims, conversion paths and source attribution while changing composition.
+Official sidebar-07 composition with contextual settings navigation, a compact header and a single main landmark. Sidebar preference is read from its existing cookie. At mobile sizes or enlarged text the native Sheet provides navigation.
 
-## Coverage
-coverage.json enumerates every visual source. Reconcile new/removed entries before completion. Every rendered family is captured in both themes and key interactions exercised in a disposable environment. No migration or live settings mutation is necessary for a visual rebuild.
+Overview has compact metric Cards, an Item project list with environment links and a deployment activity Card beside it on wide screens. Service identity/actions live in a native Card, followed by canonical line Tabs and native configuration Tabs. No nested desktop task rail. Settings use one content column with native Cards and Fields. Shared data tables place controls above the framed rows and pagination below. Authentication uses the official login-03 composition. Failure, not-found and maintenance pages use native Empty.
+
+## Component contract
+Stock New York registry components. Item, Field and Progress are vendored from the official registry with imports normalized and minimal semantic/reflow guards. No package dependency additions. Neutral default palette, including neutral destructive/sidebar-primary roles. No bespoke component stylesheet. Existing user branding remains a configurable feature.
+
+## Compatibility
+No API, schema, deploy engine or encryption changes. Every existing query/mutation/key binding is preserved. Existing draft, permission, lifecycle, confirmation, keyboard, URL/hash alias, file-picker and long-operation contracts continue. Table containers and organization dialogs remain mounted across loading/sidebar transitions.
+
+## Verification
+Desktop routes in both themes; mobile/tablet and enlarged text; overlays and focus restoration; setup; navigation; data/config preservation at rollout. Evidence lives privately under `.nixploy-data/verification/native-rebuild/`.

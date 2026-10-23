@@ -4,8 +4,8 @@ import { KeyRound, LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
-
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { authClient } from "@/lib/auth-client";
 import { describeError } from "@/lib/describe-error";
 
@@ -59,21 +59,23 @@ export function SsoRequiredGate({
 
 	return (
 		<div className="flex min-h-svh flex-col items-center justify-center gap-8 bg-background p-5">
-			<div className="surface flex w-full max-w-md flex-col items-start gap-4 p-7 text-start">
-				<KeyRound className="size-10 text-muted-foreground" />
-				<h1 className="text-xl font-semibold">Single sign-on required</h1>
-				<p className="text-sm text-muted-foreground">
-					{orgName ? (
-						<>
-							<span className="font-medium text-foreground">{orgName}</span> requires single
-							sign-on.{" "}
-						</>
-					) : (
-						"Your organization requires single sign-on. "
-					)}
-					Sign in through your identity provider to continue.
-				</p>
-			</div>
+			<Card className="min-w-0">
+				<CardContent className="flex w-full max-w-md flex-col items-start gap-4 text-start">
+					<KeyRound className="size-10 text-muted-foreground" />
+					<h1 className="text-xl font-semibold">Single sign-on required</h1>
+					<p className="text-sm text-muted-foreground">
+						{orgName ? (
+							<>
+								<span className="font-medium text-foreground">{orgName}</span> requires single
+								sign-on.{" "}
+							</>
+						) : (
+							"Your organization requires single sign-on. "
+						)}
+						Sign in through your identity provider to continue.
+					</p>
+				</CardContent>
+			</Card>
 
 			<div className="flex w-full max-w-sm flex-col gap-2">
 				{providers.length === 0 ? (

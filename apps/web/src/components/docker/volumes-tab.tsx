@@ -215,7 +215,7 @@ export function VolumesTab({ serverId }: DockerTabProps) {
 					<AlertDialogFooter>
 						<AlertDialogCancel>Cancel</AlertDialogCancel>
 						<AlertDialogAction
-							variant="destructive"
+							variant="outline"
 							disabled={removeMutation.isPending}
 							onClick={() => {
 								if (removing) removeMutation.mutate({ serverId, name: removing.Name });
@@ -244,7 +244,7 @@ export function VolumesTab({ serverId }: DockerTabProps) {
 					<AlertDialogFooter>
 						<AlertDialogCancel>Cancel</AlertDialogCancel>
 						<AlertDialogAction
-							variant="destructive"
+							variant="outline"
 							disabled={pruneMutation.isPending}
 							onClick={() => pruneMutation.mutate({ serverId })}
 						>
@@ -588,7 +588,7 @@ function VolumeBrowserSheet({
 					<AlertDialogFooter>
 						<AlertDialogCancel disabled={remove.isPending}>Cancel</AlertDialogCancel>
 						<AlertDialogAction
-							variant="destructive"
+							variant="outline"
 							disabled={remove.isPending}
 							onClick={(event) => {
 								event.preventDefault();

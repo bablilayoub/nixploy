@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef } from "react";
+import { Card, CardContent } from "@/components/ui/card";
 import "swagger-ui-dist/swagger-ui.css";
 
 import { Button } from "@/components/ui/button";
@@ -74,34 +75,36 @@ export function SwaggerExplorer() {
 			</header>
 
 			<main id="main-content" className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-10 sm:px-8">
-				<section className="surface p-4 sm:p-5">
-					<div className="flex flex-wrap items-center gap-2">
-						<h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
-							Nixploy API
-						</h1>
-						<span className="rounded-full border border-border bg-muted px-2 py-0.5 font-mono text-[11px] font-medium text-muted-foreground">
-							0.1.0
-						</span>
-						<span className="rounded-full border border-border px-2 py-0.5 font-mono text-[11px] font-medium text-muted-foreground">
-							OAS 3.0
-						</span>
-					</div>
-					<p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground text-pretty">
-						REST surface generated from the tRPC routers. Authenticate with an API key (
-						<code className="rounded-md border border-border bg-muted px-1.5 py-0.5 font-mono text-[12px] text-foreground">
-							x-api-key
-						</code>{" "}
-						header) created under Settings → Profile.
-					</p>
-					<a
-						href="/api/openapi.json"
-						target="_blank"
-						rel="noreferrer"
-						className="mt-3 inline-flex items-center text-sm text-muted-foreground underline decoration-border underline-offset-4 transition-colors hover:text-foreground hover:decoration-foreground/40"
-					>
-						/api/openapi.json
-					</a>
-				</section>
+				<Card className="min-w-0">
+					<CardContent className="">
+						<div className="flex flex-wrap items-center gap-2">
+							<h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+								Nixploy API
+							</h1>
+							<span className="rounded-full border border-border bg-muted px-2 py-0.5 font-mono text-[11px] font-medium text-muted-foreground">
+								0.1.0
+							</span>
+							<span className="rounded-full border border-border px-2 py-0.5 font-mono text-[11px] font-medium text-muted-foreground">
+								OAS 3.0
+							</span>
+						</div>
+						<p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground text-pretty">
+							REST surface generated from the tRPC routers. Authenticate with an API key (
+							<code className="rounded-md border border-border bg-muted px-1.5 py-0.5 font-mono text-[12px] text-foreground">
+								x-api-key
+							</code>{" "}
+							header) created under Settings → Profile.
+						</p>
+						<a
+							href="/api/openapi.json"
+							target="_blank"
+							rel="noreferrer"
+							className="mt-3 inline-flex items-center text-sm text-muted-foreground underline decoration-border underline-offset-4 transition-colors hover:text-foreground hover:decoration-foreground/40"
+						>
+							/api/openapi.json
+						</a>
+					</CardContent>
+				</Card>
 
 				<div ref={containerRef} className="swagger-host min-w-0" />
 			</main>

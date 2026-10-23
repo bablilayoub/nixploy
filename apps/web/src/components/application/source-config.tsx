@@ -16,6 +16,7 @@ import { useSaveBar } from "@/components/services/save-bar";
 import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
 import { Button } from "@/components/ui/button";
 import { DisabledHint } from "@/components/ui/disabled-hint";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -322,8 +323,8 @@ export function SourceConfig({ application }: { application: Application }) {
 			description="Where the code or image for this application comes from."
 		>
 			<div className="flex min-w-0 flex-col gap-5">
-				<div className="flex flex-col gap-2">
-					<Label>Source type</Label>
+				<Field>
+					<FieldLabel>Source type</FieldLabel>
 					<Select value={sourceType} onValueChange={(v) => changeSourceType(v as SourceType)}>
 						<SelectTrigger aria-label="Source type" className="w-full sm:max-w-xs">
 							<SelectValue />
@@ -336,31 +337,31 @@ export function SourceConfig({ application }: { application: Application }) {
 							))}
 						</SelectContent>
 					</Select>
-				</div>
+				</Field>
 
 				{sourceType === "git" && (
 					<>
-						<div className="flex flex-col gap-2">
-							<Label htmlFor="git-url">Repository URL</Label>
+						<Field>
+							<FieldLabel htmlFor="git-url">Repository URL</FieldLabel>
 							<Input
 								id="git-url"
 								placeholder="https://github.com/user/repo.git"
 								value={gitUrl}
 								onChange={(e) => draft.patch({ gitUrl: e.target.value })}
 							/>
-						</div>
+						</Field>
 						<div className="grid gap-4 sm:grid-cols-2">
-							<div className="flex flex-col gap-2">
-								<Label htmlFor="git-branch">Branch</Label>
+							<Field>
+								<FieldLabel htmlFor="git-branch">Branch</FieldLabel>
 								<Input
 									id="git-branch"
 									placeholder="main"
 									value={gitBranch}
 									onChange={(e) => draft.patch({ gitBranch: e.target.value })}
 								/>
-							</div>
-							<div className="flex flex-col gap-2">
-								<Label>SSH key (optional)</Label>
+							</Field>
+							<Field>
+								<FieldLabel>SSH key (optional)</FieldLabel>
 								<Select
 									value={sshKeyId}
 									onValueChange={(value) => draft.patch({ sshKeyId: value })}
@@ -377,17 +378,17 @@ export function SourceConfig({ application }: { application: Application }) {
 										))}
 									</SelectContent>
 								</Select>
-							</div>
+							</Field>
 						</div>
 					</>
 				)}
 
 				{isGitProviderSource(sourceType) && (
 					<>
-						<div className="flex flex-col gap-2">
-							<Label htmlFor="application-source-provider">
+						<Field>
+							<FieldLabel htmlFor="application-source-provider">
 								{GIT_PROVIDER_LABELS[sourceType]} provider
-							</Label>
+							</FieldLabel>
 							<Select
 								value={providerId}
 								onValueChange={(value) => draft.patch({ providerId: value })}
@@ -432,7 +433,7 @@ export function SourceConfig({ application }: { application: Application }) {
 									→ Git providers.
 								</p>
 							)}
-						</div>
+						</Field>
 						<GitProviderRepoPicker
 							sourceType={sourceType}
 							providerId={providerId}
@@ -446,17 +447,17 @@ export function SourceConfig({ application }: { application: Application }) {
 
 				{sourceType === "docker" && (
 					<>
-						<div className="flex flex-col gap-2">
-							<Label htmlFor="docker-image">Docker image</Label>
+						<Field>
+							<FieldLabel htmlFor="docker-image">Docker image</FieldLabel>
 							<Input
 								id="docker-image"
 								placeholder="nginx:latest"
 								value={dockerImage}
 								onChange={(e) => draft.patch({ dockerImage: e.target.value })}
 							/>
-						</div>
-						<div className="flex flex-col gap-2">
-							<Label>Registry (optional)</Label>
+						</Field>
+						<Field>
+							<FieldLabel>Registry (optional)</FieldLabel>
 							<Select
 								value={registryId}
 								onValueChange={(value) => draft.patch({ registryId: value })}
@@ -473,7 +474,7 @@ export function SourceConfig({ application }: { application: Application }) {
 									))}
 								</SelectContent>
 							</Select>
-						</div>
+						</Field>
 						<div className="flex items-center justify-between gap-4 rounded-lg bg-secondary p-4">
 							<div className="flex min-w-0 flex-col gap-1">
 								<Label htmlFor="auto-update-image">Auto-update image</Label>
@@ -490,16 +491,16 @@ export function SourceConfig({ application }: { application: Application }) {
 						</div>
 						{registryId === NONE && (
 							<div className="grid gap-4 sm:grid-cols-2">
-								<div className="flex flex-col gap-2">
-									<Label htmlFor="docker-username">Username (optional)</Label>
+								<Field>
+									<FieldLabel htmlFor="docker-username">Username (optional)</FieldLabel>
 									<Input
 										id="docker-username"
 										value={dockerUsername}
 										onChange={(e) => draft.patch({ dockerUsername: e.target.value })}
 									/>
-								</div>
-								<div className="flex flex-col gap-2">
-									<Label htmlFor="docker-password">Password (optional)</Label>
+								</Field>
+								<Field>
+									<FieldLabel htmlFor="docker-password">Password (optional)</FieldLabel>
 									<Input
 										id="docker-password"
 										type="password"
@@ -507,7 +508,7 @@ export function SourceConfig({ application }: { application: Application }) {
 										value={dockerPassword}
 										onChange={(e) => draft.patch({ dockerPassword: e.target.value })}
 									/>
-								</div>
+								</Field>
 							</div>
 						)}
 					</>
@@ -517,8 +518,8 @@ export function SourceConfig({ application }: { application: Application }) {
 
 				{isGitLike && (
 					<>
-						<div className="flex flex-col gap-2">
-							<Label htmlFor="build-path">Build path</Label>
+						<Field>
+							<FieldLabel htmlFor="build-path">Build path</FieldLabel>
 							<Input
 								id="build-path"
 								placeholder="/"
@@ -526,7 +527,7 @@ export function SourceConfig({ application }: { application: Application }) {
 								value={buildPath}
 								onChange={(e) => draft.patch({ buildPath: e.target.value })}
 							/>
-						</div>
+						</Field>
 						<div className="flex items-center justify-between gap-4 rounded-lg bg-secondary p-4">
 							<div className="flex flex-col gap-1">
 								<Label htmlFor="auto-deploy">Auto deploy</Label>
@@ -540,8 +541,8 @@ export function SourceConfig({ application }: { application: Application }) {
 								onCheckedChange={(checked) => draft.patch({ autoDeploy: checked })}
 							/>
 						</div>
-						<div className="flex flex-col gap-2">
-							<Label htmlFor="watch-paths">Watch paths (optional)</Label>
+						<Field>
+							<FieldLabel htmlFor="watch-paths">Watch paths (optional)</FieldLabel>
 							<Textarea
 								id="watch-paths"
 								className="min-h-24 font-mono text-xs sm:max-w-lg"
@@ -558,7 +559,7 @@ export function SourceConfig({ application }: { application: Application }) {
 								<HelpLink slug="git" />
 							</p>
 							{watchPathsProblem && <p className="text-xs text-destructive">{watchPathsProblem}</p>}
-						</div>
+						</Field>
 						{isGitProviderSource(sourceType) && (
 							<>
 								<div className="flex items-center justify-between gap-4 rounded-lg bg-secondary p-4">

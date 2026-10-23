@@ -226,7 +226,7 @@ function DetailsBody({
 						<div className="rounded-lg border bg-card">
 							<Table className="w-full min-w-[30rem] text-left text-sm">
 								<TableCaption className="sr-only">Template environment variables</TableCaption>
-								<TableHeader className="border-b bg-panel-inset text-xs text-muted-foreground">
+								<TableHeader className="border-b bg-muted text-xs text-muted-foreground">
 									<TableRow>
 										<TableHead scope="col" className="px-3 py-3 font-medium">
 											Key

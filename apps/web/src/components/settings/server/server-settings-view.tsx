@@ -40,6 +40,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { CodeEditor } from "@/components/ui/code-editor";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -179,8 +180,8 @@ function DashboardDomainFields({
 				Encrypt email below, then save.
 			</p>
 			<div className="flex max-w-xl flex-wrap items-end gap-2">
-				<div className="grid min-w-0 flex-1 gap-2">
-					<Label htmlFor="dashboard-domain">Domain</Label>
+				<Field className="min-w-0 flex-1">
+					<FieldLabel htmlFor="dashboard-domain">Domain</FieldLabel>
 					<Input
 						id="dashboard-domain"
 						placeholder="panel.nixploy.com"
@@ -190,7 +191,7 @@ function DashboardDomainFields({
 							setDnsResult(null);
 						}}
 					/>
-				</div>
+				</Field>
 				<Button
 					type="button"
 					variant="outline"
@@ -462,8 +463,8 @@ export function ServerSettingsView() {
 										onSave={(host) => updateMutation.mutate({ host })}
 									/>
 									<div className="flex max-w-xl flex-wrap items-end gap-2">
-										<div className="grid min-w-0 flex-1 gap-2">
-											<Label htmlFor="letsencrypt-email">Let&apos;s Encrypt email</Label>
+										<Field className="min-w-0 flex-1">
+											<FieldLabel htmlFor="letsencrypt-email">Let&apos;s Encrypt email</FieldLabel>
 											<Input
 												id="letsencrypt-email"
 												type="email"
@@ -471,7 +472,7 @@ export function ServerSettingsView() {
 												value={letsEncryptEmail}
 												onChange={(event) => accessDraft.set(event.target.value)}
 											/>
-										</div>
+										</Field>
 										<Button
 											type="button"
 											size="sm"
@@ -676,8 +677,8 @@ export function ServerSettingsView() {
 								<Skeleton className="h-16 w-full" />
 							) : (
 								<div className="grid gap-3 sm:grid-cols-2">
-									<div className="grid gap-2">
-										<Label htmlFor="cpu-alert">CPU alert %</Label>
+									<Field>
+										<FieldLabel htmlFor="cpu-alert">CPU alert %</FieldLabel>
 										<Input
 											id="cpu-alert"
 											type="number"
@@ -690,9 +691,9 @@ export function ServerSettingsView() {
 												healthDraft.patch({ cpuAlertPercent: event.target.value })
 											}
 										/>
-									</div>
-									<div className="grid gap-2">
-										<Label htmlFor="memory-alert">Memory alert %</Label>
+									</Field>
+									<Field>
+										<FieldLabel htmlFor="memory-alert">Memory alert %</FieldLabel>
 										<Input
 											id="memory-alert"
 											type="number"
@@ -705,7 +706,7 @@ export function ServerSettingsView() {
 												healthDraft.patch({ memoryAlertPercent: event.target.value })
 											}
 										/>
-									</div>
+									</Field>
 								</div>
 							)}
 						</SettingsSection>
@@ -766,8 +767,8 @@ export function ServerSettingsView() {
 										/>
 									</div>
 									{cleanupCronEnabled && (
-										<div className="grid gap-2">
-											<Label htmlFor="cleanup-cron-expression">Cron</Label>
+										<Field>
+											<FieldLabel htmlFor="cleanup-cron-expression">Cron</FieldLabel>
 											<Input
 												id="cleanup-cron-expression"
 												placeholder="0 3 * * *"
@@ -777,7 +778,7 @@ export function ServerSettingsView() {
 												}
 												className="font-mono"
 											/>
-										</div>
+										</Field>
 									)}
 									<p className="text-sm text-muted-foreground">
 										Custom host jobs →{" "}

@@ -370,7 +370,7 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 					<AlertDialogFooter>
 						<AlertDialogCancel disabled={stopMutation.isPending}>Cancel</AlertDialogCancel>
 						<AlertDialogAction
-							variant="destructive"
+							variant="outline"
 							disabled={stopMutation.isPending}
 							onClick={(event) => {
 								event.preventDefault();

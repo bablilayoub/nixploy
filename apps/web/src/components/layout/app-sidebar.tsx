@@ -1,95 +1,159 @@
 "use client";
 
-import { ArrowUpRight, BookOpen, LifeBuoy } from "lucide-react";
+import { BookOpen, LifeBuoy } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useBranding } from "@/components/branding-provider";
 import { isSidebarNavActive, sidebarNavGroups } from "@/components/layout/sidebar-data";
+import { filterSettingsNavGroups, settingsNavGroups } from "@/components/nav-settings";
 import { OrgSwitcher } from "@/components/org-switcher";
-import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
+import { Logo } from "@/components/shell/logo";
 import {
-	Sheet,
-	SheetContent,
-	SheetDescription,
-	SheetHeader,
-	SheetTitle,
-} from "@/components/ui/sheet";
-import { useSidebar } from "@/components/ui/sidebar";
+	Sidebar,
+	SidebarContent,
+	SidebarFooter,
+	SidebarGroup,
+	SidebarGroupContent,
+	SidebarGroupLabel,
+	SidebarHeader,
+	SidebarMenu,
+	SidebarMenuButton,
+	SidebarMenuItem,
+	SidebarRail,
+	SidebarSeparator,
+	useSidebar,
+} from "@/components/ui/sidebar";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { useMounted } from "@/hooks/use-mounted";
 
-/** Mobile workspace navigation, using the standard shadcn Sheet. */
+/** Composition from the official sidebar-07 block; all controls use stock variants. */
 export function AppSidebar() {
 	const pathname = usePathname();
 	const branding = useBranding();
-	const { can } = useCapabilities({ strict: true });
-	const { openMobile, setOpenMobile } = useSidebar();
+	const { can, isInstanceAdmin } = useCapabilities({ strict: true });
+	const mounted = useMounted();
+	const { setOpenMobile } = useSidebar();
 	const close = () => setOpenMobile(false);
+	const settings = pathname.startsWith("/dashboard/settings");
+	const groups = filterSettingsNavGroups(settingsNavGroups, {
+		can,
+		isInstanceAdmin: mounted && isInstanceAdmin,
+	});
 	return (
-		<Sheet open={openMobile} onOpenChange={setOpenMobile}>
-			<SheetContent side="left" className="w-80 max-w-[calc(100vw-2rem)] overflow-y-auto">
-				<SheetHeader>
-					<SheetTitle>{branding.productName}</SheetTitle>
-					<SheetDescription>Workspace navigation</SheetDescription>
-				</SheetHeader>
-				<div className="flex min-w-0 flex-1 flex-col gap-4 px-4 pb-6">
+		<Sidebar collapsible="icon">
+			<SidebarHeader>
+				<SidebarMenu>
+					<SidebarMenuItem>
+						<SidebarMenuButton asChild size="lg" tooltip={branding.productName}>
+							<Link href="/dashboard" onClick={close}>
+								<Logo />
+							</Link>
+						</SidebarMenuButton>
+					</SidebarMenuItem>
+				</SidebarMenu>
+				<div className="group-data-[collapsible=icon]:hidden">
 					<OrgSwitcher className="w-full justify-between" />
-					<Separator />
-					<nav
-						id="workspace-navigation"
-						aria-label="Mobile workspace navigation"
-						className="flex flex-col gap-5"
-					>
-						{sidebarNavGroups.map((group) => (
-							<div key={group.title} className="flex flex-col gap-1">
-								<p className="px-3 py-2 text-xs font-medium text-muted-foreground">
-									{group.title === "Platform" ? "Workspace" : group.title}
-								</p>
-								{group.items
-									.filter((item) => !item.capability || can(item.capability))
-									.map((item) => (
-										<Button
-											asChild
-											key={item.url}
-											variant={isSidebarNavActive(pathname, item.url) ? "secondary" : "ghost"}
-											className="w-full justify-start"
-										>
-											<Link
-												href={item.url}
-												onClick={close}
-												aria-current={isSidebarNavActive(pathname, item.url) ? "page" : undefined}
-											>
-												<item.icon aria-hidden="true" />
-												{item.title}
-											</Link>
-										</Button>
-									))}
-							</div>
-						))}
-					</nav>
-					<Separator />
-					<Button asChild variant="ghost" className="justify-start">
-						<a
-							href={branding.docsUrl ?? "https://nixploy.com/docs"}
-							target="_blank"
-							rel="noreferrer"
-						>
-							<BookOpen aria-hidden="true" />
-							Documentation
-							<ArrowUpRight className="ml-auto" aria-hidden="true" />
-						</a>
-					</Button>
-					{branding.supportUrl && (
-						<Button asChild variant="ghost" className="justify-start">
-							<a href={branding.supportUrl} target="_blank" rel="noreferrer">
-								<LifeBuoy aria-hidden="true" />
-								Support
-								<ArrowUpRight className="ml-auto" aria-hidden="true" />
-							</a>
-						</Button>
-					)}
 				</div>
-			</SheetContent>
-		</Sheet>
+			</SidebarHeader>
+			<SidebarSeparator />
+			<SidebarContent>
+				<nav id="workspace-navigation" aria-label="Workspace navigation">
+					{sidebarNavGroups.map((group) => (
+						<SidebarGroup key={group.title}>
+							<SidebarGroupLabel>
+								{group.title === "Platform" ? "Workspace" : group.title}
+							</SidebarGroupLabel>
+							<SidebarGroupContent>
+								<SidebarMenu>
+									{group.items
+										.filter((item) => !item.capability || can(item.capability))
+										.map((item) => (
+											<SidebarMenuItem key={item.url}>
+												<SidebarMenuButton
+													asChild
+													isActive={isSidebarNavActive(pathname, item.url)}
+													tooltip={item.title}
+												>
+													<Link
+														href={item.url}
+														onClick={close}
+														aria-current={
+															isSidebarNavActive(pathname, item.url) ? "page" : undefined
+														}
+													>
+														<item.icon aria-hidden="true" />
+														<span>{item.title}</span>
+													</Link>
+												</SidebarMenuButton>
+											</SidebarMenuItem>
+										))}
+								</SidebarMenu>
+							</SidebarGroupContent>
+						</SidebarGroup>
+					))}
+				</nav>
+				{settings && (
+					<>
+						<SidebarSeparator />
+						<nav aria-label="Settings navigation">
+							{groups.map((group) => (
+								<SidebarGroup key={group.label}>
+									<SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+									<SidebarGroupContent>
+										<SidebarMenu>
+											{group.items.map((item) => (
+												<SidebarMenuItem key={item.href}>
+													<SidebarMenuButton
+														asChild
+														isActive={pathname === item.href}
+														tooltip={item.label}
+													>
+														<Link
+															href={item.href}
+															onClick={close}
+															aria-current={pathname === item.href ? "page" : undefined}
+														>
+															{item.icon && <item.icon aria-hidden="true" />}
+															<span>{item.label}</span>
+														</Link>
+													</SidebarMenuButton>
+												</SidebarMenuItem>
+											))}
+										</SidebarMenu>
+									</SidebarGroupContent>
+								</SidebarGroup>
+							))}
+						</nav>
+					</>
+				)}
+			</SidebarContent>
+			<SidebarFooter>
+				<SidebarMenu>
+					<SidebarMenuItem>
+						<SidebarMenuButton asChild tooltip="Documentation">
+							<a
+								href={branding.docsUrl ?? "https://nixploy.com/docs"}
+								target="_blank"
+								rel="noreferrer"
+							>
+								<BookOpen aria-hidden="true" />
+								<span>Documentation</span>
+							</a>
+						</SidebarMenuButton>
+					</SidebarMenuItem>
+					{branding.supportUrl && (
+						<SidebarMenuItem>
+							<SidebarMenuButton asChild tooltip="Support">
+								<a href={branding.supportUrl} target="_blank" rel="noreferrer">
+									<LifeBuoy aria-hidden="true" />
+									<span>Support</span>
+								</a>
+							</SidebarMenuButton>
+						</SidebarMenuItem>
+					)}
+				</SidebarMenu>
+			</SidebarFooter>
+			<SidebarRail />
+		</Sidebar>
 	);
 }

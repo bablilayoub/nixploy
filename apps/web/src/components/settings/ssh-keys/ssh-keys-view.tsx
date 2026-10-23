@@ -20,6 +20,7 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@/components/ui/dialog";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -153,15 +154,15 @@ export function SshKeysView() {
 								</DialogDescription>
 							</DialogHeader>
 							<div className="grid gap-5">
-								<div className="grid gap-2">
-									<Label htmlFor="ssh-key-name">Name</Label>
+								<Field>
+									<FieldLabel htmlFor="ssh-key-name">Name</FieldLabel>
 									<Input
 										id="ssh-key-name"
 										placeholder="e.g. deploy-key"
 										value={name}
 										onChange={(e) => setName(e.target.value)}
 									/>
-								</div>
+								</Field>
 								{generated && (
 									<>
 										<div className="grid gap-2">
@@ -322,16 +323,16 @@ export function SshKeysView() {
 						}}
 						className="grid gap-5"
 					>
-						<div className="grid gap-2">
-							<Label htmlFor="edit-ssh-key-name">Name</Label>
+						<Field>
+							<FieldLabel htmlFor="edit-ssh-key-name">Name</FieldLabel>
 							<Input
 								id="edit-ssh-key-name"
 								value={editName}
 								onChange={(e) => setEditName(e.target.value)}
 							/>
-						</div>
-						<div className="grid gap-2">
-							<Label htmlFor="edit-ssh-key-description">Description</Label>
+						</Field>
+						<Field>
+							<FieldLabel htmlFor="edit-ssh-key-description">Description</FieldLabel>
 							<Textarea
 								id="edit-ssh-key-description"
 								placeholder="Optional description"
@@ -339,7 +340,7 @@ export function SshKeysView() {
 								value={editDescription}
 								onChange={(e) => setEditDescription(e.target.value)}
 							/>
-						</div>
+						</Field>
 						<DialogFooter>
 							<Button type="submit" disabled={updateMutation.isPending || !editName.trim()}>
 								{updateMutation.isPending && <Loader2 className="size-4 animate-spin" />}

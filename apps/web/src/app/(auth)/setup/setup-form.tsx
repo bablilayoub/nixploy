@@ -16,9 +16,9 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
-
 import { useBranding } from "@/components/branding-provider";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
 	Form,
 	FormControl,
@@ -246,17 +246,17 @@ export function SetupForm() {
 
 	if (status.isPending) {
 		return (
-			<section className="flex min-w-0 flex-col gap-8">
-				<header className="space-y-3 text-center">
+			<Card>
+				<CardHeader className="text-center">
 					<Skeleton className="mx-auto h-7 w-48" />
 					<Skeleton className="mx-auto mt-2 h-4 w-64" />
-				</header>
-				<div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
+				</CardHeader>
+				<CardContent className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
 					<Skeleton className="h-10 w-full" />
 					<Skeleton className="h-10 w-full" />
 					<Skeleton className="h-10 w-full" />
-				</div>
-			</section>
+				</CardContent>
+			</Card>
 		);
 	}
 
@@ -267,19 +267,19 @@ export function SetupForm() {
 	return (
 		<div className="flex flex-col gap-4">
 			<StepIndicator current={step} />
-			<section className="flex min-w-0 flex-col gap-8">
+			<Card>
 				{step === "welcome" && (
 					<>
-						<header className="space-y-3 text-center">
-							<h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+						<CardHeader className="text-center">
+							<CardTitle as="h1" className="text-xl">
 								Welcome to {branding.productName}
-							</h1>
+							</CardTitle>
 							<div className="text-sm text-muted-foreground">
 								Self-hosted PaaS on this server. A short setup creates your owner account and
 								organization — public registration stays closed afterward.
 							</div>
-						</header>
-						<div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
+						</CardHeader>
+						<CardContent className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
 							<ul className="grid gap-2 text-sm text-muted-foreground">
 								<li className="flex gap-2">
 									<Check className="mt-0.5 size-4 shrink-0 text-foreground" />
@@ -298,19 +298,21 @@ export function SetupForm() {
 								Continue
 								<ArrowRight className="size-4" />
 							</Button>
-						</div>
+						</CardContent>
 					</>
 				)}
 
 				{step === "owner" && (
 					<>
-						<header className="space-y-3 text-center">
-							<h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Owner account</h1>
+						<CardHeader className="text-center">
+							<CardTitle as="h1" className="text-xl">
+								Owner account
+							</CardTitle>
 							<div className="text-sm text-muted-foreground">
 								This is the first admin. You will sign in with this email and password.
 							</div>
-						</header>
-						<div>
+						</CardHeader>
+						<CardContent>
 							<Form {...ownerForm}>
 								<form
 									onSubmit={ownerForm.handleSubmit(() => void goOrgFromOwner())}
@@ -445,19 +447,21 @@ export function SetupForm() {
 									</div>
 								</form>
 							</Form>
-						</div>
+						</CardContent>
 					</>
 				)}
 
 				{step === "org" && (
 					<>
-						<header className="space-y-3 text-center">
-							<h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Organization</h1>
+						<CardHeader className="text-center">
+							<CardTitle as="h1" className="text-xl">
+								Organization
+							</CardTitle>
 							<div className="text-sm text-muted-foreground">
 								Projects, services, and teammates live under this organization.
 							</div>
-						</header>
-						<div>
+						</CardHeader>
+						<CardContent>
 							<Form {...orgForm}>
 								<form
 									onSubmit={orgForm.handleSubmit(() => void goReadyFromOrg())}
@@ -507,19 +511,21 @@ export function SetupForm() {
 									</div>
 								</form>
 							</Form>
-						</div>
+						</CardContent>
 					</>
 				)}
 
 				{step === "ready" && !complete && (
 					<>
-						<header className="space-y-3 text-center">
-							<h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Ready to create</h1>
+						<CardHeader className="text-center">
+							<CardTitle as="h1" className="text-xl">
+								Ready to create
+							</CardTitle>
 							<div className="text-sm text-muted-foreground">
 								Confirm the details below. This creates your owner account and organization.
 							</div>
-						</header>
-						<div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
+						</CardHeader>
+						<CardContent className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
 							{formError && <FormError message={formError} />}
 							<dl className="grid gap-3 rounded-lg border bg-muted/40 p-4 text-sm">
 								<div className="grid gap-0.5">
@@ -555,19 +561,21 @@ export function SetupForm() {
 									{submitting ? "Creating…" : ownerCreated ? "Retry setup" : "Create instance"}
 								</Button>
 							</div>
-						</div>
+						</CardContent>
 					</>
 				)}
 
 				{step === "ready" && complete && (
 					<>
-						<header className="space-y-3 text-center">
-							<h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">You&apos;re in</h1>
+						<CardHeader className="text-center">
+							<CardTitle as="h1" className="text-xl">
+								You&apos;re in
+							</CardTitle>
 							<div className="text-sm text-muted-foreground">
 								{orgForm.getValues("orgName").trim()} is ready. Here&apos;s a sensible next path.
 							</div>
-						</header>
-						<div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
+						</CardHeader>
+						<CardContent className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
 							<ul className="grid gap-3 text-sm">
 								<li className="flex gap-3">
 									<LayoutTemplate className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
@@ -600,10 +608,10 @@ export function SetupForm() {
 							<Button type="button" className="w-full" onClick={openDashboard}>
 								Open dashboard
 							</Button>
-						</div>
+						</CardContent>
 					</>
 				)}
-			</section>
+			</Card>
 			<p className="text-center text-xs leading-relaxed break-words text-muted-foreground">
 				Step {Math.min(stepIndex + 1, STEPS.length)} of {STEPS.length}
 				{step !== "welcome" ? ` · ${STEP_LABELS[step]}` : null}

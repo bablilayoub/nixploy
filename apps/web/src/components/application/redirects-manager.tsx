@@ -26,6 +26,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -234,8 +235,8 @@ export function RedirectsManager(parent: TraefikParent) {
 						}}
 						className="flex min-w-0 flex-col gap-5"
 					>
-						<div className="flex flex-col gap-2">
-							<Label htmlFor="regex">Regex</Label>
+						<Field>
+							<FieldLabel htmlFor="regex">Regex</FieldLabel>
 							<Input
 								id="regex"
 								className="font-mono text-sm"
@@ -243,9 +244,9 @@ export function RedirectsManager(parent: TraefikParent) {
 								value={form.regex}
 								onChange={(e) => setForm((f) => ({ ...f, regex: e.target.value }))}
 							/>
-						</div>
-						<div className="flex flex-col gap-2">
-							<Label htmlFor="replacement">Replacement</Label>
+						</Field>
+						<Field>
+							<FieldLabel htmlFor="replacement">Replacement</FieldLabel>
 							<Input
 								id="replacement"
 								className="font-mono text-sm"
@@ -253,7 +254,7 @@ export function RedirectsManager(parent: TraefikParent) {
 								value={form.replacement}
 								onChange={(e) => setForm((f) => ({ ...f, replacement: e.target.value }))}
 							/>
-						</div>
+						</Field>
 						<div className="flex items-center gap-2">
 							<Checkbox
 								id="permanent"

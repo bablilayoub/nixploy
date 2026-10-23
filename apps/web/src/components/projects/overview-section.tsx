@@ -8,6 +8,7 @@ import { QueryState } from "@/components/query-state";
 import { EmptyState } from "@/components/services/empty-state";
 import { StatusDot } from "@/components/shell";
 import { Button } from "@/components/ui/button";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DateTime } from "@/components/ui/date-time";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRunningDeployments } from "@/hooks/use-running-deployments";
@@ -57,39 +58,27 @@ export function OverviewCards({ onAttention }: { onAttention: () => void }) {
 		<section
 			aria-label="Workspace summary"
 			aria-busy={isPending}
-			className="rounded-xl border bg-card p-6"
+			className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-4"
 		>
-			<dl className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,10rem),1fr))] gap-x-6 gap-y-5">
-				{metrics.map((metric) => (
-					<div key={metric.label} className="min-w-0">
-						<dt className="text-xs text-muted-foreground">{metric.label}</dt>
-						<dd className="mt-1">
-							<div className="flex min-h-8 flex-wrap items-baseline gap-x-2 gap-y-1">
-								{isPending ? (
-									<Skeleton className="h-7 w-12" />
-								) : (
-									<span className="text-xl font-semibold tracking-tight tabular-nums">
-										{metric.value}
-									</span>
-								)}
-								{metric.label === "Need attention" && (services?.error ?? 0) > 0 ? (
-									<Button
-										variant="link"
-										size="sm"
-										className="h-auto min-h-0 px-0 py-0 text-xs"
-										onClick={onAttention}
-									>
-										Review services
-									</Button>
-								) : null}
-							</div>
-							<p className="mt-1 hidden text-xs leading-relaxed text-muted-foreground lg:block">
-								{metric.detail}
-							</p>
-						</dd>
-					</div>
-				))}
-			</dl>
+			{metrics.map((metric) => (
+				<Card key={metric.label} className="relative">
+					<CardHeader>
+						<CardDescription>
+							{metric.label === "Deployments" ? "Deployments · 24h" : metric.label}
+						</CardDescription>
+						<div className="flex flex-wrap items-center justify-between gap-2">
+							<CardTitle className="text-2xl tabular-nums">
+								{isPending ? <Skeleton className="h-8 w-16" /> : metric.value}
+							</CardTitle>
+							{metric.label === "Need attention" && (services?.error ?? 0) > 0 && (
+								<Button variant="link" size="sm" onClick={onAttention}>
+									Review services
+								</Button>
+							)}
+						</div>
+					</CardHeader>
+				</Card>
+			))}
 		</section>
 	);
 }
@@ -104,7 +93,7 @@ export function RecentDeployments() {
 
 	return (
 		<section className="flex h-full min-w-0 flex-col">
-			<div className="mb-5 space-y-1">
+			<div className="sr-only">
 				<h2 className="text-base font-medium tracking-tight">Recent deployments</h2>
 				{/* Static text: branching this on `isPending` made the server (which
 				    renders with the prefetched data) and the client's first paint

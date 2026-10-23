@@ -17,6 +17,13 @@ import { useSaveBar } from "@/components/services/save-bar";
 import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
 import { Button } from "@/components/ui/button";
 import { DisabledHint } from "@/components/ui/disabled-hint";
+import {
+	Field,
+	FieldContent,
+	FieldDescription,
+	FieldLabel,
+	FieldTitle,
+} from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -26,7 +33,6 @@ import { useCapabilities } from "@/hooks/use-capabilities";
 import { useDraft } from "@/hooks/use-draft";
 import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
-import { cn } from "@/lib/utils";
 
 import type { Application } from "./types";
 
@@ -187,73 +193,64 @@ export function BuildTypeConfig({ application }: { application: Application }) {
 						className="grid gap-2 sm:grid-cols-2"
 					>
 						{BUILD_TYPES.map((option) => (
-							<Label
-								htmlFor={`builder-${option.value}`}
-								key={option.value}
-								className={cn(
-									"relative flex cursor-pointer flex-col items-stretch gap-1 rounded-lg border p-4 pl-10 text-left transition-colors focus-within:ring-2 focus-within:ring-ring",
-									buildType === option.value
-										? "border-foreground bg-secondary/60 ring-1 ring-foreground"
-										: "border-border hover:border-foreground/40 hover:bg-secondary/40",
-								)}
-							>
-								<RadioGroupItem
-									id={`builder-${option.value}`}
-									value={option.value}
-									className="absolute left-4 top-5"
-									aria-describedby={`builder-${option.value}-description`}
-								/>
-								<span className="flex items-center gap-2 text-sm font-medium">
-									<option.icon className="size-4 text-muted-foreground" />
-									{option.label}
-								</span>
-								<span
-									id={`builder-${option.value}-description`}
-									className="text-xs font-normal text-muted-foreground"
-								>
-									{option.description}
-								</span>
-							</Label>
+							<FieldLabel htmlFor={`builder-${option.value}`} key={option.value}>
+								<Field orientation="horizontal">
+									<RadioGroupItem
+										id={`builder-${option.value}`}
+										value={option.value}
+										aria-describedby={`builder-${option.value}-description`}
+									/>
+									<FieldContent>
+										<FieldTitle>
+											<option.icon aria-hidden="true" className="size-4" />
+											{option.label}
+										</FieldTitle>
+										<FieldDescription id={`builder-${option.value}-description`}>
+											{option.description}
+										</FieldDescription>
+									</FieldContent>
+								</Field>
+							</FieldLabel>
 						))}
 					</RadioGroup>
 				</fieldset>
 
 				{buildType === "dockerfile" && (
 					<div className="grid gap-4 sm:grid-cols-3">
-						<div className="flex flex-col gap-2">
-							<Label htmlFor="dockerfile">Dockerfile path</Label>
+						<Field>
+							<FieldLabel htmlFor="dockerfile">Dockerfile path</FieldLabel>
 							<Input
 								id="dockerfile"
 								placeholder="Dockerfile"
 								value={dockerfile}
 								onChange={(e) => draft.patch({ dockerfile: e.target.value })}
 							/>
-						</div>
-						<div className="flex flex-col gap-2">
-							<Label htmlFor="docker-context">Build context</Label>
+						</Field>
+						<Field>
+							<FieldLabel htmlFor="docker-context">Build context</FieldLabel>
 							<Input
 								id="docker-context"
 								placeholder="."
 								value={dockerContextPath}
 								onChange={(e) => draft.patch({ dockerContextPath: e.target.value })}
 							/>
-						</div>
-						<div className="flex flex-col gap-2">
-							<Label htmlFor="docker-stage">Build stage (optional)</Label>
+						</Field>
+						<Field>
+							<FieldLabel htmlFor="docker-stage">Build stage (optional)</FieldLabel>
 							<Input
 								id="docker-stage"
 								placeholder="builder"
 								value={dockerBuildStage}
 								onChange={(e) => draft.patch({ dockerBuildStage: e.target.value })}
 							/>
-						</div>
+						</Field>
 					</div>
 				)}
 
 				{buildType === "static" && (
 					<>
-						<div className="flex flex-col gap-2">
-							<Label htmlFor="publish-dir">Publish directory</Label>
+						<Field>
+							<FieldLabel htmlFor="publish-dir">Publish directory</FieldLabel>
 							<Input
 								id="publish-dir"
 								placeholder="dist"
@@ -264,7 +261,7 @@ export function BuildTypeConfig({ application }: { application: Application }) {
 							<p className="text-xs text-muted-foreground">
 								Directory with the compiled assets, relative to the repo root. No build step runs.
 							</p>
-						</div>
+						</Field>
 						<div className="flex items-center justify-between rounded-md border p-3">
 							<div className="flex flex-col gap-1">
 								<Label htmlFor="is-spa">Single-page application</Label>
@@ -297,8 +294,8 @@ export function BuildTypeConfig({ application }: { application: Application }) {
 								onCheckedChange={(checked) => draft.patch({ useBuildCache: checked })}
 							/>
 						</div>
-						<div className="flex flex-col gap-2">
-							<Label htmlFor="build-args">Build args</Label>
+						<Field>
+							<FieldLabel htmlFor="build-args">Build args</FieldLabel>
 							<Textarea
 								id="build-args"
 								placeholder={"NODE_ENV=production\nSOME_FLAG=1"}
@@ -309,7 +306,7 @@ export function BuildTypeConfig({ application }: { application: Application }) {
 							<p className="text-xs text-muted-foreground">
 								One KEY=value pair per line, passed to the builder at build time.
 							</p>
-						</div>
+						</Field>
 					</>
 				)}
 

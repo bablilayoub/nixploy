@@ -4,11 +4,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Trash2, Upload } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
-
 import { SettingsSection } from "@/components/layout/settings-section";
 import { LoadError } from "@/components/query-state";
 import { useSaveBar } from "@/components/services/save-bar";
 import { Button } from "@/components/ui/button";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -135,8 +135,8 @@ export function BrandingCard() {
 					description="The product name and accent used throughout this instance."
 				>
 					<div className="grid gap-4 sm:grid-cols-2">
-						<div className="flex flex-col gap-1.5">
-							<Label htmlFor="branding-product-name">Product name</Label>
+						<Field>
+							<FieldLabel htmlFor="branding-product-name">Product name</FieldLabel>
 							<Input
 								id="branding-product-name"
 								value={form.productName}
@@ -149,7 +149,7 @@ export function BrandingCard() {
 							<p className="text-xs text-muted-foreground">
 								Replaces “Nixploy” in the browser tab, the header and outbound mail.
 							</p>
-						</div>
+						</Field>
 						<div className="flex flex-col gap-1.5">
 							<Label htmlFor="branding-accent">Accent colour</Label>
 							<div className="flex items-center gap-2">
@@ -197,8 +197,8 @@ export function BrandingCard() {
 					description="Help destinations, footer text and the sender name for outbound email."
 				>
 					<div className="grid gap-4 sm:grid-cols-2">
-						<div className="flex flex-col gap-1.5">
-							<Label htmlFor="branding-support">Support URL</Label>
+						<Field>
+							<FieldLabel htmlFor="branding-support">Support URL</FieldLabel>
 							<Input
 								id="branding-support"
 								value={form.supportUrl}
@@ -207,9 +207,9 @@ export function BrandingCard() {
 									setForm((current) => ({ ...current, supportUrl: event.target.value }))
 								}
 							/>
-						</div>
-						<div className="flex flex-col gap-1.5">
-							<Label htmlFor="branding-docs">Docs URL</Label>
+						</Field>
+						<Field>
+							<FieldLabel htmlFor="branding-docs">Docs URL</FieldLabel>
 							<Input
 								id="branding-docs"
 								value={form.docsUrl}
@@ -218,9 +218,9 @@ export function BrandingCard() {
 									setForm((current) => ({ ...current, docsUrl: event.target.value }))
 								}
 							/>
-						</div>
-						<div className="flex flex-col gap-1.5">
-							<Label htmlFor="branding-footer">Footer text</Label>
+						</Field>
+						<Field>
+							<FieldLabel htmlFor="branding-footer">Footer text</FieldLabel>
 							<Input
 								id="branding-footer"
 								value={form.footerText}
@@ -230,9 +230,9 @@ export function BrandingCard() {
 									setForm((current) => ({ ...current, footerText: event.target.value }))
 								}
 							/>
-						</div>
-						<div className="flex flex-col gap-1.5">
-							<Label htmlFor="branding-email-from">Email from-name</Label>
+						</Field>
+						<Field>
+							<FieldLabel htmlFor="branding-email-from">Email from-name</FieldLabel>
 							<Input
 								id="branding-email-from"
 								value={form.emailFromName}
@@ -245,12 +245,12 @@ export function BrandingCard() {
 							<p className="text-xs text-muted-foreground">
 								The name on outbound mail; the address stays the configured sender.
 							</p>
-						</div>
+						</Field>
 					</div>
 				</SettingsSection>
 				<SettingsSection title="Custom styling" description="Optional CSS for this instance.">
-					<div className="flex flex-col gap-1.5">
-						<Label htmlFor="branding-css">Custom CSS</Label>
+					<Field>
+						<FieldLabel htmlFor="branding-css">Custom CSS</FieldLabel>
 						<Textarea
 							id="branding-css"
 							className="h-32 font-mono text-xs"
@@ -264,7 +264,7 @@ export function BrandingCard() {
 							Injected into every page. <code className="font-mono">@import</code>, scripting
 							constructs and anything that could close the tag are stripped on save.
 						</p>
-					</div>
+					</Field>
 				</SettingsSection>
 				<div className="flex justify-end border-t pt-5">
 					<Button type="submit" disabled={save.isPending || !draft.dirty}>
@@ -317,8 +317,8 @@ function AssetSlot({
 	}
 
 	return (
-		<div className="flex flex-col gap-2 rounded-md border border-border p-3">
-			<Label>{label}</Label>
+		<Field className="rounded-md border border-border p-3">
+			<FieldLabel>{label}</FieldLabel>
 			<div className="flex h-12 items-center justify-center rounded border border-dashed border-border bg-muted/40">
 				{url ? (
 					// A plain <img>: the source is an operator upload served from our
@@ -375,6 +375,6 @@ function AssetSlot({
 					</Button>
 				) : null}
 			</div>
-		</div>
+		</Field>
 	);
 }

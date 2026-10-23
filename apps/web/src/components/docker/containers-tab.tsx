@@ -287,7 +287,7 @@ export function ContainersTab({ serverId }: DockerTabProps) {
 														)}
 														<DropdownMenuSeparator />
 														<DropdownMenuItem
-															variant="destructive"
+															variant="default"
 															onSelect={() => setRemoving(container)}
 														>
 															<Trash2 className="size-4" />
@@ -375,7 +375,7 @@ export function ContainersTab({ serverId }: DockerTabProps) {
 					<AlertDialogFooter>
 						<AlertDialogCancel>Cancel</AlertDialogCancel>
 						<AlertDialogAction
-							variant="destructive"
+							variant="outline"
 							disabled={actionMutation.isPending}
 							onClick={() => {
 								if (removing) {

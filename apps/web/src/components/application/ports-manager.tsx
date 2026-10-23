@@ -25,9 +25,9 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
 	Select,
 	SelectContent,
@@ -240,8 +240,8 @@ export function PortsManager({ applicationId }: { applicationId: string }) {
 						}}
 						className="grid gap-4 sm:grid-cols-2"
 					>
-						<div className="flex flex-col gap-2">
-							<Label htmlFor="published-port">Published port</Label>
+						<Field>
+							<FieldLabel htmlFor="published-port">Published port</FieldLabel>
 							<Input
 								id="published-port"
 								type="number"
@@ -251,9 +251,9 @@ export function PortsManager({ applicationId }: { applicationId: string }) {
 								value={form.publishedPort}
 								onChange={(e) => setForm((f) => ({ ...f, publishedPort: e.target.value }))}
 							/>
-						</div>
-						<div className="flex flex-col gap-2">
-							<Label htmlFor="target-port">Target port</Label>
+						</Field>
+						<Field>
+							<FieldLabel htmlFor="target-port">Target port</FieldLabel>
 							<Input
 								id="target-port"
 								type="number"
@@ -263,9 +263,9 @@ export function PortsManager({ applicationId }: { applicationId: string }) {
 								value={form.targetPort}
 								onChange={(e) => setForm((f) => ({ ...f, targetPort: e.target.value }))}
 							/>
-						</div>
-						<div className="flex flex-col gap-2">
-							<Label>Protocol</Label>
+						</Field>
+						<Field>
+							<FieldLabel>Protocol</FieldLabel>
 							<Select
 								value={form.protocol}
 								onValueChange={(v) =>
@@ -283,9 +283,9 @@ export function PortsManager({ applicationId }: { applicationId: string }) {
 									<SelectItem value="udp">UDP</SelectItem>
 								</SelectContent>
 							</Select>
-						</div>
-						<div className="flex flex-col gap-2">
-							<Label>Publish mode</Label>
+						</Field>
+						<Field>
+							<FieldLabel>Publish mode</FieldLabel>
 							<Select
 								value={form.publishMode}
 								onValueChange={(v) =>
@@ -307,7 +307,7 @@ export function PortsManager({ applicationId }: { applicationId: string }) {
 								Ingress load-balances across the swarm; host binds the port on the node that runs
 								the task. <HelpLink slug="deploy" />
 							</p>
-						</div>
+						</Field>
 						<DialogFooter className="sm:col-span-2">
 							<Button type="submit" disabled={!isValid || isPending}>
 								{isPending && <Loader2 className="size-4 animate-spin" />}

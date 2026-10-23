@@ -12,9 +12,9 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
 	Select,
 	SelectContent,
@@ -187,8 +187,8 @@ export function CreateComposeDialog({
 					}}
 				>
 					<fieldset disabled={pending} className="flex min-w-0 flex-col gap-4">
-						<div className="flex flex-col gap-2">
-							<Label htmlFor="compose-create-name">Name</Label>
+						<Field>
+							<FieldLabel htmlFor="compose-create-name">Name</FieldLabel>
 							<Input
 								ref={nameInput}
 								className="min-h-11 sm:min-h-9"
@@ -210,9 +210,9 @@ export function CreateComposeDialog({
 									{errors.name}
 								</p>
 							)}
-						</div>
-						<div className="flex flex-col gap-2">
-							<Label htmlFor="compose-create-source">Compose source</Label>
+						</Field>
+						<Field>
+							<FieldLabel htmlFor="compose-create-source">Compose source</FieldLabel>
 							<Select
 								value={source}
 								onValueChange={(value) => {
@@ -231,10 +231,10 @@ export function CreateComposeDialog({
 									<SelectItem value="later">Set up later</SelectItem>
 								</SelectContent>
 							</Select>
-						</div>
+						</Field>
 						{source === "file" && (
-							<div className="flex flex-col gap-2">
-								<Label htmlFor="compose-create-file">Compose file</Label>
+							<Field>
+								<FieldLabel htmlFor="compose-create-file">Compose file</FieldLabel>
 								<p id="compose-file-hint" className="text-xs text-muted-foreground">
 									Paste YAML or load a .yml / .yaml file up to 1 MiB. You can edit it here before
 									creating the service.
@@ -289,11 +289,11 @@ export function CreateComposeDialog({
 									aria-invalid={!!errors.source}
 									aria-describedby={errors.source ? "compose-source-error" : "compose-file-hint"}
 								/>
-							</div>
+							</Field>
 						)}
 						{source === "url" && (
-							<div className="flex flex-col gap-2">
-								<Label htmlFor="compose-create-url">Raw file URL</Label>
+							<Field>
+								<FieldLabel htmlFor="compose-create-url">Raw file URL</FieldLabel>
 								<p id="compose-url-hint" className="text-xs text-muted-foreground">
 									Use the file’s raw URL. Redirects and repository HTML pages are refused. Private
 									addresses require private egress enabled by the instance admin. Fetched files can
@@ -317,15 +317,15 @@ export function CreateComposeDialog({
 										clearErrors();
 									}}
 								/>
-							</div>
+							</Field>
 						)}
 						{errors.source && (
 							<p id="compose-source-error" role="alert" className="text-sm text-destructive">
 								{errors.source}
 							</p>
 						)}
-						<div className="flex flex-col gap-2">
-							<Label htmlFor="compose-create-type">Runtime</Label>
+						<Field>
+							<FieldLabel htmlFor="compose-create-type">Runtime</FieldLabel>
 							<Select
 								value={composeType}
 								onValueChange={(value) => {
@@ -345,9 +345,9 @@ export function CreateComposeDialog({
 								Compose runs on one server. Stack schedules services through Swarm.{" "}
 								<HelpLink slug="deploy" />
 							</p>
-						</div>
-						<div className="flex flex-col gap-2">
-							<Label htmlFor="compose-create-description">Description (optional)</Label>
+						</Field>
+						<Field>
+							<FieldLabel htmlFor="compose-create-description">Description (optional)</FieldLabel>
 							<Input
 								id="compose-create-description"
 								className="min-h-11 sm:min-h-9"
@@ -358,7 +358,7 @@ export function CreateComposeDialog({
 									clearErrors();
 								}}
 							/>
-						</div>
+						</Field>
 						<p className="rounded-md bg-muted/50 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
 							Creates one idle service. No containers start until you choose Deploy.{" "}
 							{source !== "later" &&

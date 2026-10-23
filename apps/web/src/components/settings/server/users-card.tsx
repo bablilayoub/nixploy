@@ -321,7 +321,7 @@ export function UsersCard() {
 											</TableCell>
 											<TableCell>
 												{banned ? (
-													<Badge variant="destructive" title={user.banReason ?? undefined}>
+													<Badge variant="outline" title={user.banReason ?? undefined}>
 														Banned
 													</Badge>
 												) : (

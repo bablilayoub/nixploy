@@ -9,6 +9,7 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { useBranding } from "@/components/branding-provider";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
 	Form,
 	FormControl,
@@ -158,14 +159,14 @@ export function LoginForm({
 	}
 
 	return (
-		<div className="flex flex-col gap-8">
-			<div className="space-y-3 text-center">
-				<h1 className="text-3xl font-semibold leading-tight tracking-tight">
+		<Card>
+			<CardHeader className="text-center">
+				<CardTitle as="h1" className="text-xl">
 					Log in to {branding.productName}
-				</h1>
-				<p className="text-sm text-muted-foreground">Deploy and manage your services.</p>
-			</div>
-			<div className="space-y-6">
+				</CardTitle>
+				<CardDescription>Sign in to your workspace.</CardDescription>
+			</CardHeader>
+			<CardContent className="space-y-6">
 				<Form {...form}>
 					<form
 						onSubmit={form.handleSubmit(onSubmit)}
@@ -200,7 +201,12 @@ export function LoginForm({
 							name="password"
 							render={({ field }) => (
 								<FormItem>
-									<FormLabel>Password</FormLabel>
+									<div className="flex flex-wrap items-center justify-between gap-2">
+										<FormLabel>Password</FormLabel>
+										<Button variant="link" size="sm" asChild className="h-auto p-0">
+											<Link href="/forgot-password">Forgot password?</Link>
+										</Button>
+									</div>
 									<FormControl>
 										<Input type="password" autoComplete="current-password" {...field} />
 									</FormControl>
@@ -211,12 +217,6 @@ export function LoginForm({
 						<Button type="submit" className="w-full" disabled={form.formState.isSubmitting}>
 							{form.formState.isSubmitting ? "Signing in…" : "Sign in"}
 						</Button>
-						<Link
-							href="/forgot-password"
-							className="inline-flex min-h-11 items-center justify-center text-center text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-						>
-							Forgot your password?
-						</Link>
 					</form>
 				</Form>
 
@@ -256,7 +256,7 @@ export function LoginForm({
 						))}
 					</div>
 				)}
-			</div>
-		</div>
+			</CardContent>
+		</Card>
 	);
 }

@@ -15,6 +15,7 @@ import {
 	CommandItem,
 	CommandList,
 } from "@/components/ui/command";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -232,8 +233,8 @@ export function AcmeDnsCard() {
 					</div>
 
 					{selected?.envKeys.map((key) => (
-						<div key={key} className="grid gap-2">
-							<Label htmlFor={`acme-dns-${key}`}>{key}</Label>
+						<Field key={key}>
+							<FieldLabel htmlFor={`acme-dns-${key}`}>{key}</FieldLabel>
 							<Input
 								id={`acme-dns-${key}`}
 								type="password"
@@ -246,7 +247,7 @@ export function AcmeDnsCard() {
 									clearZoneCheck();
 								}}
 							/>
-						</div>
+						</Field>
 					))}
 
 					{selected && (

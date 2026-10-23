@@ -25,8 +25,8 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
 	Select,
 	SelectContent,
@@ -276,8 +276,8 @@ export function MountsManager({ target }: { target: MountTarget }) {
 						className="flex min-w-0 flex-col gap-5"
 					>
 						{isCompose && (
-							<div className="flex flex-col gap-2">
-								<Label>Service</Label>
+							<Field>
+								<FieldLabel>Service</FieldLabel>
 								<Select
 									value={form.serviceName}
 									onValueChange={(v) => setForm((f) => ({ ...f, serviceName: v }))}
@@ -296,10 +296,10 @@ export function MountsManager({ target }: { target: MountTarget }) {
 								<p className="text-sm text-muted-foreground">
 									A stack has more than one container, so a mount has to name the one it goes in.
 								</p>
-							</div>
+							</Field>
 						)}
-						<div className="flex flex-col gap-2">
-							<Label>Type</Label>
+						<Field>
+							<FieldLabel>Type</FieldLabel>
 							<Select
 								value={form.type}
 								onValueChange={(v) => setForm((f) => ({ ...f, type: v as MountType }))}
@@ -313,34 +313,34 @@ export function MountsManager({ target }: { target: MountTarget }) {
 									<SelectItem value="file">File</SelectItem>
 								</SelectContent>
 							</Select>
-						</div>
+						</Field>
 
 						{form.type === "volume" && (
-							<div className="flex flex-col gap-2">
-								<Label htmlFor="volume-name">Volume name</Label>
+							<Field>
+								<FieldLabel htmlFor="volume-name">Volume name</FieldLabel>
 								<Input
 									id="volume-name"
 									placeholder="{appName}-data"
 									value={form.volumeName}
 									onChange={(e) => setForm((f) => ({ ...f, volumeName: e.target.value }))}
 								/>
-							</div>
+							</Field>
 						)}
 						{form.type === "bind" && (
-							<div className="flex flex-col gap-2">
-								<Label htmlFor="host-path">Host path</Label>
+							<Field>
+								<FieldLabel htmlFor="host-path">Host path</FieldLabel>
 								<Input
 									id="host-path"
 									placeholder="/srv/data"
 									value={form.hostPath}
 									onChange={(e) => setForm((f) => ({ ...f, hostPath: e.target.value }))}
 								/>
-							</div>
+							</Field>
 						)}
 						{form.type === "file" && (
 							<>
-								<div className="flex flex-col gap-2">
-									<Label htmlFor="file-path">File path</Label>
+								<Field>
+									<FieldLabel htmlFor="file-path">File path</FieldLabel>
 									<Input
 										id="file-path"
 										placeholder="nginx.conf"
@@ -350,9 +350,9 @@ export function MountsManager({ target }: { target: MountTarget }) {
 									<p className="text-xs text-muted-foreground">
 										Relative to the application&apos;s files directory.
 									</p>
-								</div>
-								<div className="flex flex-col gap-2">
-									<Label htmlFor="file-content">Content</Label>
+								</Field>
+								<Field>
+									<FieldLabel htmlFor="file-content">Content</FieldLabel>
 									<Textarea
 										id="file-content"
 										className="min-h-32 font-mono text-sm"
@@ -360,19 +360,19 @@ export function MountsManager({ target }: { target: MountTarget }) {
 										value={form.content}
 										onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
 									/>
-								</div>
+								</Field>
 							</>
 						)}
 
-						<div className="flex flex-col gap-2">
-							<Label htmlFor="mount-path">Mount Path (inside container)</Label>
+						<Field>
+							<FieldLabel htmlFor="mount-path">Mount Path (inside container)</FieldLabel>
 							<Input
 								id="mount-path"
 								placeholder="/data"
 								value={form.mountPath}
 								onChange={(e) => setForm((f) => ({ ...f, mountPath: e.target.value }))}
 							/>
-						</div>
+						</Field>
 						<DialogFooter>
 							<Button type="submit" disabled={!isValid || isPending}>
 								{isPending && <Loader2 className="size-4 animate-spin" />}

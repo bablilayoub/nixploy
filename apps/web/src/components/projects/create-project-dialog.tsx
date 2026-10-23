@@ -15,8 +15,8 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@/components/ui/dialog";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { describeError } from "@/lib/describe-error";
@@ -138,15 +138,15 @@ export function CreateProjectDialog({
 					}}
 					className="flex flex-col gap-5"
 				>
-					<div className="flex items-start gap-3 rounded-lg border bg-panel-inset p-3 text-sm">
+					<div className="flex items-start gap-3 rounded-lg border bg-muted p-3 text-sm">
 						<FolderGit2 className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
 						<p className="leading-relaxed text-muted-foreground">
 							Includes a <span className="font-medium text-foreground">production</span>{" "}
 							environment. You can add staging or preview environments later.
 						</p>
 					</div>
-					<div className="flex flex-col gap-2">
-						<Label htmlFor={`${id}-name`}>Project name</Label>
+					<Field>
+						<FieldLabel htmlFor={`${id}-name`}>Project name</FieldLabel>
 						<Input
 							id={`${id}-name`}
 							placeholder="e.g. Customer portal"
@@ -158,11 +158,11 @@ export function CreateProjectDialog({
 							required
 							disabled={createProject.isPending}
 						/>
-					</div>
-					<div className="flex flex-col gap-2">
-						<Label htmlFor={`${id}-description`}>
+					</Field>
+					<Field>
+						<FieldLabel htmlFor={`${id}-description`}>
 							Description <span className="font-normal text-muted-foreground">(optional)</span>
-						</Label>
+						</FieldLabel>
 						<Textarea
 							id={`${id}-description`}
 							placeholder="What does this project run?"
@@ -171,7 +171,7 @@ export function CreateProjectDialog({
 							rows={3}
 							disabled={createProject.isPending}
 						/>
-					</div>
+					</Field>
 					{createProject.isError ? (
 						<p role="alert" className="text-sm text-destructive">
 							{describeError(createProject.error, "Could not create the project. Try again.")}

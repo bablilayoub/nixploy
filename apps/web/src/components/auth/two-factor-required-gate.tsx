@@ -3,9 +3,9 @@
 import { ShieldAlert } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-
 import { TwoFactorCard } from "@/components/settings/profile/two-factor-card";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { authClient, useSession } from "@/lib/auth-client";
 
 /**
@@ -27,21 +27,23 @@ export function TwoFactorRequiredGate({ orgName }: { orgName?: string }) {
 
 	return (
 		<div className="flex min-h-svh flex-col items-center justify-center gap-8 bg-background p-5">
-			<div className="surface flex w-full max-w-md flex-col items-start gap-4 p-7 text-start">
-				<ShieldAlert className="size-10 text-muted-foreground" />
-				<h1 className="text-xl font-semibold">Two-factor authentication required</h1>
-				<p className="text-sm text-muted-foreground">
-					{orgName ? (
-						<>
-							<span className="font-medium text-foreground">{orgName}</span> requires two-factor
-							authentication.{" "}
-						</>
-					) : (
-						"Your organization requires two-factor authentication. "
-					)}
-					Set it up below to continue — everything else stays locked until you do.
-				</p>
-			</div>
+			<Card className="min-w-0">
+				<CardContent className="flex w-full max-w-md flex-col items-start gap-4 text-start">
+					<ShieldAlert className="size-10 text-muted-foreground" />
+					<h1 className="text-xl font-semibold">Two-factor authentication required</h1>
+					<p className="text-sm text-muted-foreground">
+						{orgName ? (
+							<>
+								<span className="font-medium text-foreground">{orgName}</span> requires two-factor
+								authentication.{" "}
+							</>
+						) : (
+							"Your organization requires two-factor authentication. "
+						)}
+						Set it up below to continue — everything else stays locked until you do.
+					</p>
+				</CardContent>
+			</Card>
 			<div className="w-full max-w-2xl">
 				<TwoFactorCard />
 			</div>

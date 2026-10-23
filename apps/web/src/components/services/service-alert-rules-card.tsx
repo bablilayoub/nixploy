@@ -5,8 +5,8 @@ import { Loader2, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { SettingsSection } from "@/components/layout/settings-section";
 import { Button } from "@/components/ui/button";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
 	Select,
 	SelectContent,
@@ -108,8 +108,8 @@ export function ServiceAlertRulesCard({
 				)}
 
 				<div className="grid gap-3 rounded-md border border-dashed p-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-					<div className="grid gap-1.5">
-						<Label>Metric</Label>
+					<Field>
+						<FieldLabel>Metric</FieldLabel>
 						<Select value={metric} onValueChange={(value) => setMetric(value as Metric)}>
 							<SelectTrigger aria-label="Metric">
 								<SelectValue />
@@ -121,9 +121,9 @@ export function ServiceAlertRulesCard({
 								<SelectItem value="deploy_failure_streak">Deploy failure streak</SelectItem>
 							</SelectContent>
 						</Select>
-					</div>
-					<div className="grid gap-1.5">
-						<Label>Threshold</Label>
+					</Field>
+					<Field>
+						<FieldLabel>Threshold</FieldLabel>
 						<Input
 							type="number"
 							aria-label="Threshold"
@@ -131,7 +131,7 @@ export function ServiceAlertRulesCard({
 							value={threshold}
 							onChange={(event) => setThreshold(event.target.value)}
 						/>
-					</div>
+					</Field>
 					<Button
 						disabled={upsert.isPending}
 						onClick={() =>

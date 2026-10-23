@@ -226,7 +226,7 @@ export function ActivityTray() {
 		>
 			{expanded ? (
 				<div className="overflow-hidden rounded-xl border bg-popover shadow-lg">
-					<div className="flex items-center justify-between gap-2 border-b bg-panel-inset px-4 py-3">
+					<div className="flex items-center justify-between gap-2 border-b bg-muted px-4 py-3">
 						<p className="text-sm font-medium">
 							Activity
 							<span className="ms-1.5 text-xs font-normal text-muted-foreground">

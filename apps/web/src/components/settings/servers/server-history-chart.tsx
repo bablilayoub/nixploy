@@ -9,6 +9,7 @@ import {
 	XAxis,
 	YAxis,
 } from "recharts";
+import { Card, CardContent } from "@/components/ui/card";
 
 import { formatBytes } from "@/lib/format";
 
@@ -72,52 +73,54 @@ function Panel({
 	formatValue: (value: number) => string;
 }) {
 	return (
-		<div className="surface p-4">
-			<div className="flex items-baseline justify-between gap-2">
-				<p className="text-sm font-medium">{title}</p>
-				<p className="font-mono text-xs text-muted-foreground">{value}</p>
-			</div>
-			<div className="mt-2 h-36">
-				<ResponsiveContainer width="100%" height="100%">
-					<AreaChart data={rows} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-						<defs>
-							<linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
-								<stop offset="0%" stopColor={color} stopOpacity={0.28} />
-								<stop offset="100%" stopColor={color} stopOpacity={0.02} />
-							</linearGradient>
-						</defs>
-						<CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-						<XAxis
-							dataKey="time"
-							tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
-							stroke="var(--border)"
-							minTickGap={24}
-						/>
-						<YAxis
-							domain={[0, 100]}
-							tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
-							stroke="var(--border)"
-							width={34}
-							tickFormatter={(tick: number) => `${Math.round(tick)}%`}
-						/>
-						<Tooltip
-							contentStyle={tooltipStyle}
-							formatter={(raw) => formatValue(Number(raw))}
-							labelStyle={{ color: "var(--muted-foreground)" }}
-						/>
-						<Area
-							type="monotone"
-							dataKey={dataKey}
-							name={title}
-							stroke={color}
-							strokeWidth={1.5}
-							fill={`url(#${id})`}
-							isAnimationActive={false}
-						/>
-					</AreaChart>
-				</ResponsiveContainer>
-			</div>
-		</div>
+		<Card className="min-w-0">
+			<CardContent className="">
+				<div className="flex items-baseline justify-between gap-2">
+					<p className="text-sm font-medium">{title}</p>
+					<p className="font-mono text-xs text-muted-foreground">{value}</p>
+				</div>
+				<div className="mt-2 h-36">
+					<ResponsiveContainer width="100%" height="100%">
+						<AreaChart data={rows} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+							<defs>
+								<linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+									<stop offset="0%" stopColor={color} stopOpacity={0.28} />
+									<stop offset="100%" stopColor={color} stopOpacity={0.02} />
+								</linearGradient>
+							</defs>
+							<CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+							<XAxis
+								dataKey="time"
+								tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
+								stroke="var(--border)"
+								minTickGap={24}
+							/>
+							<YAxis
+								domain={[0, 100]}
+								tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
+								stroke="var(--border)"
+								width={34}
+								tickFormatter={(tick: number) => `${Math.round(tick)}%`}
+							/>
+							<Tooltip
+								contentStyle={tooltipStyle}
+								formatter={(raw) => formatValue(Number(raw))}
+								labelStyle={{ color: "var(--muted-foreground)" }}
+							/>
+							<Area
+								type="monotone"
+								dataKey={dataKey}
+								name={title}
+								stroke={color}
+								strokeWidth={1.5}
+								fill={`url(#${id})`}
+								isAnimationActive={false}
+							/>
+						</AreaChart>
+					</ResponsiveContainer>
+				</div>
+			</CardContent>
+		</Card>
 	);
 }
 

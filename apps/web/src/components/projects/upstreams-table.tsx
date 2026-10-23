@@ -73,7 +73,7 @@ export function UpstreamsTable({
 									</TableCell>
 									<TableCell>
 										{row.blockedReason ? (
-											<Badge variant="destructive" className="text-xs">
+											<Badge variant="outline" className="text-xs">
 												Route withheld
 											</Badge>
 										) : url && domain ? (

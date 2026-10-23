@@ -28,8 +28,8 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@/components/ui/dialog";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
 	Select,
 	SelectContent,
@@ -254,17 +254,17 @@ export function ApiKeysCard() {
 										</DialogDescription>
 									</DialogHeader>
 									<div className="grid gap-5">
-										<div className="grid gap-2">
-											<Label htmlFor="api-key-name">Name</Label>
+										<Field>
+											<FieldLabel htmlFor="api-key-name">Name</FieldLabel>
 											<Input
 												id="api-key-name"
 												placeholder="e.g. CLI on my laptop"
 												value={name}
 												onChange={(e) => setName(e.target.value)}
 											/>
-										</div>
-										<div className="grid gap-2">
-											<Label>Scope</Label>
+										</Field>
+										<Field>
+											<FieldLabel>Scope</FieldLabel>
 											<Select
 												value={scope}
 												onValueChange={(value) => setScope(value as ApiKeyScope)}
@@ -283,9 +283,9 @@ export function ApiKeysCard() {
 											<p className="text-xs text-muted-foreground">
 												{API_KEY_SCOPE_DESCRIPTIONS[scope]}
 											</p>
-										</div>
-										<div className="grid gap-2">
-											<Label>Organization</Label>
+										</Field>
+										<Field>
+											<FieldLabel>Organization</FieldLabel>
 											<Select value={organizationId} onValueChange={setOrganizationId}>
 												<SelectTrigger aria-label="Organization">
 													<SelectValue placeholder="Select an organization" />
@@ -301,9 +301,9 @@ export function ApiKeysCard() {
 											<p className="text-xs text-muted-foreground">
 												The key can only act for this organization.
 											</p>
-										</div>
-										<div className="grid gap-2">
-											<Label>Expires</Label>
+										</Field>
+										<Field>
+											<FieldLabel>Expires</FieldLabel>
 											<Select value={expiration} onValueChange={setExpiration}>
 												<SelectTrigger aria-label="Expires">
 													<SelectValue />
@@ -321,7 +321,7 @@ export function ApiKeysCard() {
 													Keys always expire — only the instance admin can create one that does not.
 												</p>
 											)}
-										</div>
+										</Field>
 									</div>
 									<DialogFooter>
 										<Button disabled={isPending || !name || !organizationId} onClick={createKey}>

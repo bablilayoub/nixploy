@@ -22,8 +22,8 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { authClient } from "@/lib/auth-client";
 import { toastError } from "@/lib/describe-error";
@@ -178,8 +178,8 @@ export function OrgSwitcher({ className }: { className?: string }) {
 						}}
 						className="flex flex-col gap-4"
 					>
-						<div className="flex flex-col gap-2">
-							<Label htmlFor="org-name">Name</Label>
+						<Field>
+							<FieldLabel htmlFor="org-name">Name</FieldLabel>
 							<Input
 								id="org-name"
 								placeholder="Acme Inc."
@@ -187,7 +187,7 @@ export function OrgSwitcher({ className }: { className?: string }) {
 								onChange={(event) => setName(event.target.value)}
 								autoFocus
 							/>
-						</div>
+						</Field>
 						<DialogFooter>
 							<Button type="submit" disabled={!name.trim() || isCreating}>
 								{isCreating ? "Creating..." : "Create"}

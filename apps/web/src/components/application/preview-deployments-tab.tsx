@@ -9,8 +9,8 @@ import { useSaveBar } from "@/components/services/save-bar";
 import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
 import { Button } from "@/components/ui/button";
 import { DisabledHint } from "@/components/ui/disabled-hint";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useDraft } from "@/hooks/use-draft";
@@ -94,8 +94,8 @@ function PreviewSettingsCard({ application }: { application: Application }) {
 			description="Environment overrides, the cap on simultaneous previews, and how long a pull-request preview lives."
 		>
 			<div className="flex min-w-0 flex-col gap-5">
-				<div className="flex flex-col gap-2">
-					<Label htmlFor="preview-env">Preview environment variables</Label>
+				<Field>
+					<FieldLabel htmlFor="preview-env">Preview environment variables</FieldLabel>
 					<Textarea
 						id="preview-env"
 						className="min-h-24 font-mono text-xs sm:max-w-lg"
@@ -108,11 +108,11 @@ function PreviewSettingsCard({ application }: { application: Application }) {
 						Merged over the inherited project, environment and service variables for preview builds
 						only — point a preview at a scratch database instead of production.
 					</p>
-				</div>
+				</Field>
 
 				<div className="grid gap-4 sm:max-w-lg sm:grid-cols-2">
-					<div className="flex flex-col gap-2">
-						<Label htmlFor="preview-limit">Maximum previews</Label>
+					<Field>
+						<FieldLabel htmlFor="preview-limit">Maximum previews</FieldLabel>
 						<Input
 							id="preview-limit"
 							inputMode="numeric"
@@ -121,9 +121,9 @@ function PreviewSettingsCard({ application }: { application: Application }) {
 							onChange={(event) => draft.patch({ limit: event.target.value })}
 						/>
 						<p className="text-xs text-muted-foreground">0 means no limit.</p>
-					</div>
-					<div className="flex flex-col gap-2">
-						<Label htmlFor="preview-ttl">Expire after (hours)</Label>
+					</Field>
+					<Field>
+						<FieldLabel htmlFor="preview-ttl">Expire after (hours)</FieldLabel>
 						<Input
 							id="preview-ttl"
 							inputMode="numeric"
@@ -135,7 +135,7 @@ function PreviewSettingsCard({ application }: { application: Application }) {
 						<p className="text-xs text-muted-foreground">
 							Applied when a pull request creates the preview.
 						</p>
-					</div>
+					</Field>
 				</div>
 
 				<PreviewDatabaseFields

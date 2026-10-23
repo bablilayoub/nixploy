@@ -24,6 +24,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -365,33 +366,33 @@ export function ServersView() {
 						}}
 						className="grid gap-5"
 					>
-						<div className="grid gap-2">
-							<Label htmlFor="edit-server-name">Name</Label>
+						<Field>
+							<FieldLabel htmlFor="edit-server-name">Name</FieldLabel>
 							<Input
 								id="edit-server-name"
 								value={editName}
 								onChange={(e) => setEditName(e.target.value)}
 							/>
-						</div>
-						<div className="grid gap-2">
-							<Label htmlFor="edit-server-description">Description (optional)</Label>
+						</Field>
+						<Field>
+							<FieldLabel htmlFor="edit-server-description">Description (optional)</FieldLabel>
 							<Input
 								id="edit-server-description"
 								value={editDescription}
 								onChange={(e) => setEditDescription(e.target.value)}
 							/>
-						</div>
+						</Field>
 						<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-							<div className="grid gap-2">
-								<Label htmlFor="edit-server-ip">IP address</Label>
+							<Field>
+								<FieldLabel htmlFor="edit-server-ip">IP address</FieldLabel>
 								<Input
 									id="edit-server-ip"
 									value={editIpAddress}
 									onChange={(e) => setEditIpAddress(e.target.value)}
 								/>
-							</div>
-							<div className="grid gap-2">
-								<Label htmlFor="edit-server-port">SSH port</Label>
+							</Field>
+							<Field>
+								<FieldLabel htmlFor="edit-server-port">SSH port</FieldLabel>
 								<Input
 									id="edit-server-port"
 									type="number"
@@ -400,10 +401,10 @@ export function ServersView() {
 									value={editPort}
 									onChange={(e) => setEditPort(e.target.value)}
 								/>
-							</div>
+							</Field>
 						</div>
-						<div className="grid gap-2">
-							<Label htmlFor="edit-server-username">Username</Label>
+						<Field>
+							<FieldLabel htmlFor="edit-server-username">Username</FieldLabel>
 							<Input
 								id="edit-server-username"
 								value={editUsername}
@@ -413,9 +414,9 @@ export function ServersView() {
 							{!editUsername.trim() && (
 								<p className="text-xs text-destructive">An SSH username is required.</p>
 							)}
-						</div>
-						<div className="grid gap-2">
-							<Label>SSH key</Label>
+						</Field>
+						<Field>
+							<FieldLabel>SSH key</FieldLabel>
 							<Select
 								value={editSshKeyId ?? "none"}
 								onValueChange={(value) => setEditSshKeyId(value === "none" ? null : value)}
@@ -432,9 +433,9 @@ export function ServersView() {
 									))}
 								</SelectContent>
 							</Select>
-						</div>
-						<div className="grid gap-2">
-							<Label>Swarm role</Label>
+						</Field>
+						<Field>
+							<FieldLabel>Swarm role</FieldLabel>
 							<Select
 								value={editSwarmRole}
 								onValueChange={(value) => setEditSwarmRole(value as "worker" | "manager")}
@@ -451,7 +452,7 @@ export function ServersView() {
 								Applied on the next setup run if the node is not yet in the swarm.{" "}
 								<HelpLink slug="servers" />
 							</p>
-						</div>
+						</Field>
 						<div className="flex flex-wrap items-center justify-between gap-4 rounded-md border px-3 py-2">
 							<div className="grid gap-0.5">
 								<Label htmlFor="edit-server-metrics">Metrics history</Label>

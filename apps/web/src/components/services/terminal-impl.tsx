@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { NotRunningState, type RuntimeEmptyProps } from "@/components/services/not-running-state";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { nixployTerminalTheme } from "@/lib/codemirror-theme";
 import { terminalInputFrames } from "@/lib/terminal-input";
 import { cn } from "@/lib/utils";
@@ -304,7 +305,7 @@ export function ServiceTerminal({
 					className="min-h-[26rem]"
 				/>
 			)}
-			<div className={cn("relative overflow-hidden surface", notRunning && "hidden")}>
+			<Card className={cn("relative overflow-hidden", notRunning && "hidden")}>
 				{status !== "connected" && !notRunning && (
 					<div
 						className={cn(
@@ -345,7 +346,7 @@ export function ServiceTerminal({
 					</div>
 				)}
 				<div ref={containerRef} className="h-[26rem] p-2" />
-			</div>
+			</Card>
 		</>
 	);
 }

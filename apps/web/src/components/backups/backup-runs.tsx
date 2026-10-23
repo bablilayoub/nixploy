@@ -67,7 +67,7 @@ function StatusBadge({ status, error }: { status: BackupRunRow["status"]; error:
 		);
 	}
 	return (
-		<Badge variant="destructive" title={error ?? undefined}>
+		<Badge variant="outline" title={error ?? undefined}>
 			<XCircle />
 			Failed
 		</Badge>

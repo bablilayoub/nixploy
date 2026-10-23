@@ -64,6 +64,7 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 import { DisabledHint } from "@/components/ui/disabled-hint";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -387,7 +388,7 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 					<AlertDialogFooter>
 						<AlertDialogCancel disabled={stopMutation.isPending}>Cancel</AlertDialogCancel>
 						<AlertDialogAction
-							variant="destructive"
+							variant="outline"
 							disabled={stopMutation.isPending}
 							onClick={(event) => {
 								event.preventDefault();
@@ -670,16 +671,16 @@ function GeneralTab({
 				description={`The name and description shown throughout your ${label} workspace.`}
 			>
 				<div className="space-y-4">
-					<div className="space-y-1.5">
-						<Label htmlFor="db-name">Name</Label>
+					<Field className="space-y-1.5">
+						<FieldLabel htmlFor="db-name">Name</FieldLabel>
 						<Input
 							id="db-name"
 							value={name}
 							onChange={(e) => general.patch({ name: e.target.value })}
 						/>
-					</div>
-					<div className="space-y-1.5">
-						<Label htmlFor="db-description">Description</Label>
+					</Field>
+					<Field className="space-y-1.5">
+						<FieldLabel htmlFor="db-description">Description</FieldLabel>
 						<Textarea
 							id="db-description"
 							value={description}
@@ -687,7 +688,7 @@ function GeneralTab({
 							placeholder="Optional description"
 							rows={3}
 						/>
-					</div>
+					</Field>
 				</div>
 			</SettingsSection>
 			<SettingsSection
@@ -696,8 +697,8 @@ function GeneralTab({
 				description="Choose the database version or a custom container image. Saving these fields also saves the name and description above."
 			>
 				<div className="space-y-4">
-					<div className="space-y-1.5">
-						<Label htmlFor="db-version">Version</Label>
+					<Field className="space-y-1.5">
+						<FieldLabel htmlFor="db-version">Version</FieldLabel>
 						<Select
 							value={engineVersion || CUSTOM_IMAGE}
 							onValueChange={(value) => {
@@ -731,7 +732,7 @@ function GeneralTab({
 							Pick a version and the image follows. Choose “Custom image” for a variant such as
 							Alpine, a fork or a pinned digest.
 						</p>
-					</div>
+					</Field>
 
 					{versionChange.kind === "blocked" && (
 						<div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
@@ -755,8 +756,8 @@ function GeneralTab({
 						</div>
 					)}
 
-					<div className="space-y-1.5">
-						<Label htmlFor="db-image">Docker image</Label>
+					<Field className="space-y-1.5">
+						<FieldLabel htmlFor="db-image">Docker image</FieldLabel>
 						<Input
 							id="db-image"
 							value={dockerImage}
@@ -769,7 +770,7 @@ function GeneralTab({
 								? "Derived from the version above. Switch to “Custom image” to edit it."
 								: "Reload the service after changing the image for it to take effect."}
 						</p>
-					</div>
+					</Field>
 					<div className="flex items-center justify-end gap-3">
 						<UnsavedChangesPill dirty={general.dirty} />
 						<DisabledHint hint={writeHint}>
@@ -805,8 +806,8 @@ function GeneralTab({
 				description="Off by default. Your own services in this environment already reach the database by name — a port is only needed for tools outside the platform."
 			>
 				<div className="space-y-4">
-					<div className="space-y-1.5">
-						<Label htmlFor="db-port">Port</Label>
+					<Field className="space-y-1.5">
+						<FieldLabel htmlFor="db-port">Port</FieldLabel>
 						<Input
 							id="db-port"
 							aria-invalid={!portValid}
@@ -832,7 +833,7 @@ function GeneralTab({
 								Enter a port between 1 and 65535.
 							</p>
 						)}
-					</div>
+					</Field>
 					<div className="flex items-center justify-end gap-3">
 						<UnsavedChangesPill dirty={port.dirty} />
 						<DisabledHint hint={writeHint}>
@@ -1020,8 +1021,8 @@ function LogicalDatabasesSection({
 						}}
 						className="space-y-4"
 					>
-						<div className="space-y-1.5">
-							<Label htmlFor="logical-name">Database name</Label>
+						<Field className="space-y-1.5">
+							<FieldLabel htmlFor="logical-name">Database name</FieldLabel>
 							<Input
 								id="logical-name"
 								placeholder="analytics"
@@ -1029,9 +1030,9 @@ function LogicalDatabasesSection({
 								onChange={(event) => setName(event.target.value)}
 								className="font-mono"
 							/>
-						</div>
-						<div className="space-y-1.5">
-							<Label htmlFor="logical-user">Username (optional)</Label>
+						</Field>
+						<Field className="space-y-1.5">
+							<FieldLabel htmlFor="logical-user">Username (optional)</FieldLabel>
 							<Input
 								id="logical-user"
 								placeholder={`${name.trim().toLowerCase() || "analytics"}_user`}
@@ -1042,7 +1043,7 @@ function LogicalDatabasesSection({
 							<p className="text-sm text-muted-foreground">
 								Leave empty to name the user after the database.
 							</p>
-						</div>
+						</Field>
 						<DialogFooter>
 							<Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
 								Cancel
@@ -1069,7 +1070,7 @@ function LogicalDatabasesSection({
 					<AlertDialogFooter>
 						<AlertDialogCancel disabled={deleteMutation.isPending}>Cancel</AlertDialogCancel>
 						<AlertDialogAction
-							variant="destructive"
+							variant="outline"
 							disabled={deleteMutation.isPending}
 							onClick={(event) => {
 								event.preventDefault();
@@ -1304,10 +1305,10 @@ function SettingsTab({
 				description={`Change the display name of this ${label} instance.`}
 			>
 				<div className="space-y-4">
-					<div className="space-y-1.5">
-						<Label htmlFor="rename-input">Name</Label>
+					<Field className="space-y-1.5">
+						<FieldLabel htmlFor="rename-input">Name</FieldLabel>
 						<Input id="rename-input" value={name} onChange={(e) => nameDraft.set(e.target.value)} />
-					</div>
+					</Field>
 					<div className="flex items-center justify-end gap-3">
 						<UnsavedChangesPill dirty={nameDraft.dirty} />
 						<DisabledHint hint={canWrite ? undefined : capabilityHint("service.write")}>

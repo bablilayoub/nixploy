@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { DateTime } from "@/components/ui/date-time";
 import {
@@ -32,6 +33,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -351,104 +353,108 @@ export function RecoveryCopies({
 									: "No recovery copies in this project. Open a PostgreSQL service’s Backups tab to create one from a stored dump."}
 						</p>
 					) : copyRows.length > 0 ? (
-						<ul className="surface divide-y">
-							{copyRows.map((row) => (
-								<li
-									key={row.recoveryCopyId}
-									className="relative flex flex-wrap items-start gap-4 border-s-2 border-s-muted-foreground/40 px-5 py-5"
-								>
-									<div className="min-w-0 flex-1 basis-52">
-										<div className="flex flex-wrap items-center gap-2">
-											<p className="break-words text-sm font-medium">{row.name}</p>
-											<Badge
-												variant={
-													row.status === "error" || row.status === "interrupted"
-														? "destructive"
-														: "outline"
-												}
-											>
-												{STATUS[row.status] ?? "Unknown"}
-											</Badge>
+						<Card>
+							<ul className="divide-y">
+								{copyRows.map((row) => (
+									<li
+										key={row.recoveryCopyId}
+										className="relative flex flex-wrap items-start gap-4 border-s-2 border-s-muted-foreground/40 px-5 py-5"
+									>
+										<div className="min-w-0 flex-1 basis-52">
+											<div className="flex flex-wrap items-center gap-2">
+												<p className="break-words text-sm font-medium">{row.name}</p>
+												<Badge
+													variant={
+														row.status === "error" || row.status === "interrupted"
+															? "outline"
+															: "outline"
+													}
+												>
+													{STATUS[row.status] ?? "Unknown"}
+												</Badge>
+											</div>
+											<p className="mt-1 text-xs text-muted-foreground">
+												{row.targetEnvironmentName} · <DateTime value={row.createdAt} />
+												{row.status === "ready" &&
+													` · ${row.tableCount ?? 0} ${row.tableCount === 1 ? "table" : "tables"} verified`}
+											</p>
+											<Collapsible className="mt-3 text-xs text-muted-foreground">
+												<CollapsibleTrigger asChild>
+													<Button
+														type="button"
+														variant="ghost"
+														size="sm"
+														className="group cursor-pointer py-2"
+													>
+														Backup object details
+														<ChevronDown
+															aria-hidden="true"
+															className="size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-180"
+														/>
+													</Button>
+												</CollapsibleTrigger>
+												<CollapsibleContent forceMount className="data-[state=closed]:hidden">
+													<div className="flex items-start justify-between gap-3 rounded-md bg-muted p-3">
+														<code className="min-w-0 break-all">{row.objectKey}</code>
+														<CopyButton value={row.objectKey} label="Copy backup object key" />
+													</div>
+												</CollapsibleContent>
+											</Collapsible>
+											{row.error && (
+												<p className="mt-3 rounded-md border border-destructive/25 bg-destructive/5 p-3 text-sm text-destructive">
+													{row.error}
+												</p>
+											)}
+											{!row.backupId && (
+												<p className="mt-1 text-xs text-muted-foreground">
+													Backup schedule removed
+												</p>
+											)}
+											{row.status === "interrupted" && (
+												<p className="mt-2 text-sm text-muted-foreground">
+													{row.targetPostgresId
+														? "The operation did not report a result. Inspect the retained database or delete this copy."
+														: "The database record is unavailable. Delete this copy to verify cleanup at its recorded origin."}
+												</p>
+											)}
 										</div>
-										<p className="mt-1 text-xs text-muted-foreground">
-											{row.targetEnvironmentName} · <DateTime value={row.createdAt} />
-											{row.status === "ready" &&
-												` · ${row.tableCount ?? 0} ${row.tableCount === 1 ? "table" : "tables"} verified`}
-										</p>
-										<Collapsible className="mt-3 text-xs text-muted-foreground">
-											<CollapsibleTrigger asChild>
-												<Button
-													type="button"
-													variant="ghost"
-													size="sm"
-													className="group cursor-pointer py-2"
-												>
-													Backup object details
-													<ChevronDown
-														aria-hidden="true"
-														className="size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-180"
-													/>
+										<div className="flex shrink-0 items-center gap-2 border-s ps-4">
+											{row.targetPostgresId && (
+												<Button asChild size="sm" variant="outline">
+													<Link
+														href={`/dashboard/projects/${row.projectId}/services/postgres/${row.targetPostgresId}?tab=connection`}
+													>
+														Open database
+														<ArrowUpRight className="size-3.5" />
+													</Link>
 												</Button>
-											</CollapsibleTrigger>
-											<CollapsibleContent forceMount className="data-[state=closed]:hidden">
-												<div className="flex items-start justify-between gap-3 rounded-md bg-panel-inset p-3">
-													<code className="min-w-0 break-all">{row.objectKey}</code>
-													<CopyButton value={row.objectKey} label="Copy backup object key" />
-												</div>
-											</CollapsibleContent>
-										</Collapsible>
-										{row.error && (
-											<p className="mt-3 rounded-md border border-destructive/25 bg-destructive/5 p-3 text-sm text-destructive">
-												{row.error}
-											</p>
-										)}
-										{!row.backupId && (
-											<p className="mt-1 text-xs text-muted-foreground">Backup schedule removed</p>
-										)}
-										{row.status === "interrupted" && (
-											<p className="mt-2 text-sm text-muted-foreground">
-												{row.targetPostgresId
-													? "The operation did not report a result. Inspect the retained database or delete this copy."
-													: "The database record is unavailable. Delete this copy to verify cleanup at its recorded origin."}
-											</p>
-										)}
-									</div>
-									<div className="flex shrink-0 items-center gap-2 border-s ps-4">
-										{row.targetPostgresId && (
-											<Button asChild size="sm" variant="outline">
-												<Link
-													href={`/dashboard/projects/${row.projectId}/services/postgres/${row.targetPostgresId}?tab=connection`}
+											)}
+											{row.status !== "deleted" && (
+												<Button
+													size="icon-sm"
+													variant="ghost"
+													aria-label={`Delete ${row.name}`}
+													title={
+														!canDelete
+															? "An organization admin with backup and service deletion permissions is required"
+															: ACTIVE.has(row.status)
+																? "Wait for the current copy operation to finish"
+																: `Delete ${row.name}`
+													}
+													disabled={!canDelete || ACTIVE.has(row.status) || remove.isPending}
+													onClick={() => {
+														setDeleteError(null);
+														setDeleteId(row.recoveryCopyId);
+													}}
 												>
-													Open database
-													<ArrowUpRight className="size-3.5" />
-												</Link>
-											</Button>
-										)}
-										{row.status !== "deleted" && (
-											<Button
-												size="icon-sm"
-												variant="ghost"
-												aria-label={`Delete ${row.name}`}
-												title={
-													!canDelete
-														? "An organization admin with backup and service deletion permissions is required"
-														: ACTIVE.has(row.status)
-															? "Wait for the current copy operation to finish"
-															: `Delete ${row.name}`
-												}
-												disabled={!canDelete || ACTIVE.has(row.status) || remove.isPending}
-												onClick={() => {
-													setDeleteError(null);
-													setDeleteId(row.recoveryCopyId);
-												}}
-											>
-												<Trash2 className="size-4" />
-											</Button>
-										)}
-									</div>
-								</li>
-							))}
-						</ul>
+													<Trash2 className="size-4" />
+												</Button>
+											)}
+										</div>
+									</li>
+								))}
+							</ul>
+						</Card>
 					) : null}
 				</div>
 			)}
@@ -506,8 +512,8 @@ export function RecoveryCopies({
 							}}
 						>
 							{backups.length > 1 && (
-								<div className="space-y-2">
-									<Label htmlFor={`${fieldId}-backup`}>Backup schedule</Label>
+								<Field className="space-y-2">
+									<FieldLabel htmlFor={`${fieldId}-backup`}>Backup schedule</FieldLabel>
 									<Select
 										value={backupId}
 										onValueChange={(value) => {
@@ -527,7 +533,7 @@ export function RecoveryCopies({
 											))}
 										</SelectContent>
 									</Select>
-								</div>
+								</Field>
 							)}
 							<div className="space-y-2">
 								<Label htmlFor={`${fieldId}-key`}>Stored dump</Label>
@@ -559,8 +565,8 @@ export function RecoveryCopies({
 									</>
 								)}
 							</div>
-							<div className="space-y-2">
-								<Label htmlFor={`${fieldId}-name`}>Copy name</Label>
+							<Field className="space-y-2">
+								<FieldLabel htmlFor={`${fieldId}-name`}>Copy name</FieldLabel>
 								<Input
 									id={`${fieldId}-name`}
 									value={name}
@@ -569,7 +575,7 @@ export function RecoveryCopies({
 									required
 									disabled={create.isPending}
 								/>
-							</div>
+							</Field>
 							<div className="space-y-2">
 								<Label htmlFor={`${fieldId}-environment`}>Target environment</Label>
 								{projects.isError || source.isError ? (

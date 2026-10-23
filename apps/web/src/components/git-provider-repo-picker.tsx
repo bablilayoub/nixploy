@@ -3,9 +3,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Field, FieldLabel } from "@/components/ui/field";
 
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
 	Select,
 	SelectContent,
@@ -175,24 +175,24 @@ export function GitProviderRepoPicker({
 		return (
 			<div className="flex flex-col gap-2">
 				<div className="grid gap-4 sm:grid-cols-2">
-					<div className="flex flex-col gap-2">
-						<Label htmlFor="repo-path">Repository</Label>
+					<Field>
+						<FieldLabel htmlFor="repo-path">Repository</FieldLabel>
 						<Input
 							id="repo-path"
 							placeholder="owner/repository"
 							value={repoSelection}
 							onChange={(e) => onRepoSelectionChange(e.target.value)}
 						/>
-					</div>
-					<div className="flex flex-col gap-2">
-						<Label htmlFor="branch">Branch</Label>
+					</Field>
+					<Field>
+						<FieldLabel htmlFor="branch">Branch</FieldLabel>
 						<Input
 							id="branch"
 							placeholder="main"
 							value={branch}
 							onChange={(e) => onBranchChange(e.target.value)}
 						/>
-					</div>
+					</Field>
 				</div>
 				{providerId && (
 					<Button
@@ -212,8 +212,8 @@ export function GitProviderRepoPicker({
 	return (
 		<div className="flex flex-col gap-2">
 			<div className="grid gap-4 sm:grid-cols-2">
-				<div className="flex flex-col gap-2">
-					<Label>Repository</Label>
+				<Field>
+					<FieldLabel>Repository</FieldLabel>
 					<Select
 						value={repoSelection}
 						onValueChange={(value) => {
@@ -233,9 +233,9 @@ export function GitProviderRepoPicker({
 							))}
 						</SelectContent>
 					</Select>
-				</div>
-				<div className="flex flex-col gap-2">
-					<Label>Branch</Label>
+				</Field>
+				<Field>
+					<FieldLabel>Branch</FieldLabel>
 					<Select
 						value={branch}
 						onValueChange={onBranchChange}
@@ -252,7 +252,7 @@ export function GitProviderRepoPicker({
 							))}
 						</SelectContent>
 					</Select>
-				</div>
+				</Field>
 			</div>
 			{reposError ? (
 				<p className="text-xs text-destructive">

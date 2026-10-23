@@ -22,8 +22,8 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@/components/ui/dialog";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
 	Select,
 	SelectContent,
@@ -255,8 +255,8 @@ export function MembersCard() {
 							</DialogDescription>
 						</DialogHeader>
 						<div className="grid gap-5">
-							<div className="grid gap-2">
-								<Label htmlFor="invite-email">Email</Label>
+							<Field>
+								<FieldLabel htmlFor="invite-email">Email</FieldLabel>
 								<Input
 									id="invite-email"
 									type="email"
@@ -267,9 +267,9 @@ export function MembersCard() {
 								<p className="text-xs text-muted-foreground">
 									The invitee must sign up with this exact email.
 								</p>
-							</div>
-							<div className="grid gap-2">
-								<Label>Role</Label>
+							</Field>
+							<Field>
+								<FieldLabel>Role</FieldLabel>
 								<Select value={role} onValueChange={(value) => setRole(value as InvitableRole)}>
 									<SelectTrigger aria-label="Role">
 										<SelectValue />
@@ -282,9 +282,9 @@ export function MembersCard() {
 										))}
 									</SelectContent>
 								</Select>
-							</div>
-							<div className="grid gap-2">
-								<Label>Expires in</Label>
+							</Field>
+							<Field>
+								<FieldLabel>Expires in</FieldLabel>
 								<Select
 									value={expiryDays}
 									onValueChange={(value) => setExpiryDays(value as "1" | "7" | "30")}
@@ -298,7 +298,7 @@ export function MembersCard() {
 										<SelectItem value="30">30 days</SelectItem>
 									</SelectContent>
 								</Select>
-							</div>
+							</Field>
 						</div>
 						<DialogFooter>
 							<Button

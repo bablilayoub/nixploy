@@ -20,6 +20,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -361,8 +362,8 @@ export function SsoProvidersView() {
 						}}
 					>
 						<div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
-							<div className="flex min-w-0 flex-col gap-1.5">
-								<Label htmlFor="sso-preset">Provider</Label>
+							<Field className="min-w-0">
+								<FieldLabel htmlFor="sso-preset">Provider</FieldLabel>
 								<Select
 									value={form.preset}
 									onValueChange={(preset) => {
@@ -387,9 +388,9 @@ export function SsoProvidersView() {
 										))}
 									</SelectContent>
 								</Select>
-							</div>
-							<div className="flex min-w-0 flex-col gap-1.5">
-								<Label htmlFor="sso-name">Button label</Label>
+							</Field>
+							<Field className="min-w-0">
+								<FieldLabel htmlFor="sso-name">Button label</FieldLabel>
 								<Input
 									id="sso-name"
 									value={form.name}
@@ -399,12 +400,12 @@ export function SsoProvidersView() {
 									placeholder="Acme SSO"
 									required
 								/>
-							</div>
+							</Field>
 						</div>
 
 						{editing ? null : (
-							<div className="flex min-w-0 flex-col gap-1.5">
-								<Label htmlFor="sso-provider-id">Provider id</Label>
+							<Field className="min-w-0">
+								<FieldLabel htmlFor="sso-provider-id">Provider id</FieldLabel>
 								<Input
 									id="sso-provider-id"
 									value={form.providerId}
@@ -416,12 +417,12 @@ export function SsoProvidersView() {
 									required
 								/>
 								<RedirectUriHint providerId={form.providerId} />
-							</div>
+							</Field>
 						)}
 
 						{presetInfo?.kind === "fixed" ? null : (
-							<div className="flex min-w-0 flex-col gap-1.5">
-								<Label htmlFor="sso-issuer">Issuer URL</Label>
+							<Field className="min-w-0">
+								<FieldLabel htmlFor="sso-issuer">Issuer URL</FieldLabel>
 								<Input
 									id="sso-issuer"
 									value={form.issuer}
@@ -434,13 +435,13 @@ export function SsoProvidersView() {
 									Its discovery document supplies every endpoint. Leave empty to enter them by hand
 									below.
 								</p>
-							</div>
+							</Field>
 						)}
 
 						{presetInfo?.kind !== "fixed" && !form.issuer ? (
 							<div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
-								<div className="flex min-w-0 flex-col gap-1.5">
-									<Label htmlFor="sso-auth-url">Authorization URL</Label>
+								<Field className="min-w-0">
+									<FieldLabel htmlFor="sso-auth-url">Authorization URL</FieldLabel>
 									<Input
 										id="sso-auth-url"
 										value={form.authorizationUrl}
@@ -448,9 +449,9 @@ export function SsoProvidersView() {
 											setForm((current) => ({ ...current, authorizationUrl: event.target.value }))
 										}
 									/>
-								</div>
-								<div className="flex min-w-0 flex-col gap-1.5">
-									<Label htmlFor="sso-token-url">Token URL</Label>
+								</Field>
+								<Field className="min-w-0">
+									<FieldLabel htmlFor="sso-token-url">Token URL</FieldLabel>
 									<Input
 										id="sso-token-url"
 										value={form.tokenUrl}
@@ -458,9 +459,9 @@ export function SsoProvidersView() {
 											setForm((current) => ({ ...current, tokenUrl: event.target.value }))
 										}
 									/>
-								</div>
-								<div className="flex min-w-0 flex-col gap-1.5 sm:col-span-2">
-									<Label htmlFor="sso-userinfo-url">Userinfo URL</Label>
+								</Field>
+								<Field className="min-w-0 sm:col-span-2">
+									<FieldLabel htmlFor="sso-userinfo-url">Userinfo URL</FieldLabel>
 									<Input
 										id="sso-userinfo-url"
 										value={form.userInfoUrl}
@@ -468,14 +469,14 @@ export function SsoProvidersView() {
 											setForm((current) => ({ ...current, userInfoUrl: event.target.value }))
 										}
 									/>
-								</div>
+								</Field>
 							</div>
 						) : null}
 
 						<h3 className="mt-3 border-b pb-3 text-sm font-semibold">Connection</h3>
 						<div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
-							<div className="flex min-w-0 flex-col gap-1.5">
-								<Label htmlFor="sso-client-id">Client ID</Label>
+							<Field className="min-w-0">
+								<FieldLabel htmlFor="sso-client-id">Client ID</FieldLabel>
 								<Input
 									id="sso-client-id"
 									value={form.clientId}
@@ -484,9 +485,9 @@ export function SsoProvidersView() {
 									}
 									required
 								/>
-							</div>
-							<div className="flex min-w-0 flex-col gap-1.5">
-								<Label htmlFor="sso-client-secret">Client secret</Label>
+							</Field>
+							<Field className="min-w-0">
+								<FieldLabel htmlFor="sso-client-secret">Client secret</FieldLabel>
 								<Input
 									id="sso-client-secret"
 									type="password"
@@ -497,12 +498,12 @@ export function SsoProvidersView() {
 									placeholder={editing ? "Leave blank to keep the current secret" : ""}
 									required={!editing}
 								/>
-							</div>
+							</Field>
 						</div>
 
 						<div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
-							<div className="flex min-w-0 flex-col gap-1.5">
-								<Label htmlFor="sso-scopes">Scopes</Label>
+							<Field className="min-w-0">
+								<FieldLabel htmlFor="sso-scopes">Scopes</FieldLabel>
 								<Input
 									id="sso-scopes"
 									value={form.scopes}
@@ -510,9 +511,9 @@ export function SsoProvidersView() {
 										setForm((current) => ({ ...current, scopes: event.target.value }))
 									}
 								/>
-							</div>
-							<div className="flex min-w-0 flex-col gap-1.5">
-								<Label htmlFor="sso-domains">Allowed email domains</Label>
+							</Field>
+							<Field className="min-w-0">
+								<FieldLabel htmlFor="sso-domains">Allowed email domains</FieldLabel>
 								<Input
 									id="sso-domains"
 									value={form.allowedEmailDomains}
@@ -527,13 +528,13 @@ export function SsoProvidersView() {
 								<p className="text-xs text-muted-foreground">
 									Empty admits any domain the provider authenticates.
 								</p>
-							</div>
+							</Field>
 						</div>
 
 						<h3 className="mt-3 border-b pb-3 text-sm font-semibold">Access</h3>
 						<div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
-							<div className="flex min-w-0 flex-col gap-1.5">
-								<Label htmlFor="sso-default-org">New users join</Label>
+							<Field className="min-w-0">
+								<FieldLabel htmlFor="sso-default-org">New users join</FieldLabel>
 								<Select
 									value={form.defaultOrganizationId || "none"}
 									onValueChange={(value) =>
@@ -558,9 +559,9 @@ export function SsoProvidersView() {
 										))}
 									</SelectContent>
 								</Select>
-							</div>
-							<div className="flex min-w-0 flex-col gap-1.5">
-								<Label htmlFor="sso-default-role">…as</Label>
+							</Field>
+							<Field className="min-w-0">
+								<FieldLabel htmlFor="sso-default-role">…as</FieldLabel>
 								<Select
 									value={form.defaultRole}
 									onValueChange={(defaultRole) =>
@@ -578,12 +579,12 @@ export function SsoProvidersView() {
 										))}
 									</SelectContent>
 								</Select>
-							</div>
+							</Field>
 						</div>
 
 						<div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
-							<div className="flex min-w-0 flex-col gap-1.5">
-								<Label htmlFor="sso-group-claim">Group claim</Label>
+							<Field className="min-w-0">
+								<FieldLabel htmlFor="sso-group-claim">Group claim</FieldLabel>
 								<Input
 									id="sso-group-claim"
 									value={form.groupClaim}
@@ -592,9 +593,9 @@ export function SsoProvidersView() {
 									}
 									placeholder="groups"
 								/>
-							</div>
-							<div className="flex min-w-0 flex-col gap-1.5">
-								<Label htmlFor="sso-group-mappings">Group → role</Label>
+							</Field>
+							<Field className="min-w-0">
+								<FieldLabel htmlFor="sso-group-mappings">Group → role</FieldLabel>
 								<Textarea
 									id="sso-group-mappings"
 									className="h-20 font-mono text-xs"
@@ -604,7 +605,7 @@ export function SsoProvidersView() {
 									}
 									placeholder={"platform-admins = admin\ndevelopers = deployer"}
 								/>
-							</div>
+							</Field>
 						</div>
 
 						<div className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3">

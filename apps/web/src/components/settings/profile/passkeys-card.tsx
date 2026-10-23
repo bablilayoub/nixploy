@@ -18,8 +18,8 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
 	Table,
@@ -229,8 +229,8 @@ export function PasskeysCard() {
 							security key. Nothing secret leaves the device — the panel only stores a public key.
 						</DialogDescription>
 					</DialogHeader>
-					<div className="space-y-2">
-						<Label htmlFor="passkey-name">Name</Label>
+					<Field className="space-y-2">
+						<FieldLabel htmlFor="passkey-name">Name</FieldLabel>
 						<Input
 							id="passkey-name"
 							value={name}
@@ -240,7 +240,7 @@ export function PasskeysCard() {
 						<p className="text-xs text-muted-foreground">
 							So you can tell it apart later. Optional.
 						</p>
-					</div>
+					</Field>
 					<DialogFooter>
 						<Button variant="outline" onClick={() => setDialogOpen(false)}>
 							Cancel

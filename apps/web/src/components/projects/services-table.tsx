@@ -271,7 +271,7 @@ export function ServicesTable({
 					<AlertDialogFooter>
 						<AlertDialogCancel disabled={bulkPending}>Cancel</AlertDialogCancel>
 						<AlertDialogAction
-							variant="destructive"
+							variant="outline"
 							disabled={bulkPending}
 							onClick={(event) => {
 								// Keep the dialog open (with its spinner) until every stop settled.

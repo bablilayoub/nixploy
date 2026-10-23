@@ -10,6 +10,7 @@ import { useSaveBar } from "@/components/services/save-bar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DisabledHint } from "@/components/ui/disabled-hint";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -94,8 +95,8 @@ export function StatusPageCard() {
 				<Skeleton className="h-24 w-full" />
 			) : (
 				<div className="flex min-w-0 flex-col gap-5">
-					<div className="flex flex-col gap-2">
-						<Label htmlFor="status-page-title">Page title</Label>
+					<Field>
+						<FieldLabel htmlFor="status-page-title">Page title</FieldLabel>
 						<Input
 							id="status-page-title"
 							className="sm:max-w-sm"
@@ -103,7 +104,7 @@ export function StatusPageCard() {
 							disabled={!canManage}
 							onChange={(event) => draft.patch({ title: event.target.value })}
 						/>
-					</div>
+					</Field>
 
 					<div className="flex flex-col gap-2">
 						<Label>Published probes</Label>

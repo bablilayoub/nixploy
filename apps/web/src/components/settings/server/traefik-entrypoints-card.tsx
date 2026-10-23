@@ -27,9 +27,9 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
 	Select,
 	SelectContent,
@@ -207,8 +207,8 @@ export function TraefikEntrypointsCard() {
 						}}
 						className="space-y-4"
 					>
-						<div className="space-y-1.5">
-							<Label htmlFor="entrypoint-name">Name</Label>
+						<Field className="space-y-1.5">
+							<FieldLabel htmlFor="entrypoint-name">Name</FieldLabel>
 							<Input
 								id="entrypoint-name"
 								placeholder="pg-15432"
@@ -218,10 +218,10 @@ export function TraefikEntrypointsCard() {
 							<p className="text-xs text-muted-foreground">
 								Lowercase letters, digits and dashes. Domains reference the entrypoint by this name.
 							</p>
-						</div>
+						</Field>
 						<div className="grid grid-cols-2 gap-3">
-							<div className="space-y-1.5">
-								<Label htmlFor="entrypoint-port">Port</Label>
+							<Field className="space-y-1.5">
+								<FieldLabel htmlFor="entrypoint-port">Port</FieldLabel>
 								<Input
 									id="entrypoint-port"
 									placeholder="15432"
@@ -229,9 +229,9 @@ export function TraefikEntrypointsCard() {
 									value={port}
 									onChange={(event) => setPort(event.target.value)}
 								/>
-							</div>
-							<div className="space-y-1.5">
-								<Label>Protocol</Label>
+							</Field>
+							<Field className="space-y-1.5">
+								<FieldLabel>Protocol</FieldLabel>
 								<Select
 									value={protocol}
 									onValueChange={(value) => setProtocol(value as EntrypointProtocol)}
@@ -244,7 +244,7 @@ export function TraefikEntrypointsCard() {
 										<SelectItem value="udp">UDP</SelectItem>
 									</SelectContent>
 								</Select>
-							</div>
+							</Field>
 						</div>
 						<p className="text-xs text-muted-foreground">
 							Privileged ports and the ports the platform already uses are rejected. Pick something
@@ -276,7 +276,7 @@ export function TraefikEntrypointsCard() {
 					<AlertDialogFooter>
 						<AlertDialogCancel disabled={deleteMutation.isPending}>Cancel</AlertDialogCancel>
 						<AlertDialogAction
-							variant="destructive"
+							variant="outline"
 							disabled={deleteMutation.isPending}
 							onClick={(event) => {
 								event.preventDefault();

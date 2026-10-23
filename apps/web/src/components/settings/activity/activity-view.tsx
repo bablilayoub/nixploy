@@ -39,8 +39,8 @@ const ALL = "__all__";
 const ACTION_VARIANTS: Record<string, "default" | "destructive" | "outline" | "secondary"> = {
 	create: "default",
 	deploy: "secondary",
-	delete: "destructive",
-	remove: "destructive",
+	delete: "outline",
+	remove: "outline",
 	prune: "outline",
 };
 

@@ -125,7 +125,7 @@ export function GettingStartedCard({ firstProjectId }: { firstProjectId?: string
 			</CardHeader>
 			<CardContent className="space-y-4 pt-0">
 				{can("gitops.manage") && !data.service && (
-					<div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-panel-inset p-3">
+					<div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted p-3">
 						<p className="text-sm text-muted-foreground">
 							Already running services on Dokploy or Coolify?
 						</p>

@@ -1,12 +1,21 @@
 "use client";
-import { BookOpen, Code2, Globe, ShieldAlert } from "lucide-react";
+
+import { BookOpen, Code2, Eye, Globe, ShieldAlert } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader } from "@/components/ui/card";
+import {
+	Card,
+	CardAction,
+	CardContent,
+	CardDescription,
+	CardFooter,
+	CardHeader,
+	CardTitle,
+} from "@/components/ui/card";
 import { needsInstanceAdmin } from "./template-catalog";
 import { TemplateLogo } from "./template-logo";
 import type { TemplateSummary } from "./templates-view";
 
-/** A catalogue object: identity, requirements, description, then an explicit action. */
 export function TemplateCard({
 	template,
 	onInspect,
@@ -20,8 +29,8 @@ export function TemplateCard({
 	deployBlocker: string | null;
 	onTag?: (tag: string) => void;
 }) {
-	const settingsCount = template.env.length;
 	const admin = needsInstanceAdmin(template);
+	const settingsCount = template.env.length;
 	const links = [
 		{ href: template.links.github, label: "Source", icon: Code2 },
 		{ href: template.links.website, label: "Website", icon: Globe },
@@ -30,74 +39,65 @@ export function TemplateCard({
 		Boolean(link.href),
 	);
 	return (
-		<Card className="h-full min-w-0 gap-4 [overflow-wrap:anywhere]">
-			<CardHeader className="flex flex-row items-start gap-3">
-				<span className="flex size-11 shrink-0 items-center justify-center rounded-lg border bg-panel-inset">
-					<TemplateLogo name={template.name} logo={template.logo} className="size-7" />
-				</span>
-				<div className="min-w-0 flex-1">
-					<h3 className="truncate text-base leading-snug font-medium tracking-tight">
-						<Button
-							variant="ghost"
-							size="sm"
-							type="button"
-							onClick={onInspect}
-							aria-label={`${template.name} details`}
-							className="h-auto min-h-0 px-0 py-0 text-base font-medium inline-flex max-w-full items-center text-start underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-						>
-							<span className="truncate">{template.name}</span>
-						</Button>
-					</h3>
-					<p className="mt-1 text-xs text-muted-foreground">{template.category}</p>
+		<Card className="h-full min-w-0">
+			<CardHeader>
+				<div className="mb-3">
+					<TemplateLogo name={template.name} logo={template.logo} className="size-9" />
 				</div>
-				{admin && (
-					<ShieldAlert
-						className="mt-1 size-4 shrink-0 text-warning"
-						aria-label="Needs the instance admin: host access or published ports"
-					/>
-				)}
+				<CardTitle as="h3">
+					<Button
+						variant="link"
+						className="h-auto justify-start p-0 text-base"
+						onClick={onInspect}
+						aria-label={`${template.name} details`}
+					>
+						{template.name}
+					</Button>
+				</CardTitle>
+				<CardDescription>{template.category}</CardDescription>
+				<CardAction>
+					<Button
+						size="icon-sm"
+						variant="ghost"
+						onClick={onInspect}
+						aria-label={`Preview ${template.name}`}
+					>
+						<Eye aria-hidden="true" />
+					</Button>
+				</CardAction>
 			</CardHeader>
-			<CardContent>
-				<CardDescription className="line-clamp-2 min-h-10">{template.description}</CardDescription>
-			</CardContent>
-			<div className="flex min-h-7 flex-wrap items-center gap-1.5 px-6">
-				{template.tags.slice(0, 3).map((tag) =>
-					onTag ? (
-						<Button
-							variant="ghost"
-							size="sm"
-							type="button"
-							key={tag}
-							onClick={(event) => {
-								event.stopPropagation();
-								onTag(tag);
-							}}
-							className="h-auto min-h-7 relative z-10 rounded-md bg-secondary px-2 py-1 text-xs text-muted-foreground hover:border-input hover:text-foreground"
-						>
-							{tag}
-						</Button>
-					) : (
-						<span
-							key={tag}
-							className="rounded border px-1.5 py-0.5 text-[11px] text-muted-foreground"
-						>
-							{tag}
-						</span>
-					),
-				)}
-			</div>
-			<div className="mt-auto px-5 pt-4 pb-4">
-				<div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+			<CardContent className="flex flex-1 flex-col gap-4">
+				<CardDescription>{template.description}</CardDescription>
+				<div className="flex flex-wrap gap-2">
+					{template.tags.slice(0, 3).map((tag) =>
+						onTag ? (
+							<Button key={tag} size="sm" variant="secondary" onClick={() => onTag(tag)}>
+								{tag}
+							</Button>
+						) : (
+							<Badge key={tag} variant="secondary">
+								{tag}
+							</Badge>
+						),
+					)}
+				</div>
+				<div className="mt-auto flex flex-wrap gap-2 text-xs text-muted-foreground">
 					<span>
 						{settingsCount === 0
 							? "No configuration needed"
 							: `${settingsCount} ${settingsCount === 1 ? "setting" : "settings"}`}
 					</span>
-					{template.source && <span className="truncate">{template.source.name}</span>}
+					{template.source && <span>· {template.source.name}</span>}
+					{admin && (
+						<span className="flex items-center gap-1">
+							<ShieldAlert aria-hidden="true" className="size-3.5" />
+							Instance admin required
+						</span>
+					)}
 				</div>
-			</div>
-			<CardFooter className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-t pt-4">
-				<div className="flex min-w-0 flex-wrap items-center gap-1">
+			</CardContent>
+			<CardFooter className="justify-between gap-2 border-t">
+				<div className="flex flex-wrap gap-1">
 					{links.map((link) => (
 						<Button key={link.label} asChild variant="ghost" size="icon-sm">
 							<a
@@ -105,18 +105,14 @@ export function TemplateCard({
 								target="_blank"
 								rel="noreferrer"
 								aria-label={`${template.name}: ${link.label}`}
-								onClick={(event) => event.stopPropagation()}
-								className="relative z-10 text-muted-foreground"
 							>
-								<link.icon aria-hidden="true" className="size-3.5" />
+								<link.icon aria-hidden="true" />
 							</a>
 						</Button>
 					))}
 				</div>
 				<Button
 					size="sm"
-					variant="outline"
-					className="relative z-10"
 					onClick={onDeploy}
 					disabled={deployBlocker !== null}
 					title={deployBlocker ?? undefined}

@@ -28,9 +28,9 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@/components/ui/dialog";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
 	Select,
 	SelectContent,
@@ -204,8 +204,8 @@ export function TemplateSourcesView() {
 									</DialogDescription>
 								</DialogHeader>
 								<div className="grid gap-5">
-									<div className="grid gap-2">
-										<Label htmlFor="source-name">Name</Label>
+									<Field>
+										<FieldLabel htmlFor="source-name">Name</FieldLabel>
 										<Input
 											id="source-name"
 											name="name"
@@ -215,9 +215,9 @@ export function TemplateSourcesView() {
 											value={name}
 											onChange={(event) => setName(event.target.value)}
 										/>
-									</div>
-									<div className="grid gap-2">
-										<Label htmlFor="source-kind">Kind</Label>
+									</Field>
+									<Field>
+										<FieldLabel htmlFor="source-kind">Kind</FieldLabel>
 										<Select
 											value={kind}
 											onValueChange={(value) => {
@@ -240,9 +240,9 @@ export function TemplateSourcesView() {
 												<SelectItem value="coolify">Coolify catalog</SelectItem>
 											</SelectContent>
 										</Select>
-									</div>
-									<div className="grid gap-2">
-										<Label htmlFor="source-url">URL</Label>
+									</Field>
+									<Field>
+										<FieldLabel htmlFor="source-url">URL</FieldLabel>
 										<Input
 											id="source-url"
 											name="url"
@@ -270,17 +270,17 @@ export function TemplateSourcesView() {
 														? "Coolify's generated templates/service-templates.json format. Supports one public service target, ordinary named volumes and documented random generators. Secrets are created separately for each installation. Unsupported entries appear in the sync report."
 														: "A JSON array of templates, or an object with a templates array."}
 										</p>
-									</div>
+									</Field>
 									{kind === "git" || kind === "blueprints" ? (
-										<div className="grid gap-2">
-											<Label htmlFor="source-branch">Branch (optional)</Label>
+										<Field>
+											<FieldLabel htmlFor="source-branch">Branch (optional)</FieldLabel>
 											<Input
 												id="source-branch"
 												placeholder="Default branch"
 												value={branch}
 												onChange={(event) => setBranch(event.target.value)}
 											/>
-										</div>
+										</Field>
 									) : null}
 								</div>
 								<DialogFooter>
@@ -487,7 +487,7 @@ export function TemplateSourcesView() {
 					<AlertDialogFooter>
 						<AlertDialogCancel disabled={deleteMutation.isPending}>Cancel</AlertDialogCancel>
 						<AlertDialogAction
-							variant="destructive"
+							variant="outline"
 							disabled={deleteMutation.isPending}
 							onClick={(event) => {
 								event.preventDefault();

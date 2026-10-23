@@ -7,6 +7,8 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Field, FieldLabel } from "@/components/ui/field";
 import {
 	Form,
 	FormControl,
@@ -17,7 +19,6 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
-import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
 import { describeError } from "@/lib/describe-error";
 import { safeNextPath } from "@/lib/safe-next-path";
@@ -78,22 +79,22 @@ export function TwoFactorForm() {
 	}
 
 	return (
-		<section className="flex min-w-0 flex-col gap-8">
-			<header className="space-y-3 text-center">
-				<h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+		<Card>
+			<CardHeader className="text-center">
+				<CardTitle as="h1" className="text-xl">
 					Two-factor authentication
-				</h1>
+				</CardTitle>
 				<div className="text-sm text-muted-foreground">
 					{backupMode
 						? "Use an unused backup code saved when you enabled two-factor authentication."
 						: "Enter the 6-digit code from your authenticator app."}
 				</div>
-			</header>
-			<div>
+			</CardHeader>
+			<CardContent>
 				{backupMode ? (
 					<form onSubmit={verifyBackupCode} className="grid gap-4">
-						<div className="grid gap-2">
-							<Label htmlFor="backup-code">Backup code</Label>
+						<Field>
+							<FieldLabel htmlFor="backup-code">Backup code</FieldLabel>
 							<Input
 								id="backup-code"
 								value={backupCode}
@@ -120,7 +121,7 @@ export function TwoFactorForm() {
 									{backupError}
 								</p>
 							)}
-						</div>
+						</Field>
 						<Button type="submit" disabled={backupPending || !backupCode.trim()}>
 							{backupPending ? "Verifying…" : "Verify backup code"}
 						</Button>
@@ -177,7 +178,7 @@ export function TwoFactorForm() {
 						<Link href={`/login?next=${encodeURIComponent(nextPath)}`}>Back to sign in</Link>
 					</Button>
 				</div>
-			</div>
-		</section>
+			</CardContent>
+		</Card>
 	);
 }

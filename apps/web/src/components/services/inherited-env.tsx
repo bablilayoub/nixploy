@@ -67,7 +67,7 @@ export function InheritedEnv({
 			onOpenChange={setOpen}
 			className="overflow-hidden rounded-lg border border-border bg-card"
 		>
-			<div className="flex items-center justify-between gap-2 bg-panel-inset px-4 py-3">
+			<div className="flex items-center justify-between gap-2 bg-muted px-4 py-3">
 				<CollapsibleTrigger asChild>
 					<Button
 						variant="ghost"

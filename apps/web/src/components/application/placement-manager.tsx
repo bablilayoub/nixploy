@@ -5,7 +5,7 @@ import { SettingsSection } from "@/components/layout/settings-section";
 import { capabilityHint } from "@/components/services/capability-hint";
 import { useSaveBar } from "@/components/services/save-bar";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useDraft } from "@/hooks/use-draft";
@@ -72,8 +72,8 @@ export function PlacementManager({ application }: { application: Application }) 
 			}
 		>
 			<div className="flex flex-col gap-3">
-				<div className="grid gap-2">
-					<Label htmlFor="placement-constraints">Constraints</Label>
+				<Field>
+					<FieldLabel htmlFor="placement-constraints">Constraints</FieldLabel>
 					<Textarea
 						id="placement-constraints"
 						className="min-h-28 font-mono"
@@ -81,7 +81,7 @@ export function PlacementManager({ application }: { application: Application }) 
 						onChange={(event) => draft.set(event.target.value)}
 						placeholder={"node.role==worker\nnode.labels.disk==ssd"}
 					/>
-				</div>
+				</Field>
 				<Button
 					type="button"
 					disabled={save.isPending || !canWrite}

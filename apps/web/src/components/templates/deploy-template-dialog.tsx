@@ -18,6 +18,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -366,8 +367,8 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 								environment and its first deployment starts immediately.
 							</p>
 						</div>
-						<div className="flex flex-col gap-2">
-							<Label>Project</Label>
+						<Field>
+							<FieldLabel>Project</FieldLabel>
 							<Select
 								value={projectId}
 								onValueChange={(value) => {
@@ -386,9 +387,9 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 									))}
 								</SelectContent>
 							</Select>
-						</div>
-						<div className="flex flex-col gap-2">
-							<Label>Environment</Label>
+						</Field>
+						<Field>
+							<FieldLabel>Environment</FieldLabel>
 							<Select
 								value={environmentName}
 								onValueChange={setEnvironmentName}
@@ -405,7 +406,7 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 									))}
 								</SelectContent>
 							</Select>
-						</div>
+						</Field>
 					</div>
 				)}
 

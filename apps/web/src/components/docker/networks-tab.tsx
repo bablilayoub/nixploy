@@ -151,7 +151,7 @@ export function NetworksTab({ serverId }: DockerTabProps) {
 					<AlertDialogFooter>
 						<AlertDialogCancel>Cancel</AlertDialogCancel>
 						<AlertDialogAction
-							variant="destructive"
+							variant="outline"
 							disabled={removeMutation.isPending}
 							onClick={() => {
 								if (removing) removeMutation.mutate({ serverId, name: removing.Name });

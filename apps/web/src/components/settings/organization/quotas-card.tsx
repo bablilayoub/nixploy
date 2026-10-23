@@ -2,12 +2,11 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
-
 import { SettingsSection } from "@/components/layout/settings-section";
 import { useSaveBar } from "@/components/services/save-bar";
 import { Button } from "@/components/ui/button";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useDraft } from "@/hooks/use-draft";
@@ -130,8 +129,8 @@ export function QuotasCard() {
 					title={manageHint}
 					className="grid min-w-0 gap-x-6 gap-y-5 sm:grid-cols-2"
 				>
-					<div className="grid content-start gap-2">
-						<Label htmlFor="max-projects">Max projects</Label>
+					<Field className="content-start">
+						<FieldLabel htmlFor="max-projects">Max projects</FieldLabel>
 						<Input
 							id="max-projects"
 							type="number"
@@ -140,9 +139,9 @@ export function QuotasCard() {
 							value={maxProjects}
 							onChange={(e) => draft.patch({ maxProjects: e.target.value })}
 						/>
-					</div>
-					<div className="grid content-start gap-2">
-						<Label htmlFor="max-services">Max services</Label>
+					</Field>
+					<Field className="content-start">
+						<FieldLabel htmlFor="max-services">Max services</FieldLabel>
 						<Input
 							id="max-services"
 							type="number"
@@ -151,9 +150,9 @@ export function QuotasCard() {
 							value={maxServices}
 							onChange={(e) => draft.patch({ maxServices: e.target.value })}
 						/>
-					</div>
-					<div className="grid content-start gap-2">
-						<Label htmlFor="max-cpu">Max CPU shares</Label>
+					</Field>
+					<Field className="content-start">
+						<FieldLabel htmlFor="max-cpu">Max CPU shares</FieldLabel>
 						<Input
 							id="max-cpu"
 							type="number"
@@ -162,9 +161,9 @@ export function QuotasCard() {
 							value={maxCpuShares}
 							onChange={(e) => draft.patch({ maxCpuShares: e.target.value })}
 						/>
-					</div>
-					<div className="grid content-start gap-2">
-						<Label htmlFor="max-memory">Max memory (MB)</Label>
+					</Field>
+					<Field className="content-start">
+						<FieldLabel htmlFor="max-memory">Max memory (MB)</FieldLabel>
 						<Input
 							id="max-memory"
 							type="number"
@@ -173,9 +172,9 @@ export function QuotasCard() {
 							value={maxMemoryMb}
 							onChange={(e) => draft.patch({ maxMemoryMb: e.target.value })}
 						/>
-					</div>
-					<div className="grid content-start gap-2">
-						<Label htmlFor="runtime-log-days">Runtime log history (days)</Label>
+					</Field>
+					<Field className="content-start">
+						<FieldLabel htmlFor="runtime-log-days">Runtime log history (days)</FieldLabel>
 						<Input
 							id="runtime-log-days"
 							type="number"
@@ -188,9 +187,9 @@ export function QuotasCard() {
 							How long what each service printed is kept searchable. The instance limit is the
 							ceiling; an organization can keep less, not more.
 						</p>
-					</div>
-					<div className="grid content-start gap-2">
-						<Label htmlFor="runtime-log-mb">Runtime log history per service (MB)</Label>
+					</Field>
+					<Field className="content-start">
+						<FieldLabel htmlFor="runtime-log-mb">Runtime log history per service (MB)</FieldLabel>
 						<Input
 							id="runtime-log-mb"
 							type="number"
@@ -199,7 +198,7 @@ export function QuotasCard() {
 							value={runtimeLogMaxMbPerService}
 							onChange={(e) => draft.patch({ runtimeLogMaxMbPerService: e.target.value })}
 						/>
-					</div>
+					</Field>
 				</fieldset>
 				<div>
 					<Button type="submit" disabled={!canManage || save.isPending} title={manageHint}>

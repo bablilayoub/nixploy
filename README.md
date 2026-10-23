@@ -91,9 +91,10 @@ Product docs: [nixploy.com/docs](https://nixploy.com/docs) · API: [nixploy.com/
 ## Inside the workspace
 
 Projects bring environments and services together. The app uses native shadcn/ui
-components and the standard New York/Zinc light, dark and system themes. A workspace
-header and route navigation lead into project cards, service configuration and
-settings. Editors, terminals, deployment activity, monitoring, templates and
+components with monochrome New York/Neutral light, dark and system modes. A
+collapsible workspace sidebar leads into a project list and deployment activity.
+Services use native Cards and Tabs; settings navigation stays with the workspace.
+Editors, terminals, monitoring, templates and
 infrastructure tools remain connected to the same APIs and permissions.
 
 <details>

@@ -18,6 +18,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -393,8 +394,8 @@ function InstanceBackupFormDialog({
 					</DialogDescription>
 				</DialogHeader>
 				<div className="space-y-4">
-					<div className="space-y-1.5">
-						<Label htmlFor="instance-backup-schedule">Schedule (cron)</Label>
+					<Field className="space-y-1.5">
+						<FieldLabel htmlFor="instance-backup-schedule">Schedule (cron)</FieldLabel>
 						<Input
 							id="instance-backup-schedule"
 							value={form.schedule}
@@ -406,9 +407,9 @@ function InstanceBackupFormDialog({
 							Examples: <code>0 3 * * *</code> daily at 3:00, <code>0 */6 * * *</code> every 6
 							hours.
 						</p>
-					</div>
-					<div className="space-y-1.5">
-						<Label>Destination</Label>
+					</Field>
+					<Field className="space-y-1.5">
+						<FieldLabel>Destination</FieldLabel>
 						<Select
 							value={form.destinationId}
 							onValueChange={(destinationId) => setForm({ ...form, destinationId })}
@@ -424,19 +425,19 @@ function InstanceBackupFormDialog({
 								))}
 							</SelectContent>
 						</Select>
-					</div>
+					</Field>
 					<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-						<div className="space-y-1.5">
-							<Label htmlFor="instance-backup-prefix">Prefix</Label>
+						<Field className="space-y-1.5">
+							<FieldLabel htmlFor="instance-backup-prefix">Prefix</FieldLabel>
 							<Input
 								id="instance-backup-prefix"
 								value={form.prefix}
 								onChange={(e) => setForm({ ...form, prefix: e.target.value })}
 								className="font-mono"
 							/>
-						</div>
-						<div className="space-y-1.5">
-							<Label htmlFor="instance-backup-keep">Keep latest count (optional)</Label>
+						</Field>
+						<Field className="space-y-1.5">
+							<FieldLabel htmlFor="instance-backup-keep">Keep latest count (optional)</FieldLabel>
 							<Input
 								id="instance-backup-keep"
 								type="number"
@@ -448,7 +449,7 @@ function InstanceBackupFormDialog({
 							{!keepValid && (
 								<p className="text-sm text-destructive">Enter a whole number of at least 1.</p>
 							)}
-						</div>
+						</Field>
 					</div>
 					<div className="flex items-center gap-2">
 						<Switch

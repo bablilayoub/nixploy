@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { useCapabilities } from "@/hooks/use-capabilities";
@@ -63,15 +64,11 @@ function HostStat({
 			</div>
 			<p className="truncate text-sm font-semibold tabular-nums">{value}</p>
 			{percent != null ? (
-				<div className="h-1 overflow-hidden rounded-full bg-muted">
-					<div
-						className={cn(
-							"h-full rounded-full",
-							percent >= 90 ? "bg-destructive" : "bg-foreground/80",
-						)}
-						style={{ width: `${Math.min(100, Math.max(0, percent))}%` }}
-					/>
-				</div>
+				<Progress
+					value={Math.min(100, Math.max(0, percent))}
+					aria-label={`${label} usage`}
+					className="h-1"
+				/>
 			) : (
 				<div className="h-1" />
 			)}

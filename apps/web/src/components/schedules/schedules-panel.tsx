@@ -31,6 +31,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -633,8 +634,8 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 	const fields = (
 		<>
 			{isGlobal && !editing && (
-				<div className="grid gap-2">
-					<Label>Target</Label>
+				<Field>
+					<FieldLabel>Target</FieldLabel>
 					<Select
 						value={form.scheduleType}
 						onValueChange={(value) =>
@@ -656,11 +657,11 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 							Schedules on the Nixploy host itself are limited to instance administrators.
 						</p>
 					)}
-				</div>
+				</Field>
 			)}
 			{needsTarget && !editing && (
-				<div className="grid gap-2">
-					<Label>Server</Label>
+				<Field>
+					<FieldLabel>Server</FieldLabel>
 					<Select
 						value={form.targetId || undefined}
 						onValueChange={(value) => setForm({ ...form, targetId: value })}
@@ -676,19 +677,19 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 							))}
 						</SelectContent>
 					</Select>
-				</div>
+				</Field>
 			)}
-			<div className="grid gap-2">
-				<Label htmlFor="schedule-name">Name</Label>
+			<Field>
+				<FieldLabel htmlFor="schedule-name">Name</FieldLabel>
 				<Input
 					id="schedule-name"
 					placeholder={isGlobal ? undefined : "Nightly cleanup"}
 					value={form.name}
 					onChange={(event) => setForm({ ...form, name: event.target.value })}
 				/>
-			</div>
-			<div className="grid gap-2">
-				<Label>{isGlobal ? "Preset" : "Cron expression (UTC)"}</Label>
+			</Field>
+			<Field>
+				<FieldLabel>{isGlobal ? "Preset" : "Cron expression (UTC)"}</FieldLabel>
 				<Select
 					value={presetValue}
 					onValueChange={(value) => {
@@ -708,7 +709,7 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 						<SelectItem value="custom">Custom</SelectItem>
 					</SelectContent>
 				</Select>
-			</div>
+			</Field>
 			<div className="grid gap-2">
 				{isGlobal ? <Label htmlFor="schedule-cron">Cron (UTC)</Label> : null}
 				<Input
@@ -726,8 +727,8 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 				)}
 			</div>
 			{supportsImageMode ? (
-				<div className="grid gap-2">
-					<Label htmlFor="schedule-run-mode">Runs in</Label>
+				<Field>
+					<FieldLabel htmlFor="schedule-run-mode">Runs in</FieldLabel>
 					<Select
 						value={form.runMode}
 						onValueChange={(value) => setForm({ ...form, runMode: value as "exec" | "image" })}
@@ -745,11 +746,11 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 							? "A throwaway container on this service's network, with its environment variables. Works while the service is stopped."
 							: "Runs inside a container of this service — it has to be running."}
 					</p>
-				</div>
+				</Field>
 			) : null}
 			{supportsImageMode && form.runMode === "image" ? (
-				<div className="grid gap-2">
-					<Label htmlFor="schedule-image">Image</Label>
+				<Field>
+					<FieldLabel htmlFor="schedule-image">Image</FieldLabel>
 					<Input
 						id="schedule-image"
 						className="font-mono text-sm"
@@ -760,10 +761,10 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 					<p className="text-xs text-muted-foreground">
 						The image needs a shell — scratch and distroless images cannot run a job.
 					</p>
-				</div>
+				</Field>
 			) : null}
-			<div className="grid gap-2">
-				<Label htmlFor="schedule-shell">Shell</Label>
+			<Field>
+				<FieldLabel htmlFor="schedule-shell">Shell</FieldLabel>
 				<Select
 					value={form.shellType}
 					onValueChange={(value) => setForm({ ...form, shellType: value as "bash" | "sh" })}
@@ -776,9 +777,9 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 						<SelectItem value="sh">sh</SelectItem>
 					</SelectContent>
 				</Select>
-			</div>
-			<div className="grid gap-2">
-				<Label htmlFor="schedule-command">Command</Label>
+			</Field>
+			<Field>
+				<FieldLabel htmlFor="schedule-command">Command</FieldLabel>
 				<Textarea
 					id="schedule-command"
 					className="font-mono text-sm"
@@ -787,7 +788,7 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 					value={form.command}
 					onChange={(event) => setForm({ ...form, command: event.target.value })}
 				/>
-			</div>
+			</Field>
 			{!editing &&
 				(isGlobal ? (
 					<div className="flex flex-wrap items-center justify-between gap-4">
@@ -843,8 +844,8 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 					</DialogDescription>
 				</DialogHeader>
 				<div className="grid gap-4">
-					<div className="grid gap-2">
-						<Label htmlFor="once-image">Image</Label>
+					<Field>
+						<FieldLabel htmlFor="once-image">Image</FieldLabel>
 						<Input
 							id="once-image"
 							className="font-mono text-sm"
@@ -852,9 +853,9 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 							value={onceImage}
 							onChange={(event) => setOnceImage(event.target.value)}
 						/>
-					</div>
-					<div className="grid gap-2">
-						<Label htmlFor="once-command">Command</Label>
+					</Field>
+					<Field>
+						<FieldLabel htmlFor="once-command">Command</FieldLabel>
 						<Textarea
 							id="once-command"
 							className="font-mono text-sm"
@@ -863,7 +864,7 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 							value={onceCommand}
 							onChange={(event) => setOnceCommand(event.target.value)}
 						/>
-					</div>
+					</Field>
 				</div>
 				<DialogFooter>
 					<Button variant="outline" onClick={() => setOnceOpen(false)}>
@@ -900,7 +901,7 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 							The completed job’s output. It is also retained in the service run history.
 						</DialogDescription>
 					</DialogHeader>
-					<pre className="max-h-[60vh] overflow-auto rounded-lg border bg-control p-4 font-mono text-xs whitespace-pre-wrap break-words">
+					<pre className="max-h-[60vh] overflow-auto rounded-lg border bg-background p-4 font-mono text-xs whitespace-pre-wrap break-words">
 						{jobOutput || "The job completed without output."}
 					</pre>
 				</DialogContent>
@@ -953,7 +954,7 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 					<AlertDialogFooter>
 						<AlertDialogCancel disabled={remove.isPending}>Cancel</AlertDialogCancel>
 						<AlertDialogAction
-							variant={isGlobal ? "destructive" : undefined}
+							variant={isGlobal ? "outline" : undefined}
 							disabled={remove.isPending}
 							onClick={(event) => {
 								// Keep the dialog open (with its spinner) until the mutation settles.

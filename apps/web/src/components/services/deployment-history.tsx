@@ -21,6 +21,7 @@ import { LogViewer } from "@/components/services/log-viewer";
 import { DeploymentStatusBadge } from "@/components/services/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { DateTime } from "@/components/ui/date-time";
 import {
 	Dialog,
@@ -414,180 +415,184 @@ export function DeploymentHistory({
 						</>
 					}
 				>
-					<ol className="surface divide-y overflow-hidden" aria-label="Deployment timeline">
-						{deployments.map((deployment) => (
-							<li key={deployment.deploymentId} className="px-4 py-5 sm:px-5">
-								<article className="flex min-w-0 flex-col gap-3 lg:grid lg:grid-cols-[minmax(0,1fr)_auto] lg:[&>:first-child]:col-start-2 lg:[&>:first-child]:row-start-1 lg:[&>:nth-child(2)]:col-start-1 lg:[&>:nth-child(2)]:row-span-2 lg:[&>:nth-child(2)]:row-start-1 lg:[&>:nth-child(3)]:col-start-2 min-w-0">
-									<div className="flex flex-wrap items-center gap-3 lg:flex-col lg:items-end lg:gap-2">
-										<DeploymentStatusBadge
-											status={deployment.status}
-											queuePosition={deployment.queuePosition}
-										/>
-										<span className="text-xs tabular-nums text-muted-foreground">
-											<DateTime value={deployment.createdAt} /> ·{" "}
-											{formatDuration(deployment.startedAt, deployment.finishedAt)}
-										</span>
-									</div>
-									<div className="text-sm font-medium">
-										<span className="flex flex-wrap items-center gap-1.5">
-											{deployment.title}
-											{deployment.trigger && (
-												<Badge
-													variant="outline"
-													className="font-normal text-muted-foreground"
-													title={describeTriggeredBy(deployment) ?? undefined}
-												>
-													{TRIGGER_LABELS[deployment.trigger] ?? deployment.trigger}
-												</Badge>
-											)}
-										</span>
-										{deployment.commitSha && (
-											<span className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5 text-xs font-normal text-muted-foreground ">
-												{(() => {
-													const sha = deployment.commitSha;
-													const href = commitUrl?.(sha) ?? null;
-													return href ? (
-														<a
-															href={href}
-															target="_blank"
-															rel="noreferrer"
-															className="shrink-0 font-mono text-foreground underline-offset-2 hover:underline"
-															title={sha}
-														>
-															{shortSha(sha)}
-														</a>
-													) : (
-														<span className="shrink-0 font-mono text-foreground" title={sha}>
-															{shortSha(sha)}
-														</span>
-													);
-												})()}
-												{firstLine(deployment.commitMessage) && (
-													<span
-														className="break-words"
-														title={deployment.commitMessage ?? undefined}
+					<Card>
+						<ol className="divide-y overflow-hidden" aria-label="Deployment timeline">
+							{deployments.map((deployment) => (
+								<li key={deployment.deploymentId} className="px-4 py-5 sm:px-5">
+									<article className="flex min-w-0 flex-col gap-3 lg:grid lg:grid-cols-[minmax(0,1fr)_auto] lg:[&>:first-child]:col-start-2 lg:[&>:first-child]:row-start-1 lg:[&>:nth-child(2)]:col-start-1 lg:[&>:nth-child(2)]:row-span-2 lg:[&>:nth-child(2)]:row-start-1 lg:[&>:nth-child(3)]:col-start-2 min-w-0">
+										<div className="flex flex-wrap items-center gap-3 lg:flex-col lg:items-end lg:gap-2">
+											<DeploymentStatusBadge
+												status={deployment.status}
+												queuePosition={deployment.queuePosition}
+											/>
+											<span className="text-xs tabular-nums text-muted-foreground">
+												<DateTime value={deployment.createdAt} /> ·{" "}
+												{formatDuration(deployment.startedAt, deployment.finishedAt)}
+											</span>
+										</div>
+										<div className="text-sm font-medium">
+											<span className="flex flex-wrap items-center gap-1.5">
+												{deployment.title}
+												{deployment.trigger && (
+													<Badge
+														variant="outline"
+														className="font-normal text-muted-foreground"
+														title={describeTriggeredBy(deployment) ?? undefined}
 													>
-														{firstLine(deployment.commitMessage)}
-													</span>
-												)}
-												{deployment.commitAuthor && (
-													<span className="shrink-0">· {deployment.commitAuthor}</span>
+														{TRIGGER_LABELS[deployment.trigger] ?? deployment.trigger}
+													</Badge>
 												)}
 											</span>
-										)}
-										{!deployment.commitSha && describeTriggeredBy(deployment) && (
-											<span className="block text-xs font-normal text-muted-foreground">
-												{describeTriggeredBy(deployment)}
-											</span>
-										)}
-										{deployment.errorMessage && (
-											<span className="mt-3 block rounded-md border border-destructive/20 bg-destructive/5 p-3 text-xs leading-relaxed font-normal text-destructive ">
-												{deployment.errorMessage}
-											</span>
-										)}
-									</div>
-									<div className="flex flex-wrap items-center gap-2 lg:justify-end">
-										<Button
-											variant="ghost"
-											size="sm"
-											onClick={(event) => {
-												logTrigger.current = event.currentTarget;
-												setLogDeployment(deployment);
-											}}
-										>
-											<ScrollText className="size-4" />
-											Logs
-										</Button>
-										{(deployment.status === "error" ||
-											(kind === "application" &&
-												!isActive(deployment.status) &&
-												Boolean(deployment.commitSha)) ||
-											(canCancel && isActive(deployment.status))) && (
-											<DropdownMenu>
-												<DropdownMenuTrigger asChild>
-													<Button variant="ghost" size="sm">
-														More actions
-														<ChevronDown className="size-3.5" />
-													</Button>
-												</DropdownMenuTrigger>
-												<DropdownMenuContent align="start">
-													{deployment.status === "error" && (
-														<DropdownMenuItem asChild>
-															<Button
-																variant="ghost"
-																size="sm"
-																disabled={explain.isPending || !canExplain}
-																title={canExplain ? undefined : capabilityHint("ai.use")}
-																onClick={() =>
-																	explain.mutate({ deploymentId: deployment.deploymentId })
-																}
+											{deployment.commitSha && (
+												<span className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5 text-xs font-normal text-muted-foreground ">
+													{(() => {
+														const sha = deployment.commitSha;
+														const href = commitUrl?.(sha) ?? null;
+														return href ? (
+															<a
+																href={href}
+																target="_blank"
+																rel="noreferrer"
+																className="shrink-0 font-mono text-foreground underline-offset-2 hover:underline"
+																title={sha}
 															>
-																{explain.isPending &&
-																explain.variables?.deploymentId === deployment.deploymentId ? (
-																	<Loader2 className="size-4 animate-spin" />
-																) : (
-																	<Bot className="size-4" />
-																)}
-																Explain
-															</Button>
-														</DropdownMenuItem>
+																{shortSha(sha)}
+															</a>
+														) : (
+															<span className="shrink-0 font-mono text-foreground" title={sha}>
+																{shortSha(sha)}
+															</span>
+														);
+													})()}
+													{firstLine(deployment.commitMessage) && (
+														<span
+															className="break-words"
+															title={deployment.commitMessage ?? undefined}
+														>
+															{firstLine(deployment.commitMessage)}
+														</span>
 													)}
-													{/* The list already excludes preview rows (queries.ts filters
-											    isPreview), so a row with a sha is always rebuildable. */}
-													{kind === "application" &&
-														!isActive(deployment.status) &&
-														deployment.commitSha && (
+													{deployment.commitAuthor && (
+														<span className="shrink-0">· {deployment.commitAuthor}</span>
+													)}
+												</span>
+											)}
+											{!deployment.commitSha && describeTriggeredBy(deployment) && (
+												<span className="block text-xs font-normal text-muted-foreground">
+													{describeTriggeredBy(deployment)}
+												</span>
+											)}
+											{deployment.errorMessage && (
+												<span className="mt-3 block rounded-md border border-destructive/20 bg-destructive/5 p-3 text-xs leading-relaxed font-normal text-destructive ">
+													{deployment.errorMessage}
+												</span>
+											)}
+										</div>
+										<div className="flex flex-wrap items-center gap-2 lg:justify-end">
+											<Button
+												variant="ghost"
+												size="sm"
+												onClick={(event) => {
+													logTrigger.current = event.currentTarget;
+													setLogDeployment(deployment);
+												}}
+											>
+												<ScrollText className="size-4" />
+												Logs
+											</Button>
+											{(deployment.status === "error" ||
+												(kind === "application" &&
+													!isActive(deployment.status) &&
+													Boolean(deployment.commitSha)) ||
+												(canCancel && isActive(deployment.status))) && (
+												<DropdownMenu>
+													<DropdownMenuTrigger asChild>
+														<Button variant="ghost" size="sm">
+															More actions
+															<ChevronDown className="size-3.5" />
+														</Button>
+													</DropdownMenuTrigger>
+													<DropdownMenuContent align="start">
+														{deployment.status === "error" && (
 															<DropdownMenuItem asChild>
 																<Button
 																	variant="ghost"
 																	size="sm"
-																	disabled={redeployCommit.isPending || !canDeploy}
-																	title={
-																		canDeploy
-																			? `Build ${shortSha(deployment.commitSha)} again`
-																			: capabilityHint("service.deploy")
-																	}
+																	disabled={explain.isPending || !canExplain}
+																	title={canExplain ? undefined : capabilityHint("ai.use")}
 																	onClick={() =>
-																		redeployCommit.mutate({ deploymentId: deployment.deploymentId })
+																		explain.mutate({ deploymentId: deployment.deploymentId })
 																	}
 																>
-																	{redeployCommit.isPending &&
-																	redeployCommit.variables?.deploymentId ===
-																		deployment.deploymentId ? (
+																	{explain.isPending &&
+																	explain.variables?.deploymentId === deployment.deploymentId ? (
 																		<Loader2 className="size-4 animate-spin" />
 																	) : (
-																		<History className="size-4" />
+																		<Bot className="size-4" />
 																	)}
-																	Redeploy this commit
+																	Explain
 																</Button>
 															</DropdownMenuItem>
 														)}
-													{canCancel && isActive(deployment.status) && (
-														<DropdownMenuItem asChild>
-															<Button
-																variant="ghost"
-																size="sm"
-																onClick={() =>
-																	cancel.mutate({
-																		deploymentId: deployment.deploymentId,
-																	})
-																}
-																disabled={cancel.isPending || !canDeploy}
-																title={canDeploy ? undefined : capabilityHint("service.deploy")}
-															>
-																<Ban className="size-4" />
-																Cancel
-															</Button>
-														</DropdownMenuItem>
-													)}
-												</DropdownMenuContent>
-											</DropdownMenu>
-										)}
-									</div>
-								</article>
-							</li>
-						))}
-					</ol>
+														{/* The list already excludes preview rows (queries.ts filters
+											    isPreview), so a row with a sha is always rebuildable. */}
+														{kind === "application" &&
+															!isActive(deployment.status) &&
+															deployment.commitSha && (
+																<DropdownMenuItem asChild>
+																	<Button
+																		variant="ghost"
+																		size="sm"
+																		disabled={redeployCommit.isPending || !canDeploy}
+																		title={
+																			canDeploy
+																				? `Build ${shortSha(deployment.commitSha)} again`
+																				: capabilityHint("service.deploy")
+																		}
+																		onClick={() =>
+																			redeployCommit.mutate({
+																				deploymentId: deployment.deploymentId,
+																			})
+																		}
+																	>
+																		{redeployCommit.isPending &&
+																		redeployCommit.variables?.deploymentId ===
+																			deployment.deploymentId ? (
+																			<Loader2 className="size-4 animate-spin" />
+																		) : (
+																			<History className="size-4" />
+																		)}
+																		Redeploy this commit
+																	</Button>
+																</DropdownMenuItem>
+															)}
+														{canCancel && isActive(deployment.status) && (
+															<DropdownMenuItem asChild>
+																<Button
+																	variant="ghost"
+																	size="sm"
+																	onClick={() =>
+																		cancel.mutate({
+																			deploymentId: deployment.deploymentId,
+																		})
+																	}
+																	disabled={cancel.isPending || !canDeploy}
+																	title={canDeploy ? undefined : capabilityHint("service.deploy")}
+																>
+																	<Ban className="size-4" />
+																	Cancel
+																</Button>
+															</DropdownMenuItem>
+														)}
+													</DropdownMenuContent>
+												</DropdownMenu>
+											)}
+										</div>
+									</article>
+								</li>
+							))}
+						</ol>
+					</Card>
 				</TableCard>
 			)}
 

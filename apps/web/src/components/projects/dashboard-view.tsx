@@ -1,6 +1,6 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowUpRight, FolderGit2, Plus, Search, X } from "lucide-react";
+import { FolderGit2, Plus, Search, X } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { QueryState } from "@/components/query-state";
@@ -8,20 +8,20 @@ import { capabilityHint } from "@/components/services/capability-hint";
 import { EmptyState } from "@/components/services/empty-state";
 import { SubTabsList, SubTabsTrigger } from "@/components/services/sub-tabs";
 import { PageHeader, StatusDot } from "@/components/shell";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardFooter,
-	CardHeader,
-	CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DateTime } from "@/components/ui/date-time";
 import { DisabledHint } from "@/components/ui/disabled-hint";
 import { Input } from "@/components/ui/input";
+import {
+	Item,
+	ItemContent,
+	ItemDescription,
+	ItemGroup,
+	ItemMedia,
+	ItemTitle,
+} from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { useCapabilities } from "@/hooks/use-capabilities";
@@ -63,210 +63,21 @@ export function DashboardView() {
 		setNeedsAttention(false);
 	};
 	return (
-		<div className="space-y-8">
+		<div className="flex min-w-0 flex-col gap-6">
 			<PageHeader
-				title="Projects"
-				description="Your applications and databases, organized by environment."
+				title="Overview"
+				description="Your projects, services and latest deployments."
 				actions={
 					<DisabledHint hint={createHint}>
 						<CreateProjectDialog handleDeepLink={!capabilitiesLoading && canCreate}>
 							<Button disabled={!canCreate}>
-								<Plus aria-hidden="true" className="size-4" />
+								<Plus aria-hidden="true" />
 								New project
 							</Button>
 						</CreateProjectDialog>
 					</DisabledHint>
 				}
 			/>
-			<section
-				id="projects"
-				className="min-w-0 scroll-mt-40 space-y-5"
-				aria-labelledby="project-list-heading"
-			>
-				<div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-					<div className="flex items-center gap-2">
-						<h2 id="project-list-heading" className="text-base font-medium tracking-tight">
-							All projects
-						</h2>
-						{projects && (
-							<span className="rounded border px-1.5 text-xs tabular-nums text-muted-foreground">
-								{projects.length}
-							</span>
-						)}
-					</div>
-					<div className="flex min-w-0 max-w-full flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-						<div className="relative min-w-0 w-full sm:w-auto sm:flex-none">
-							<Search
-								aria-hidden="true"
-								className="pointer-events-none absolute start-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
-							/>
-							<Input
-								placeholder="Find a project…"
-								aria-label="Search projects"
-								value={search}
-								onChange={(event) => setSearch(event.target.value)}
-								className="h-9 w-full bg-card ps-9 pe-9 sm:w-60"
-							/>
-							{search && (
-								<Button
-									type="button"
-									size="icon-sm"
-									variant="ghost"
-									aria-label="Clear project search"
-									className="absolute end-0.5 top-0.5"
-									onClick={() => setSearch("")}
-								>
-									<X className="size-3.5" />
-								</Button>
-							)}
-						</div>
-						{(attentionCount > 0 || needsAttention) && (
-							<Button
-								type="button"
-								size="sm"
-								variant={needsAttention ? "secondary" : "ghost"}
-								aria-pressed={needsAttention}
-								className="h-auto min-h-9 justify-start whitespace-normal py-2 text-left"
-								onClick={() => setNeedsAttention((value) => !value)}
-							>
-								<StatusDot status="error" />
-								Needs attention
-								<span className="tabular-nums text-muted-foreground">{attentionCount}</span>
-							</Button>
-						)}
-					</div>
-				</div>
-				<QueryState
-					isPending={isPending}
-					isError={isError}
-					error={error}
-					onRetry={() => refetch()}
-					isEmpty={!filtered?.length}
-					skeleton={
-						<div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-							{[1, 2, 3].map((index) => (
-								<Card key={index}>
-									<CardHeader>
-										<Skeleton className="size-8 rounded-md" />
-										<Skeleton className="h-5 w-40" />
-										<Skeleton className="h-4 w-2/3" />
-									</CardHeader>
-									<CardContent>
-										<Skeleton className="h-9 w-full" />
-									</CardContent>
-									<CardFooter>
-										<Skeleton className="h-4 w-28" />
-									</CardFooter>
-								</Card>
-							))}
-						</div>
-					}
-					empty={
-						query || needsAttention ? (
-							<EmptyState
-								icon={Search}
-								title="No projects match"
-								description="Change your search or clear the filters."
-								action={
-									<Button variant="outline" onClick={resetFilters}>
-										Clear filters
-									</Button>
-								}
-							/>
-						) : (
-							<EmptyState
-								icon={FolderGit2}
-								title="Create your first project"
-								description="Organize your applications and databases into environments."
-								action={
-									<DisabledHint hint={createHint}>
-										<CreateProjectDialog>
-											<Button disabled={!canCreate}>
-												<Plus aria-hidden="true" className="size-4" />
-												New project
-											</Button>
-										</CreateProjectDialog>
-									</DisabledHint>
-								}
-							/>
-						)
-					}
-				>
-					<div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-						{(filtered ?? []).map((project) => {
-							const total = project.environments.reduce((n, env) => n + env.services.total, 0);
-							const running = project.environments.reduce(
-								(n, env) => n + countRunningServices(env.services.byStatus),
-								0,
-							);
-							const errors = project.environments.reduce(
-								(n, env) => n + env.services.byStatus.error,
-								0,
-							);
-							return (
-								<Card key={project.projectId} className="min-w-0 gap-4">
-									<CardHeader>
-										<div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
-											<Avatar className="size-8 rounded-md">
-												<AvatarFallback className="rounded-md">
-													<FolderGit2 aria-hidden="true" className="size-4" />
-												</AvatarFallback>
-											</Avatar>
-											<Badge variant="outline">
-												<StatusDot status={errors ? "error" : running ? "success" : "neutral"} />
-												{errors ? `${errors} need attention` : running ? "Running" : "Idle"}
-											</Badge>
-										</div>
-										<CardTitle as="h3" className="mt-0">
-											<Link
-												href={`/dashboard/projects/${project.projectId}`}
-												className="flex min-h-9 items-center justify-between gap-2 hover:underline underline-offset-4"
-											>
-												<span className="min-w-0 break-words">{project.name}</span>
-												<ArrowUpRight
-													aria-hidden="true"
-													className="size-4 shrink-0 text-muted-foreground"
-												/>
-											</Link>
-										</CardTitle>
-										<CardDescription className="line-clamp-2">
-											{project.description ||
-												`${total} services across ${project.environments.length} environments`}
-										</CardDescription>
-									</CardHeader>
-									<CardContent className="flex min-w-0 flex-wrap gap-2">
-										{project.environments.slice(0, 4).map((environment) => (
-											<Button key={environment.environmentId} variant="outline" size="sm" asChild>
-												<Link
-													href={`/dashboard/projects/${project.projectId}?env=${encodeURIComponent(environment.name)}`}
-												>
-													{environment.name}
-												</Link>
-											</Button>
-										))}
-										{project.environments.length > 4 && (
-											<Button variant="ghost" size="sm" asChild>
-												<Link href={`/dashboard/projects/${project.projectId}`}>
-													+{project.environments.length - 4} more
-												</Link>
-											</Button>
-										)}
-										{project.environments.length === 0 && (
-											<p className="text-sm text-muted-foreground">No environments yet</p>
-										)}
-									</CardContent>
-									<CardFooter className="mt-auto flex-wrap justify-between gap-2 border-t pt-4 text-xs text-muted-foreground">
-										<span className="tabular-nums">
-											{running} / {total} services running
-										</span>
-										<DateTime value={project.createdAt} />
-									</CardFooter>
-								</Card>
-							);
-						})}
-					</div>
-				</QueryState>
-			</section>
 			<OverviewCards
 				onAttention={() => {
 					setSearch("");
@@ -276,19 +87,218 @@ export function DashboardView() {
 						?.scrollIntoView({ block: "start", behavior: "instant" });
 				}}
 			/>
-			<Tabs id="deployments" defaultValue="recent" className="scroll-mt-24 gap-5 border-t pt-6">
-				<SubTabsList aria-label="Workspace activity">
-					<SubTabsTrigger value="recent">Recent deployments</SubTabsTrigger>
-					<SubTabsTrigger value="trends">Deployment trends</SubTabsTrigger>
-				</SubTabsList>
-				<TabsContent value="recent">
-					<RecentDeployments />
-				</TabsContent>
-				<TabsContent value="trends">
-					<DeploymentsChart />
-				</TabsContent>
-			</Tabs>
-			<GettingStartedCard firstProjectId={projects?.[0]?.projectId} />
+			<div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
+				<section
+					id="projects"
+					aria-labelledby="project-list-heading"
+					className="min-w-0 scroll-mt-24"
+				>
+					<Card>
+						<CardHeader>
+							<div className="flex flex-wrap items-center justify-between gap-3">
+								<CardTitle as="h2" id="project-list-heading">
+									Projects
+								</CardTitle>
+								{projects && <Badge variant="secondary">{projects.length}</Badge>}
+							</div>
+							<CardDescription>Open a project to manage its services.</CardDescription>
+						</CardHeader>
+						<CardContent className="space-y-4">
+							<div className="flex min-w-0 flex-wrap gap-2">
+								<div className="relative min-w-0 flex-1">
+									<Search
+										aria-hidden="true"
+										className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+									/>
+									<Input
+										aria-label="Search projects"
+										placeholder="Search projects…"
+										value={search}
+										onChange={(e) => setSearch(e.target.value)}
+										className="ps-9 pe-9"
+									/>
+									{search && (
+										<Button
+											type="button"
+											size="icon-sm"
+											variant="ghost"
+											aria-label="Clear project search"
+											className="absolute end-0.5 top-0.5"
+											onClick={() => setSearch("")}
+										>
+											<X />
+										</Button>
+									)}
+								</div>
+								{(attentionCount > 0 || needsAttention) && (
+									<Button
+										type="button"
+										variant={needsAttention ? "secondary" : "outline"}
+										aria-pressed={needsAttention}
+										onClick={() => setNeedsAttention((v) => !v)}
+									>
+										<StatusDot status="error" />
+										Needs attention <span className="tabular-nums">{attentionCount}</span>
+									</Button>
+								)}
+							</div>
+							<QueryState
+								isPending={isPending}
+								isError={isError}
+								error={error}
+								onRetry={() => refetch()}
+								isEmpty={!filtered?.length}
+								skeleton={
+									<div className="space-y-3">
+										{[1, 2, 3].map((i) => (
+											<Item variant="outline" key={i}>
+												<ItemMedia variant="icon" className="hidden sm:flex">
+													<FolderGit2 />
+												</ItemMedia>
+												<ItemContent className="min-w-0">
+													<Skeleton className="h-4 w-40" />
+													<Skeleton className="h-4 w-2/3" />
+												</ItemContent>
+											</Item>
+										))}
+									</div>
+								}
+								empty={
+									query || needsAttention ? (
+										<EmptyState
+											icon={Search}
+											title="No projects match"
+											description="Try another search or clear the filters."
+											action={
+												<Button variant="outline" onClick={resetFilters}>
+													Clear filters
+												</Button>
+											}
+										/>
+									) : (
+										<EmptyState
+											icon={FolderGit2}
+											title="Create your first project"
+											description="Organize your applications and databases into environments."
+											action={
+												<DisabledHint hint={createHint}>
+													<CreateProjectDialog>
+														<Button disabled={!canCreate}>
+															<Plus />
+															New project
+														</Button>
+													</CreateProjectDialog>
+												</DisabledHint>
+											}
+										/>
+									)
+								}
+							>
+								<ItemGroup className="divide-y">
+									{(filtered ?? []).map((project) => {
+										const total = project.environments.reduce(
+											(n, env) => n + env.services.total,
+											0,
+										);
+										const running = project.environments.reduce(
+											(n, env) => n + countRunningServices(env.services.byStatus),
+											0,
+										);
+										const errors = project.environments.reduce(
+											(n, env) => n + env.services.byStatus.error,
+											0,
+										);
+										return (
+											<Item
+												key={project.projectId}
+												role="listitem"
+												size="sm"
+												className="items-start px-0"
+											>
+												<ItemMedia variant="icon" className="hidden sm:flex">
+													<FolderGit2 aria-hidden="true" />
+												</ItemMedia>
+												<ItemContent className="min-w-0">
+													<ItemTitle className="min-w-0 max-w-full flex-wrap">
+														<Link
+															href={`/dashboard/projects/${project.projectId}`}
+															className="break-words underline-offset-4 hover:underline"
+														>
+															{project.name}
+														</Link>
+														<Badge variant="outline">
+															<StatusDot
+																status={errors ? "error" : running ? "success" : "neutral"}
+															/>
+															{errors ? `${errors} need attention` : running ? "Running" : "Idle"}
+														</Badge>
+													</ItemTitle>
+													<ItemDescription>
+														{project.description ||
+															`${total} services across ${project.environments.length} environments`}
+													</ItemDescription>
+													<div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+														<span className="tabular-nums">
+															{running} / {total} services running
+														</span>
+														<DateTime value={project.createdAt} />
+													</div>
+													<div className="mt-2 flex min-w-0 flex-wrap gap-2">
+														{project.environments.slice(0, 4).map((env) => (
+															<Button key={env.environmentId} asChild variant="outline" size="sm">
+																<Link
+																	href={`/dashboard/projects/${project.projectId}?env=${encodeURIComponent(env.name)}`}
+																>
+																	{env.name}
+																</Link>
+															</Button>
+														))}
+														{project.environments.length > 4 && (
+															<Button asChild variant="ghost" size="sm">
+																<Link href={`/dashboard/projects/${project.projectId}`}>
+																	+{project.environments.length - 4} more
+																</Link>
+															</Button>
+														)}
+														{project.environments.length === 0 && (
+															<span className="text-xs text-muted-foreground">
+																No environments yet
+															</span>
+														)}
+													</div>
+												</ItemContent>
+											</Item>
+										);
+									})}
+								</ItemGroup>
+							</QueryState>
+						</CardContent>
+					</Card>
+				</section>
+				<aside className="min-w-0 space-y-6" aria-label="Deployment activity">
+					<Card>
+						<CardHeader>
+							<CardTitle as="h2">Activity</CardTitle>
+							<CardDescription>Releases across your workspace.</CardDescription>
+						</CardHeader>
+						<CardContent>
+							<Tabs id="deployments" defaultValue="recent" className="gap-4">
+								<SubTabsList aria-label="Workspace activity">
+									<SubTabsTrigger value="recent">Recent deployments</SubTabsTrigger>
+									<SubTabsTrigger value="trends">Trends</SubTabsTrigger>
+								</SubTabsList>
+								<TabsContent value="recent">
+									<RecentDeployments />
+								</TabsContent>
+								<TabsContent value="trends">
+									<DeploymentsChart framed={false} />
+								</TabsContent>
+							</Tabs>
+						</CardContent>
+					</Card>
+					<GettingStartedCard firstProjectId={projects?.[0]?.projectId} />
+				</aside>
+			</div>
 		</div>
 	);
 }

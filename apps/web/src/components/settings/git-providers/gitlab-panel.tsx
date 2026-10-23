@@ -19,8 +19,8 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@/components/ui/dialog";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
 	Table,
@@ -118,36 +118,36 @@ export function GitlabPanel() {
 							<DialogDescription>Connect with a personal access token.</DialogDescription>
 						</DialogHeader>
 						<div className="grid gap-5">
-							<div className="grid gap-2">
-								<Label htmlFor="gitlab-name">Name</Label>
+							<Field>
+								<FieldLabel htmlFor="gitlab-name">Name</FieldLabel>
 								<Input id="gitlab-name" value={name} onChange={(e) => setName(e.target.value)} />
-							</div>
-							<div className="grid gap-2">
-								<Label htmlFor="gitlab-url">GitLab URL</Label>
+							</Field>
+							<Field>
+								<FieldLabel htmlFor="gitlab-url">GitLab URL</FieldLabel>
 								<Input
 									id="gitlab-url"
 									placeholder="https://gitlab.com"
 									value={gitlabUrl}
 									onChange={(e) => setGitlabUrl(e.target.value)}
 								/>
-							</div>
-							<div className="grid gap-2">
-								<Label htmlFor="gitlab-token">Access token</Label>
+							</Field>
+							<Field>
+								<FieldLabel htmlFor="gitlab-token">Access token</FieldLabel>
 								<Input
 									id="gitlab-token"
 									type="password"
 									value={accessToken}
 									onChange={(e) => setAccessToken(e.target.value)}
 								/>
-							</div>
-							<div className="grid gap-2">
-								<Label htmlFor="gitlab-group">Group name (optional)</Label>
+							</Field>
+							<Field>
+								<FieldLabel htmlFor="gitlab-group">Group name (optional)</FieldLabel>
 								<Input
 									id="gitlab-group"
 									value={groupName}
 									onChange={(e) => setGroupName(e.target.value)}
 								/>
-							</div>
+							</Field>
 						</div>
 						<DialogFooter>
 							<Button

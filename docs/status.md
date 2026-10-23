@@ -5,6 +5,52 @@ and move items between the backlog sections. Durable knowledge belongs in
 [`../CLAUDE.md`](../CLAUDE.md) / [`codebase-map.md`](./codebase-map.md); this
 file is for **state** and **tasks**.
 
+## Monochrome native app rebuild — 2026-10-23
+
+Latest user correction supersedes the design checkpoints below: monochrome,
+native shadcn components, Vercel-style restraint, and replacement page compositions.
+The current [brief](../.ui-craft/brief.md) contains one authoritative direction.
+
+Rebuilt with the official sidebar-07/login-03 compositions and New York/Neutral
+components. Projects use compact Item rows alongside deployment activity; services
+have a new identity/action Card, line Tabs and horizontal configuration Tabs.
+Settings navigation lives in the workspace sidebar, with a single content column.
+Native Fields replace bespoke form wrappers across service/settings/dialog flows;
+shared table controls and pagination sit outside the row frame. Builder choices
+use native FieldLabel/RadioGroup, host usage uses Progress, and failure/not-found/
+maintenance pages use Empty. The obsolete component-state stylesheet is removed.
+Monochrome applies to engine chrome/ANSI colors too; stored user branding and tags
+remain supported. No dependency, server API, schema or encryption changes.
+
+All 624 normalized query/mutation/key call expressions are identical. Draft
+retention, capabilities, lifecycle actions, confirmations, file pickers and URL/hash
+aliases remain. Organization dialogs stay mounted through sidebar changes; table
+containers stay mounted during loading. Sidebar preference is read from its existing
+cookie. Navigation uses the native Sheet when text enlargement needs more room.
+
+Validation: production build/typecheck, strict Biome (1,198 files), knip,
+119 web and 3,353 server tests pass (137 optional server tests skipped). Browser
+coverage includes 392 initial route/theme captures, 408 responsive cases with
+focused fixes/rechecks, 100 focused enlarged-layout cases, 68 final tablet cases,
+216 dialogs plus six corrected dialog rechecks, 104 page/control captures,
+28 focused controls, four migration sequences, 18 template steps, 16 final role/
+deep-link checks, 12 error-boundary cases and 16 final navigation cases. All five
+setup steps complete in a fresh isolated database. Independent design/a11y findings
+are resolved. Final live checks pass for the existing session, project, service,
+settings and mobile navigation. Counts describe verification iterations, not a
+screen-reader or deploy-engine certification.
+
+The `.next-native-release` production build runs on localhost:3000 with the
+original all-role custom server, database, config directory and encryption keys.
+Database/config backups precede the switch; all restart hashes match 72 tables /
+240 rows and 62 persistent config files. After read-only checks the only changed
+setting is the automatic `webServer.updateLastCheckedAt` timestamp. No primary
+reset, seed, restore or migration. Previous build retained for rollback. Public
+website remains on 3373; PR 34 remains a draft. README previews show example data.
+Private receipts: `.nixploy-data/verification/native-rebuild/`.
+[Scope and limits](../.ui-craft/app-workspace.md). Earlier design checkpoints below
+are historical; their layouts do not describe the current app.
+
 ## Native shadcn app layout rebuild — 2026-10-23
 
 The latest request requires a structural app rebuild with Vercel-style layouts,

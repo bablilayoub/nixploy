@@ -1,7 +1,6 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
-
 import { SettingsSection, SettingsStack } from "@/components/layout/settings-section";
 import { capabilityHint } from "@/components/services/capability-hint";
 import { DangerZone } from "@/components/services/danger-zone";
@@ -10,8 +9,8 @@ import { ServiceActionsCard } from "@/components/services/service-actions-card";
 import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
 import { Button } from "@/components/ui/button";
 import { DisabledHint } from "@/components/ui/disabled-hint";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useDraft } from "@/hooks/use-draft";
@@ -92,17 +91,17 @@ export function ServiceSettingsBody({
 		<SettingsStack>
 			<SettingsSection title={copy.sectionTitle} description={copy.sectionDescription}>
 				<div className="flex flex-col gap-5">
-					<div className="flex flex-col gap-2.5">
-						<Label htmlFor="service-name">Name</Label>
+					<Field>
+						<FieldLabel htmlFor="service-name">Name</FieldLabel>
 						<Input
 							id="service-name"
 							className="sm:max-w-sm"
 							value={draft.value.name}
 							onChange={(event) => draft.patch({ name: event.target.value })}
 						/>
-					</div>
-					<div className="flex flex-col gap-2.5">
-						<Label htmlFor="service-description">Description</Label>
+					</Field>
+					<Field>
+						<FieldLabel htmlFor="service-description">Description</FieldLabel>
 						<Textarea
 							id="service-description"
 							className="min-h-20 sm:max-w-lg"
@@ -110,7 +109,7 @@ export function ServiceSettingsBody({
 							value={draft.value.description}
 							onChange={(event) => draft.patch({ description: event.target.value })}
 						/>
-					</div>
+					</Field>
 					<div className="flex items-center justify-end gap-3">
 						<UnsavedChangesPill dirty={draft.dirty} />
 						<DisabledHint hint={canWrite ? undefined : capabilityHint("service.write")}>

@@ -6,8 +6,9 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
 import { toastError } from "@/lib/describe-error";
 
@@ -60,41 +61,43 @@ export function NoOrganization({ userName }: { userName?: string | null }) {
 	}
 
 	return (
-		<div className="surface mx-auto my-10 flex min-h-[60vh] max-w-xl flex-col items-start justify-center gap-6 px-6 py-12 sm:px-10">
-			<div className="flex size-12 items-center justify-center rounded-lg border bg-panel-inset">
-				<Building2 className="size-6 text-muted-foreground" />
-			</div>
-			<div className="flex flex-col gap-3">
-				<h1 className="text-3xl leading-tight font-semibold tracking-tight">
-					You have no organization
-				</h1>
-				<p className="max-w-md text-sm leading-relaxed text-muted-foreground">
-					Projects, servers and services all live inside an organization. Create one to get started,
-					or ask an admin to invite you to theirs.
-				</p>
-			</div>
-			<form
-				className="flex w-full max-w-sm flex-col gap-3 text-left"
-				onSubmit={(event) => {
-					event.preventDefault();
-					void handleCreate();
-				}}
-			>
-				<div className="flex flex-col gap-2">
-					<Label htmlFor="new-org-name">Organization name</Label>
-					<Input
-						id="new-org-name"
-						value={name}
-						onChange={(event) => setName(event.target.value)}
-						placeholder="Acme Inc"
-						autoFocus
-					/>
+		<Card className="min-w-0">
+			<CardContent className="mx-auto my-10 flex min-h-[60vh] max-w-xl flex-col items-start justify-center gap-6">
+				<div className="flex size-12 items-center justify-center rounded-lg border bg-muted">
+					<Building2 className="size-6 text-muted-foreground" />
 				</div>
-				<Button type="submit" disabled={!name.trim() || isCreating}>
-					{isCreating && <Loader2 className="size-4 animate-spin" />}
-					Create organization
-				</Button>
-			</form>
-		</div>
+				<div className="flex flex-col gap-3">
+					<h1 className="text-3xl leading-tight font-semibold tracking-tight">
+						You have no organization
+					</h1>
+					<p className="max-w-md text-sm leading-relaxed text-muted-foreground">
+						Projects, servers and services all live inside an organization. Create one to get
+						started, or ask an admin to invite you to theirs.
+					</p>
+				</div>
+				<form
+					className="flex w-full max-w-sm flex-col gap-3 text-left"
+					onSubmit={(event) => {
+						event.preventDefault();
+						void handleCreate();
+					}}
+				>
+					<Field>
+						<FieldLabel htmlFor="new-org-name">Organization name</FieldLabel>
+						<Input
+							id="new-org-name"
+							value={name}
+							onChange={(event) => setName(event.target.value)}
+							placeholder="Acme Inc"
+							autoFocus
+						/>
+					</Field>
+					<Button type="submit" disabled={!name.trim() || isCreating}>
+						{isCreating && <Loader2 className="size-4 animate-spin" />}
+						Create organization
+					</Button>
+				</form>
+			</CardContent>
+		</Card>
 	);
 }

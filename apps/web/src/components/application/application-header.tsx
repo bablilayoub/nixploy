@@ -244,7 +244,7 @@ export function ApplicationHeader({
 					<AlertDialogFooter>
 						<AlertDialogCancel disabled={stop.isPending}>Cancel</AlertDialogCancel>
 						<AlertDialogAction
-							variant="destructive"
+							variant="outline"
 							disabled={stop.isPending}
 							onClick={(event) => {
 								event.preventDefault();

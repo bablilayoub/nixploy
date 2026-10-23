@@ -49,6 +49,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -341,8 +342,8 @@ function NixployAuthFields({
 			</p>
 
 			<div className="grid gap-2 sm:grid-cols-2">
-				<div className="space-y-1">
-					<Label className="text-xs">Minimum role</Label>
+				<Field className="space-y-1">
+					<FieldLabel className="text-xs">Minimum role</FieldLabel>
 					<Select
 						value={text("minRole") || "any"}
 						onValueChange={(value) => set("minRole", value === "any" ? "" : value)}
@@ -358,16 +359,16 @@ function NixployAuthFields({
 							<SelectItem value="owner">Owner only</SelectItem>
 						</SelectContent>
 					</Select>
-				</div>
-				<div className="space-y-1">
-					<Label className="text-xs">Session length (hours)</Label>
+				</Field>
+				<Field className="space-y-1">
+					<FieldLabel className="text-xs">Session length (hours)</FieldLabel>
 					<Input
 						aria-label="Session length (hours)"
 						inputMode="numeric"
 						value={text("sessionHours")}
 						onChange={(event) => set("sessionHours", event.target.value)}
 					/>
-				</div>
+				</Field>
 			</div>
 
 			{canReadTeams && teams.length > 0 ? (
@@ -400,8 +401,8 @@ function NixployAuthFields({
 				</div>
 			) : null}
 
-			<div className="space-y-1">
-				<Label className="text-xs">Allowed email domains (optional)</Label>
+			<Field className="space-y-1">
+				<FieldLabel className="text-xs">Allowed email domains (optional)</FieldLabel>
 				<Input
 					aria-label="Allowed email domains"
 					className="font-mono text-xs"
@@ -409,10 +410,10 @@ function NixployAuthFields({
 					value={text("emailDomains")}
 					onChange={(event) => set("emailDomains", event.target.value)}
 				/>
-			</div>
+			</Field>
 
-			<div className="space-y-1">
-				<Label className="text-xs">Paths served without signing in (one per line)</Label>
+			<Field className="space-y-1">
+				<FieldLabel className="text-xs">Paths served without signing in (one per line)</FieldLabel>
 				<Textarea
 					aria-label="Paths served without signing in"
 					rows={2}
@@ -424,7 +425,7 @@ function NixployAuthFields({
 				<p className="text-xs text-muted-foreground">
 					Health checks and webhooks carry no browser session, so they need a way past the gate.
 				</p>
-			</div>
+			</Field>
 
 			<div className="flex items-center gap-2">
 				<Checkbox
@@ -464,41 +465,41 @@ function MiddlewareFieldsEditor({
 	if (kind === "rateLimit") {
 		return (
 			<div className="grid grid-cols-3 gap-2">
-				<div className="space-y-1">
-					<Label className="text-xs">Average</Label>
+				<Field className="space-y-1">
+					<FieldLabel className="text-xs">Average</FieldLabel>
 					<Input
 						aria-label="Average"
 						inputMode="numeric"
 						value={text("average")}
 						onChange={(event) => set("average", event.target.value)}
 					/>
-				</div>
-				<div className="space-y-1">
-					<Label className="text-xs">Burst</Label>
+				</Field>
+				<Field className="space-y-1">
+					<FieldLabel className="text-xs">Burst</FieldLabel>
 					<Input
 						aria-label="Burst"
 						inputMode="numeric"
 						value={text("burst")}
 						onChange={(event) => set("burst", event.target.value)}
 					/>
-				</div>
-				<div className="space-y-1">
-					<Label className="text-xs">Period</Label>
+				</Field>
+				<Field className="space-y-1">
+					<FieldLabel className="text-xs">Period</FieldLabel>
 					<Input
 						aria-label="Period"
 						placeholder="1s"
 						value={text("period")}
 						onChange={(event) => set("period", event.target.value)}
 					/>
-				</div>
+				</Field>
 			</div>
 		);
 	}
 
 	if (kind === "ipAllowList") {
 		return (
-			<div className="space-y-1">
-				<Label className="text-xs">Allowed CIDRs (one per line)</Label>
+			<Field className="space-y-1">
+				<FieldLabel className="text-xs">Allowed CIDRs (one per line)</FieldLabel>
 				<Textarea
 					aria-label="Allowed CIDRs (one per line)"
 					rows={3}
@@ -507,15 +508,15 @@ function MiddlewareFieldsEditor({
 					value={text("sourceRange")}
 					onChange={(event) => set("sourceRange", event.target.value)}
 				/>
-			</div>
+			</Field>
 		);
 	}
 
 	if (kind === "headers") {
 		return (
 			<div className="space-y-2">
-				<div className="space-y-1">
-					<Label className="text-xs">Response headers (Name: value)</Label>
+				<Field className="space-y-1">
+					<FieldLabel className="text-xs">Response headers (Name: value)</FieldLabel>
 					<Textarea
 						aria-label="Response headers (Name: value)"
 						rows={2}
@@ -524,9 +525,9 @@ function MiddlewareFieldsEditor({
 						value={text("responseHeaders")}
 						onChange={(event) => set("responseHeaders", event.target.value)}
 					/>
-				</div>
-				<div className="space-y-1">
-					<Label className="text-xs">Request headers (Name: value)</Label>
+				</Field>
+				<Field className="space-y-1">
+					<FieldLabel className="text-xs">Request headers (Name: value)</FieldLabel>
 					<Textarea
 						aria-label="Request headers (Name: value)"
 						rows={2}
@@ -535,10 +536,10 @@ function MiddlewareFieldsEditor({
 						value={text("requestHeaders")}
 						onChange={(event) => set("requestHeaders", event.target.value)}
 					/>
-				</div>
+				</Field>
 				<div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-					<div className="space-y-1">
-						<Label className="text-xs">HSTS max-age (seconds)</Label>
+					<Field className="space-y-1">
+						<FieldLabel className="text-xs">HSTS max-age (seconds)</FieldLabel>
 						<Input
 							aria-label="HSTS max-age (seconds)"
 							inputMode="numeric"
@@ -546,16 +547,16 @@ function MiddlewareFieldsEditor({
 							value={text("stsSeconds")}
 							onChange={(event) => set("stsSeconds", event.target.value)}
 						/>
-					</div>
-					<div className="space-y-1">
-						<Label className="text-xs">CORS origins</Label>
+					</Field>
+					<Field className="space-y-1">
+						<FieldLabel className="text-xs">CORS origins</FieldLabel>
 						<Input
 							aria-label="CORS origins"
 							placeholder="https://app.example.com"
 							value={text("corsOrigins")}
 							onChange={(event) => set("corsOrigins", event.target.value)}
 						/>
-					</div>
+					</Field>
 				</div>
 				<div className="flex gap-4">
 					<div className="flex items-center gap-2">
@@ -590,8 +591,8 @@ function MiddlewareFieldsEditor({
 
 	if (kind === "compress") {
 		return (
-			<div className="space-y-1">
-				<Label className="text-xs">Minimum response size (bytes, optional)</Label>
+			<Field className="space-y-1">
+				<FieldLabel className="text-xs">Minimum response size (bytes, optional)</FieldLabel>
 				<Input
 					aria-label="Minimum response size (bytes, optional)"
 					inputMode="numeric"
@@ -599,7 +600,7 @@ function MiddlewareFieldsEditor({
 					value={text("minResponseBodyBytes")}
 					onChange={(event) => set("minResponseBodyBytes", event.target.value)}
 				/>
-			</div>
+			</Field>
 		);
 	}
 
@@ -610,8 +611,8 @@ function MiddlewareFieldsEditor({
 	if (kind === "forwardAuth") {
 		return (
 			<div className="space-y-2">
-				<div className="space-y-1">
-					<Label className="text-xs">Auth endpoint</Label>
+				<Field className="space-y-1">
+					<FieldLabel className="text-xs">Auth endpoint</FieldLabel>
 					<Input
 						aria-label="Auth endpoint"
 						className="font-mono text-xs"
@@ -622,9 +623,9 @@ function MiddlewareFieldsEditor({
 					<p className="text-xs text-muted-foreground">
 						Either the app name of another service in this organization, or a public HTTPS URL.
 					</p>
-				</div>
-				<div className="space-y-1">
-					<Label className="text-xs">Headers to copy from the auth response</Label>
+				</Field>
+				<Field className="space-y-1">
+					<FieldLabel className="text-xs">Headers to copy from the auth response</FieldLabel>
 					<Input
 						aria-label="Headers to copy from the auth response"
 						className="font-mono text-xs"
@@ -632,7 +633,7 @@ function MiddlewareFieldsEditor({
 						value={text("authResponseHeaders")}
 						onChange={(event) => set("authResponseHeaders", event.target.value)}
 					/>
-				</div>
+				</Field>
 				<div className="flex items-center gap-2">
 					<Checkbox
 						id={`mw-${kind}-trustForwardHeader`}
@@ -649,15 +650,15 @@ function MiddlewareFieldsEditor({
 
 	return (
 		<div className="space-y-2">
-			<div className="space-y-1">
-				<Label className="text-xs">Cookie name</Label>
+			<Field className="space-y-1">
+				<FieldLabel className="text-xs">Cookie name</FieldLabel>
 				<Input
 					aria-label="Cookie name"
 					placeholder="nixploy_sticky"
 					value={text("name")}
 					onChange={(event) => set("name", event.target.value)}
 				/>
-			</div>
+			</Field>
 			<div className="flex gap-4">
 				<div className="flex items-center gap-2">
 					<Checkbox
@@ -1357,7 +1358,7 @@ export function DomainManager({
 														</DropdownMenuItem>
 														<DropdownMenuSeparator />
 														<DropdownMenuItem
-															variant="destructive"
+															variant="default"
 															disabled={!canManage}
 															title={manageHint}
 															onSelect={() => setDeleting(domain)}
@@ -1451,8 +1452,8 @@ export function DomainManager({
 						</div>
 
 						{!external && (
-							<div className="space-y-1.5">
-								<Label>Protocol</Label>
+							<Field className="space-y-1.5">
+								<FieldLabel>Protocol</FieldLabel>
 								<Select
 									value={protocol}
 									onValueChange={(value) => setProtocol(value as RouteProtocol)}
@@ -1472,12 +1473,12 @@ export function DomainManager({
 										: "Layer 4: Traefik forwards the raw stream on a dedicated entrypoint. No paths, redirects or middlewares."}{" "}
 									<HelpLink slug="tcp-udp-routing" />
 								</p>
-							</div>
+							</Field>
 						)}
 
 						{protocol !== "http" && (
-							<div className="space-y-1.5">
-								<Label>Entrypoint</Label>
+							<Field className="space-y-1.5">
+								<FieldLabel>Entrypoint</FieldLabel>
 								<Select
 									value={entrypoint ?? ""}
 									onValueChange={(value) => setEntrypoint(value || null)}
@@ -1500,12 +1501,12 @@ export function DomainManager({
 										? "The host port clients connect to. Entrypoints are instance-wide."
 										: `No ${protocol.toUpperCase()} entrypoint exists yet — the instance administrator adds one under Settings → Server.`}
 								</p>
-							</div>
+							</Field>
 						)}
 
 						{protocol === "tcp" && (
-							<div className="space-y-1.5">
-								<Label>TLS</Label>
+							<Field className="space-y-1.5">
+								<FieldLabel>TLS</FieldLabel>
 								<Select value={tlsMode} onValueChange={(value) => setTlsMode(value as TlsMode)}>
 									<SelectTrigger aria-label="TLS">
 										<SelectValue />
@@ -1521,7 +1522,7 @@ export function DomainManager({
 										? "The entrypoint's port is the only selector: this router takes every connection on it, whatever the host above says."
 										: "Traefik matches the host from the TLS handshake (SNI), so several services can share one port."}
 								</p>
-							</div>
+							</Field>
 						)}
 
 						<div
@@ -1532,19 +1533,19 @@ export function DomainManager({
 							}
 						>
 							{protocol === "http" && (
-								<div className="space-y-1.5">
-									<Label htmlFor="domain-path">Path</Label>
+								<Field className="space-y-1.5">
+									<FieldLabel htmlFor="domain-path">Path</FieldLabel>
 									<Input
 										id="domain-path"
 										placeholder="/"
 										value={path}
 										onChange={(event) => setPath(event.target.value)}
 									/>
-								</div>
+								</Field>
 							)}
 							{!external && (
-								<div className="space-y-1.5">
-									<Label htmlFor="domain-port">Container port</Label>
+								<Field className="space-y-1.5">
+									<FieldLabel htmlFor="domain-port">Container port</FieldLabel>
 									<Input
 										id="domain-port"
 										placeholder={DEFAULT_HTTP_PORT}
@@ -1552,7 +1553,7 @@ export function DomainManager({
 										value={port}
 										onChange={(event) => setPort(event.target.value)}
 									/>
-								</div>
+								</Field>
 							)}
 						</div>
 						{!external && (
@@ -1563,8 +1564,8 @@ export function DomainManager({
 						)}
 
 						{protocol === "http" && (
-							<div className="space-y-1.5">
-								<Label htmlFor="domain-internal-path">Internal path (optional)</Label>
+							<Field className="space-y-1.5">
+								<FieldLabel htmlFor="domain-internal-path">Internal path (optional)</FieldLabel>
 								<Input
 									id="domain-internal-path"
 									placeholder="/"
@@ -1580,12 +1581,12 @@ export function DomainManager({
 									</code>
 									. Leave empty to forward the path unchanged.
 								</p>
-							</div>
+							</Field>
 						)}
 
 						{serviceType === "compose" && (
-							<div className="space-y-1.5">
-								<Label>Compose service</Label>
+							<Field className="space-y-1.5">
+								<FieldLabel>Compose service</FieldLabel>
 								<Select
 									value={serviceName ?? ""}
 									onValueChange={(value) => setServiceName(value || null)}
@@ -1601,7 +1602,7 @@ export function DomainManager({
 										))}
 									</SelectContent>
 								</Select>
-							</div>
+							</Field>
 						)}
 
 						{protocol === "http" && (
@@ -1629,8 +1630,8 @@ export function DomainManager({
 						{/* A certificate only matters when something terminates TLS; the
 						    select used to sit there on a plain-HTTP domain. */}
 						{((protocol === "http" && https) || tlsMode === "terminate") && (
-							<div className="space-y-1.5">
-								<Label>Certificate</Label>
+							<Field className="space-y-1.5">
+								<FieldLabel>Certificate</FieldLabel>
 								<Select
 									value={certificateType}
 									onValueChange={(value) => setCertificateType(value as CertificateType)}
@@ -1657,13 +1658,13 @@ export function DomainManager({
 										reachable from the internet.
 									</p>
 								)}
-							</div>
+							</Field>
 						)}
 
 						{certificateType === "custom" &&
 							((protocol === "http" && https) || tlsMode === "terminate") && (
-								<div className="space-y-1.5">
-									<Label>Custom certificate</Label>
+								<Field className="space-y-1.5">
+									<FieldLabel>Custom certificate</FieldLabel>
 									<Select
 										value={certificateId ?? ""}
 										onValueChange={(value) => setCertificateId(value || null)}
@@ -1682,7 +1683,7 @@ export function DomainManager({
 											))}
 										</SelectContent>
 									</Select>
-								</div>
+								</Field>
 							)}
 						<DialogFooter>
 							<Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
@@ -1709,7 +1710,7 @@ export function DomainManager({
 					<AlertDialogFooter>
 						<AlertDialogCancel disabled={deleteMutation.isPending}>Cancel</AlertDialogCancel>
 						<AlertDialogAction
-							variant="destructive"
+							variant="outline"
 							disabled={deleteMutation.isPending}
 							onClick={(event) => {
 								// Keep the dialog open (with its spinner) until the mutation settles.
@@ -1773,7 +1774,7 @@ function DomainDiagnosisDialog({
 										? "outline"
 										: data.verdict === "degraded"
 											? "secondary"
-											: "destructive"
+											: "outline"
 								}
 								className="ml-2 align-middle capitalize"
 							>

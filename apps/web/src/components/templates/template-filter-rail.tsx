@@ -54,16 +54,12 @@ function FacetRow({
 }) {
 	return (
 		<Button
-			variant="ghost"
+			variant={active ? "secondary" : "ghost"}
 			size="sm"
 			type="button"
 			onClick={onClick}
 			aria-pressed={active}
-			className={cn(
-				"flex w-full font-normal items-center justify-between gap-2 rounded-md px-2 py-1.5 text-start text-sm transition-colors",
-				active ? "bg-secondary font-medium text-foreground" : "text-muted-foreground",
-				count === 0 && !active ? "opacity-50" : "hover:bg-accent hover:text-foreground",
-			)}
+			className="w-full justify-between"
 		>
 			<span className="truncate">{label}</span>
 			<span className="shrink-0 text-xs tabular-nums text-muted-foreground/70">{count}</span>
@@ -74,9 +70,7 @@ function FacetRow({
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
 	return (
 		<div className="flex flex-col gap-1">
-			<h3 className="px-2 text-[11px] font-medium normal-case tracking-wide text-muted-foreground/70">
-				{title}
-			</h3>
+			<h3 className="px-2 text-sm font-medium text-muted-foreground">{title}</h3>
 			{children}
 		</div>
 	);

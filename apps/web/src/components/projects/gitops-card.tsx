@@ -15,6 +15,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -340,8 +341,8 @@ export const GitopsCard = forwardRef<
 								Redeploy changed services after apply
 							</Label>
 						</div>
-						<div className="grid gap-2">
-							<Label htmlFor="gitops-yaml">Stack YAML</Label>
+						<Field>
+							<FieldLabel htmlFor="gitops-yaml">Stack YAML</FieldLabel>
 							<Textarea
 								id="gitops-yaml"
 								value={yaml}
@@ -349,7 +350,7 @@ export const GitopsCard = forwardRef<
 								placeholder="version: 2&#10;project:&#10;  name: my-project"
 								className="min-h-48 font-mono text-xs"
 							/>
-						</div>
+						</Field>
 					</div>
 					<DialogFooter>
 						<Button variant="outline" onClick={() => closeImport(false)}>
@@ -404,7 +405,7 @@ export const GitopsCard = forwardRef<
 												item.action === "create"
 													? "default"
 													: item.action === "delete"
-														? "destructive"
+														? "outline"
 														: "secondary"
 											}
 										>

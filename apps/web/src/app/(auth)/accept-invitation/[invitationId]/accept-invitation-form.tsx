@@ -9,8 +9,8 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
-
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
 	Form,
 	FormControl,
@@ -147,36 +147,36 @@ export function AcceptInvitationForm({ invitationId }: { invitationId: string })
 
 	if (preview.isPending || isSessionPending) {
 		return (
-			<section className="flex min-w-0 flex-col gap-8">
-				<header className="space-y-3 text-center">
+			<Card>
+				<CardHeader className="text-center">
 					<Skeleton className="mx-auto h-7 w-48" />
 					<Skeleton className="mx-auto mt-2 h-4 w-64" />
-				</header>
-				<div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
+				</CardHeader>
+				<CardContent className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
 					<Skeleton className="h-10 w-full" />
 					<Skeleton className="h-10 w-full" />
-				</div>
-			</section>
+				</CardContent>
+			</Card>
 		);
 	}
 
 	if (!invitation) {
 		return (
-			<section className="flex min-w-0 flex-col gap-8">
-				<header className="space-y-3 text-center">
-					<h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+			<Card>
+				<CardHeader className="text-center">
+					<CardTitle as="h1" className="text-xl">
 						Invitation unavailable
-					</h1>
+					</CardTitle>
 					<div className="text-sm text-muted-foreground">
 						This link is invalid, expired, or already used. Ask an admin for a new invite.
 					</div>
-				</header>
-				<div>
+				</CardHeader>
+				<CardContent>
 					<Button asChild className="w-full" variant="outline">
 						<Link href="/login">Go to sign in</Link>
 					</Button>
-				</div>
-			</section>
+				</CardContent>
+			</Card>
 		);
 	}
 
@@ -184,17 +184,17 @@ export function AcceptInvitationForm({ invitationId }: { invitationId: string })
 		const emailMatches =
 			maskEmail(session.user.email.toLowerCase()) === invitation.emailMasked.toLowerCase();
 		return (
-			<section className="flex min-w-0 flex-col gap-8">
-				<header className="space-y-3 text-center">
-					<h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+			<Card>
+				<CardHeader className="text-center">
+					<CardTitle as="h1" className="text-xl">
 						Join {invitation.organizationName}
-					</h1>
+					</CardTitle>
 					<div className="text-sm text-muted-foreground">
 						You&apos;re signed in as {session.user.email}. Role:{" "}
 						<span className="capitalize">{invitation.role ?? "member"}</span>.
 					</div>
-				</header>
-				<div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
+				</CardHeader>
+				<CardContent className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
 					{formError && (
 						<div className="flex items-center gap-2 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
 							<AlertCircle className="size-4 shrink-0" />
@@ -217,23 +217,23 @@ export function AcceptInvitationForm({ invitationId }: { invitationId: string })
 							</Button>
 						</>
 					)}
-				</div>
-			</section>
+				</CardContent>
+			</Card>
 		);
 	}
 
 	return (
-		<section className="flex min-w-0 flex-col gap-8">
-			<header className="space-y-3 text-center">
-				<h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+		<Card>
+			<CardHeader className="text-center">
+				<CardTitle as="h1" className="text-xl">
 					Join {invitation.organizationName}
-				</h1>
+				</CardTitle>
 				<div className="text-sm text-muted-foreground">
 					Create your account to accept this invitation as{" "}
 					<span className="capitalize">{invitation.role ?? "member"}</span>.
 				</div>
-			</header>
-			<div>
+			</CardHeader>
+			<CardContent>
 				<Form {...form}>
 					<form
 						onSubmit={form.handleSubmit(onSubmit)}
@@ -320,7 +320,7 @@ export function AcceptInvitationForm({ invitationId }: { invitationId: string })
 						</p>
 					</form>
 				</Form>
-			</div>
-		</section>
+			</CardContent>
+		</Card>
 	);
 }

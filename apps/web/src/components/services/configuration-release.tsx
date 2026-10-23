@@ -97,7 +97,7 @@ export function ConfigurationRelease({ scope }: { scope: ConfigurationScope }) {
 					<DialogTitle>
 						{apply.isSuccess ? "Configuration release queued" : "Review variable changes"}
 					</DialogTitle>
-					<DialogDescription className="rounded-lg border bg-panel-inset px-4 py-3 text-xs leading-relaxed">
+					<DialogDescription className="rounded-lg border bg-muted px-4 py-3 text-xs leading-relaxed">
 						Organization → project → environment → service. Lower levels win, including empty
 						values. Values stay hidden in this review.
 					</DialogDescription>

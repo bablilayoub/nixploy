@@ -8,9 +8,9 @@ import { useSaveBar } from "@/components/services/save-bar";
 import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
 import { Button } from "@/components/ui/button";
 import { DisabledHint } from "@/components/ui/disabled-hint";
+import { FieldDescription, FieldLabel, Field as NativeField } from "@/components/ui/field";
 import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
 	Select,
 	SelectContent,
@@ -110,11 +110,11 @@ function Field({
 	children: ReactNode;
 }) {
 	return (
-		<div className="grid gap-1.5">
-			<Label htmlFor={id}>{label}</Label>
+		<NativeField>
+			<FieldLabel htmlFor={id}>{label}</FieldLabel>
 			{children}
-			{hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
-		</div>
+			{hint ? <FieldDescription>{hint}</FieldDescription> : null}
+		</NativeField>
 	);
 }
 
@@ -765,8 +765,8 @@ function NetworksForm({ application }: { application: Application }) {
 				</>
 			}
 		>
-			<div className="grid gap-2">
-				<Label htmlFor="swarm-networks">Networks</Label>
+			<NativeField>
+				<FieldLabel htmlFor="swarm-networks">Networks</FieldLabel>
 				<Textarea
 					id="swarm-networks"
 					className="min-h-24 font-mono text-xs"
@@ -776,7 +776,7 @@ function NetworksForm({ application }: { application: Application }) {
 					aria-invalid={problem ? true : undefined}
 				/>
 				{problem && <p className="text-xs text-destructive">{problem}</p>}
-			</div>
+			</NativeField>
 			<FormFooter
 				dirty={draft.dirty}
 				pending={save.isPending}

@@ -7,8 +7,8 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
-
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
 	Form,
 	FormControl,
@@ -73,36 +73,38 @@ export function ForgotPasswordForm() {
 
 	if (sent) {
 		return (
-			<section className="flex min-w-0 flex-col gap-8">
-				<header className="space-y-3 text-center">
-					<h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+			<Card>
+				<CardHeader className="text-center">
+					<CardTitle as="h1" className="text-xl">
 						<MailCheck className="size-5" />
 						Check your inbox
-					</h1>
+					</CardTitle>
 					<div className="text-sm text-muted-foreground">
 						If an account exists for that address, a reset link is on its way. It expires in one
 						hour.
 					</div>
-				</header>
-				<div>
+				</CardHeader>
+				<CardContent>
 					<Button asChild variant="outline" className="w-full">
 						<Link href="/login">Back to sign in</Link>
 					</Button>
-				</div>
-			</section>
+				</CardContent>
+			</Card>
 		);
 	}
 
 	return (
-		<section className="flex min-w-0 flex-col gap-8">
-			<header className="space-y-3 text-center">
-				<h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Forgot your password?</h1>
+		<Card>
+			<CardHeader className="text-center">
+				<CardTitle as="h1" className="text-xl">
+					Forgot your password?
+				</CardTitle>
 				<div className="text-sm text-muted-foreground">
 					We will email you a link to choose a new one. Your instance must have an email
 					notification channel configured.
 				</div>
-			</header>
-			<div>
+			</CardHeader>
+			<CardContent>
 				<Form {...form}>
 					<form
 						onSubmit={form.handleSubmit(onSubmit)}
@@ -140,7 +142,7 @@ export function ForgotPasswordForm() {
 						</Button>
 					</form>
 				</Form>
-			</div>
-		</section>
+			</CardContent>
+		</Card>
 	);
 }

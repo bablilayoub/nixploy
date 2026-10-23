@@ -9,9 +9,10 @@ import { capabilityHint } from "@/components/services/capability-hint";
 import { RuntimeLogHistory } from "@/components/services/runtime-log-history";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { DateTime } from "@/components/ui/date-time";
 import { DisabledHint } from "@/components/ui/disabled-hint";
-import { Label } from "@/components/ui/label";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
@@ -135,314 +136,323 @@ export function IncidentWorkbench({
 				? "Restore previous deployment"
 				: null;
 	return (
-		<section className="min-w-0 overflow-hidden surface" aria-label="Incident investigation">
-			<div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
-				<h3 className="text-sm font-medium">Investigation</h3>
-				<div className="flex gap-1">
-					<Button
-						type="button"
-						variant="ghost"
-						size="icon-sm"
-						aria-label="Refresh incident"
-						onClick={() => {
-							void query.refetch();
-							void refresh();
-						}}
-					>
-						<RefreshCw className="size-3.5" />
-					</Button>
-					<Button
-						type="button"
-						variant="ghost"
-						size="icon-sm"
-						aria-label="Close investigation"
-						onClick={onClose}
-					>
-						<X className="size-3.5" />
-					</Button>
+		<Card role="region" className="min-w-0" aria-label="Incident investigation">
+			<CardContent className="min-w-0 overflow-hidden">
+				<div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
+					<h3 className="text-sm font-medium">Investigation</h3>
+					<div className="flex gap-1">
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon-sm"
+							aria-label="Refresh incident"
+							onClick={() => {
+								void query.refetch();
+								void refresh();
+							}}
+						>
+							<RefreshCw className="size-3.5" />
+						</Button>
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon-sm"
+							aria-label="Close investigation"
+							onClick={onClose}
+						>
+							<X className="size-3.5" />
+						</Button>
+					</div>
 				</div>
-			</div>
-			<QueryState
-				isPending={query.isPending}
-				isError={query.isError}
-				error={query.error}
-				onRetry={() => void query.refetch()}
-				isEmpty={false}
-				empty={null}
-				skeleton={<Skeleton className="m-4 h-64" />}
-			>
-				{data && (
-					<div className="flex flex-col gap-5 p-4 sm:p-5">
-						<div className="flex flex-col gap-2">
-							<div className="flex flex-wrap items-center gap-2">
-								<Badge variant={data.incident.resolvedAt ? "secondary" : "outline"}>
-									{data.incident.resolvedAt
-										? "Resolved"
-										: data.incident.acknowledgedAt
-											? "Acknowledged"
-											: "Open"}
-								</Badge>
-								<span className="text-xs text-muted-foreground">
-									{data.incident.severity} · <DateTime value={data.incident.createdAt} />
-								</span>
-							</div>
-							<h4 className="break-words text-xl leading-snug font-semibold tracking-tight tracking-tight">
-								{data.incident.title}
-							</h4>
-							<p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">
-								{data.incident.message}
-							</p>
-							{service && serviceHref ? (
-								<Link href={serviceHref} className="text-sm underline underline-offset-4">
-									{service.projectName} / {service.environmentName} / {service.name}
-								</Link>
-							) : (
-								<p className="text-xs text-muted-foreground">
-									No accessible service is linked to this incident. Its recorded evidence remains
-									below.
+				<QueryState
+					isPending={query.isPending}
+					isError={query.isError}
+					error={query.error}
+					onRetry={() => void query.refetch()}
+					isEmpty={false}
+					empty={null}
+					skeleton={<Skeleton className="m-4 h-64" />}
+				>
+					{data && (
+						<div className="flex flex-col gap-5 p-4 sm:p-5">
+							<div className="flex flex-col gap-2">
+								<div className="flex flex-wrap items-center gap-2">
+									<Badge variant={data.incident.resolvedAt ? "secondary" : "outline"}>
+										{data.incident.resolvedAt
+											? "Resolved"
+											: data.incident.acknowledgedAt
+												? "Acknowledged"
+												: "Open"}
+									</Badge>
+									<span className="text-xs text-muted-foreground">
+										{data.incident.severity} · <DateTime value={data.incident.createdAt} />
+									</span>
+								</div>
+								<h4 className="break-words text-xl leading-snug font-semibold tracking-tight tracking-tight">
+									{data.incident.title}
+								</h4>
+								<p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">
+									{data.incident.message}
 								</p>
-							)}
-						</div>
-						{data.recovery && recoveryState && (
-							<div
-								className="flex flex-col gap-2 rounded-lg border bg-panel-inset p-4"
-								role="status"
-							>
-								<p className="text-sm font-medium">{RECOVERY_LABEL[recoveryState]}</p>
-								<p className="text-xs text-muted-foreground">
-									{recoveryActive
-										? "The operation is still in progress. This incident remains open."
-										: recoveryState === "unknown"
-											? "The recovery did not report a result or its deployment is unavailable. Inspect the service before recording a manual resolution. This action will not be replayed."
-											: "Operation completion does not establish application health. Inspect the evidence, verify the service, then record your conclusion."}
-								</p>
-								{(liveRecovery?.errorMessage ?? data.recovery.error) && (
-									<p className="break-words text-xs text-destructive">
-										{liveRecovery?.errorMessage ?? data.recovery.error}
-									</p>
-								)}
-								{data.recovery.deploymentId && serviceHref && (
-									<Button asChild size="sm" variant="outline" className="self-start">
-										<Link
-											href={`${serviceHref}?tab=deployments&deployment=${data.recovery.deploymentId}`}
-										>
-											View recovery deployment
-											<ExternalLink className="size-3.5" />
-										</Link>
-									</Button>
-								)}
-							</div>
-						)}
-						{data.incident.resolvedAt ? (
-							<div className="rounded-lg border bg-panel-inset p-4">
-								<p className="flex items-center gap-2 text-sm font-medium">
-									<Check className="size-4" />
-									Resolved <DateTime value={data.incident.resolvedAt} />
-								</p>
-								{typeof data.incident.metadata?.resolutionNote === "string" && (
-									<p className="mt-2 whitespace-pre-wrap break-words text-sm text-muted-foreground">
-										{data.incident.metadata.resolutionNote}
+								{service && serviceHref ? (
+									<Link href={serviceHref} className="text-sm underline underline-offset-4">
+										{service.projectName} / {service.environmentName} / {service.name}
+									</Link>
+								) : (
+									<p className="text-xs text-muted-foreground">
+										No accessible service is linked to this incident. Its recorded evidence remains
+										below.
 									</p>
 								)}
 							</div>
-						) : (
-							<>
-								{!data.recovery && proposal && (
-									<div className="flex flex-col gap-3 surface p-5">
-										<p className="text-sm font-medium">Proposed recovery</p>
-										<p className="text-xs text-muted-foreground">
-											{applyLabel
-												? "This changes the running service. Apply once, follow the operation, then verify its health."
-												: "There is no automatic action for this proposal. Inspect the service before recording a resolution."}
+							{data.recovery && recoveryState && (
+								<div className="flex flex-col gap-2 rounded-lg border bg-muted p-4" role="status">
+									<p className="text-sm font-medium">{RECOVERY_LABEL[recoveryState]}</p>
+									<p className="text-xs text-muted-foreground">
+										{recoveryActive
+											? "The operation is still in progress. This incident remains open."
+											: recoveryState === "unknown"
+												? "The recovery did not report a result or its deployment is unavailable. Inspect the service before recording a manual resolution. This action will not be replayed."
+												: "Operation completion does not establish application health. Inspect the evidence, verify the service, then record your conclusion."}
+									</p>
+									{(liveRecovery?.errorMessage ?? data.recovery.error) && (
+										<p className="break-words text-xs text-destructive">
+											{liveRecovery?.errorMessage ?? data.recovery.error}
 										</p>
-										<div className="flex flex-wrap gap-2">
-											{applyLabel && (
+									)}
+									{data.recovery.deploymentId && serviceHref && (
+										<Button asChild size="sm" variant="outline" className="self-start">
+											<Link
+												href={`${serviceHref}?tab=deployments&deployment=${data.recovery.deploymentId}`}
+											>
+												View recovery deployment
+												<ExternalLink className="size-3.5" />
+											</Link>
+										</Button>
+									)}
+								</div>
+							)}
+							{data.incident.resolvedAt ? (
+								<div className="rounded-lg border bg-muted p-4">
+									<p className="flex items-center gap-2 text-sm font-medium">
+										<Check className="size-4" />
+										Resolved <DateTime value={data.incident.resolvedAt} />
+									</p>
+									{typeof data.incident.metadata?.resolutionNote === "string" && (
+										<p className="mt-2 whitespace-pre-wrap break-words text-sm text-muted-foreground">
+											{data.incident.metadata.resolutionNote}
+										</p>
+									)}
+								</div>
+							) : (
+								<>
+									{!data.recovery && proposal && (
+										<Card className="min-w-0">
+											<CardContent className="flex flex-col gap-3">
+												<p className="text-sm font-medium">Proposed recovery</p>
+												<p className="text-xs text-muted-foreground">
+													{applyLabel
+														? "This changes the running service. Apply once, follow the operation, then verify its health."
+														: "There is no automatic action for this proposal. Inspect the service before recording a resolution."}
+												</p>
+												<div className="flex flex-wrap gap-2">
+													{applyLabel && (
+														<DisabledHint
+															hint={canApply ? undefined : capabilityHint("service.deploy")}
+														>
+															<Button
+																type="button"
+																size="sm"
+																disabled={!canApply || apply.isPending || dismiss.isPending}
+																onClick={() => apply.mutate({ incidentId })}
+															>
+																{apply.isPending && <Loader2 className="size-3.5 animate-spin" />}
+																{applyLabel}
+															</Button>
+														</DisabledHint>
+													)}
+													<DisabledHint
+														hint={canManage ? undefined : capabilityHint("project.write")}
+													>
+														<Button
+															type="button"
+															size="sm"
+															variant="outline"
+															disabled={!canManage || dismiss.isPending || apply.isPending}
+															onClick={() => dismiss.mutate({ incidentId })}
+														>
+															Dismiss proposal
+														</Button>
+													</DisabledHint>
+												</div>
+											</CardContent>
+										</Card>
+									)}
+									<Field className="border-t pt-4">
+										<div className="flex items-center justify-between gap-2">
+											<h5 className="text-sm font-medium">Verify and resolve</h5>
+											{!data.incident.acknowledgedAt && (
 												<DisabledHint
-													hint={canApply ? undefined : capabilityHint("service.deploy")}
+													hint={canManage ? undefined : capabilityHint("project.write")}
 												>
 													<Button
 														type="button"
 														size="sm"
-														disabled={!canApply || apply.isPending || dismiss.isPending}
-														onClick={() => apply.mutate({ incidentId })}
+														variant="outline"
+														disabled={!canManage || acknowledge.isPending}
+														onClick={() => acknowledge.mutate({ incidentId })}
 													>
-														{apply.isPending && <Loader2 className="size-3.5 animate-spin" />}
-														{applyLabel}
+														Acknowledge
 													</Button>
 												</DisabledHint>
 											)}
-											<DisabledHint hint={canManage ? undefined : capabilityHint("project.write")}>
-												<Button
-													type="button"
-													size="sm"
-													variant="outline"
-													disabled={!canManage || dismiss.isPending || apply.isPending}
-													onClick={() => dismiss.mutate({ incidentId })}
-												>
-													Dismiss proposal
-												</Button>
-											</DisabledHint>
 										</div>
-									</div>
-								)}
-								<div className="flex flex-col gap-3 border-t pt-4">
-									<div className="flex items-center justify-between gap-2">
-										<h5 className="text-sm font-medium">Verify and resolve</h5>
-										{!data.incident.acknowledgedAt && (
-											<DisabledHint hint={canManage ? undefined : capabilityHint("project.write")}>
-												<Button
-													type="button"
-													size="sm"
-													variant="outline"
-													disabled={!canManage || acknowledge.isPending}
-													onClick={() => acknowledge.mutate({ incidentId })}
-												>
-													Acknowledge
-												</Button>
-											</DisabledHint>
-										)}
-									</div>
-									<Label htmlFor={`resolution-${incidentId}`}>What did you verify?</Label>
-									<Textarea
-										id={`resolution-${incidentId}`}
-										value={note}
-										onChange={(event) => setNote(event.target.value)}
-										maxLength={1000}
-										rows={3}
-										placeholder="For example: checked the route and confirmed a successful database-backed request."
-										disabled={!canManage}
-									/>
-									<p className="text-xs text-muted-foreground">
-										{recoveryActive
-											? "Wait for the recovery operation to finish before resolving."
-											: "Record the check you performed. Resolving records your conclusion and does not run a health check."}
-									</p>
-									<DisabledHint hint={canManage ? undefined : capabilityHint("project.write")}>
-										<Button
-											type="button"
-											size="sm"
-											className="self-start"
-											disabled={
-												!canManage ||
-												!note.trim() ||
-												recoveryActive ||
-												resolve.isPending ||
-												apply.isPending
-											}
-											onClick={() => resolve.mutate({ incidentId, note: note.trim() })}
-										>
-											{resolve.isPending && <Loader2 className="size-3.5 animate-spin" />}Resolve
-											with verification note
-										</Button>
-									</DisabledHint>
-								</div>
-							</>
-						)}
-						{serviceHref && (
-							<div className="flex flex-col gap-3 border-t pt-4">
-								<h5 className="text-sm font-medium">Evidence</h5>
-								<div className="flex flex-wrap gap-2">
-									{data.sourceDeployment && (
-										<Button asChild size="sm" variant="outline">
-											<Link
-												href={
-													serviceHref +
-													"?tab=deployments&deployment=" +
-													data.sourceDeployment.deploymentId
+										<FieldLabel htmlFor={`resolution-${incidentId}`}>
+											What did you verify?
+										</FieldLabel>
+										<Textarea
+											id={`resolution-${incidentId}`}
+											value={note}
+											onChange={(event) => setNote(event.target.value)}
+											maxLength={1000}
+											rows={3}
+											placeholder="For example: checked the route and confirmed a successful database-backed request."
+											disabled={!canManage}
+										/>
+										<p className="text-xs text-muted-foreground">
+											{recoveryActive
+												? "Wait for the recovery operation to finish before resolving."
+												: "Record the check you performed. Resolving records your conclusion and does not run a health check."}
+										</p>
+										<DisabledHint hint={canManage ? undefined : capabilityHint("project.write")}>
+											<Button
+												type="button"
+												size="sm"
+												className="self-start"
+												disabled={
+													!canManage ||
+													!note.trim() ||
+													recoveryActive ||
+													resolve.isPending ||
+													apply.isPending
 												}
+												onClick={() => resolve.mutate({ incidentId, note: note.trim() })}
 											>
-												View failed deployment
-											</Link>
+												{resolve.isPending && <Loader2 className="size-3.5 animate-spin" />}Resolve
+												with verification note
+											</Button>
+										</DisabledHint>
+									</Field>
+								</>
+							)}
+							{serviceHref && (
+								<div className="flex flex-col gap-3 border-t pt-4">
+									<h5 className="text-sm font-medium">Evidence</h5>
+									<div className="flex flex-wrap gap-2">
+										{data.sourceDeployment && (
+											<Button asChild size="sm" variant="outline">
+												<Link
+													href={
+														serviceHref +
+														"?tab=deployments&deployment=" +
+														data.sourceDeployment.deploymentId
+													}
+												>
+													View failed deployment
+												</Link>
+											</Button>
+										)}
+										<Button asChild size="sm" variant="outline">
+											<Link href={`${serviceHref}?tab=events`}>Service events</Link>
 										</Button>
-									)}
-									<Button asChild size="sm" variant="outline">
-										<Link href={`${serviceHref}?tab=events`}>Service events</Link>
-									</Button>
-									<Button asChild size="sm" variant="outline">
-										<Link href={`${serviceHref}?tab=monitoring`}>Service metrics</Link>
-									</Button>
-									<DisabledHint hint={canRuntime ? undefined : capabilityHint("service.runtime")}>
-										<Button
-											type="button"
-											size="sm"
-											variant="outline"
-											aria-expanded={showLogs}
-											disabled={!canRuntime}
-											onClick={() => setShowLogs((value) => !value)}
-										>
-											{showLogs ? "Hide runtime evidence" : "Runtime logs around incident"}
+										<Button asChild size="sm" variant="outline">
+											<Link href={`${serviceHref}?tab=monitoring`}>Service metrics</Link>
 										</Button>
-									</DisabledHint>
-								</div>
-								{showLogs && service && (
-									<RuntimeLogHistory
-										appName={service.appName}
-										since={new Date(data.incident.createdAt).getTime() - 15 * 60_000}
-										until={new Date(data.incident.createdAt).getTime() + 15 * 60_000}
-									/>
-								)}
-							</div>
-						)}
-						{data.domains.length > 0 && (
-							<div className="flex flex-col gap-3 border-t pt-4">
-								<h5 className="text-sm font-medium">Routes</h5>
-								{data.domains.map((domain) => (
-									<div
-										key={domain.domainId}
-										className="flex min-w-0 flex-wrap items-center justify-between gap-2"
-									>
-										<span className="min-w-0 break-all font-mono text-xs">
-											{domain.host}
-											{domain.path === "/" ? "" : domain.path}
-										</span>
 										<DisabledHint hint={canRuntime ? undefined : capabilityHint("service.runtime")}>
 											<Button
 												type="button"
-												variant="outline"
 												size="sm"
-												disabled={!canRuntime || diagnosis.isFetching}
-												onClick={() => runDiagnosis(domain.domainId)}
+												variant="outline"
+												aria-expanded={showLogs}
+												disabled={!canRuntime}
+												onClick={() => setShowLogs((value) => !value)}
 											>
-												Diagnose route
+												{showLogs ? "Hide runtime evidence" : "Runtime logs around incident"}
 											</Button>
 										</DisabledHint>
 									</div>
-								))}
-								<p className="text-xs text-muted-foreground">
-									Diagnosis runs only when requested and can start a temporary network probe.
-								</p>
-								{diagnosing && (
-									<QueryState
-										isPending={diagnosis.isPending}
-										isError={diagnosis.isError}
-										error={diagnosis.error}
-										onRetry={() => diagnosing && runDiagnosis(diagnosing)}
-										isEmpty={false}
-										empty={null}
-									>
-										<div className="rounded-lg border p-3">
-											<p className="mb-2 text-sm font-medium">
-												{diagnosis.data?.host} · {diagnosis.data?.verdict}
-											</p>
-											<ul className="flex flex-col gap-3">
-												{diagnosis.data?.findings.map((finding) => (
-													<li key={finding.id} className="text-xs">
-														<p className="font-medium">
-															{finding.status}: {finding.title}
-														</p>
-														<p className="text-muted-foreground">{finding.detail}</p>
-														{finding.fix && <p className="mt-1">{finding.fix}</p>}
-													</li>
-												))}
-											</ul>
+									{showLogs && service && (
+										<RuntimeLogHistory
+											appName={service.appName}
+											since={new Date(data.incident.createdAt).getTime() - 15 * 60_000}
+											until={new Date(data.incident.createdAt).getTime() + 15 * 60_000}
+										/>
+									)}
+								</div>
+							)}
+							{data.domains.length > 0 && (
+								<div className="flex flex-col gap-3 border-t pt-4">
+									<h5 className="text-sm font-medium">Routes</h5>
+									{data.domains.map((domain) => (
+										<div
+											key={domain.domainId}
+											className="flex min-w-0 flex-wrap items-center justify-between gap-2"
+										>
+											<span className="min-w-0 break-all font-mono text-xs">
+												{domain.host}
+												{domain.path === "/" ? "" : domain.path}
+											</span>
+											<DisabledHint
+												hint={canRuntime ? undefined : capabilityHint("service.runtime")}
+											>
+												<Button
+													type="button"
+													variant="outline"
+													size="sm"
+													disabled={!canRuntime || diagnosis.isFetching}
+													onClick={() => runDiagnosis(domain.domainId)}
+												>
+													Diagnose route
+												</Button>
+											</DisabledHint>
 										</div>
-									</QueryState>
-								)}
-							</div>
-						)}
-					</div>
-				)}
-			</QueryState>
-		</section>
+									))}
+									<p className="text-xs text-muted-foreground">
+										Diagnosis runs only when requested and can start a temporary network probe.
+									</p>
+									{diagnosing && (
+										<QueryState
+											isPending={diagnosis.isPending}
+											isError={diagnosis.isError}
+											error={diagnosis.error}
+											onRetry={() => diagnosing && runDiagnosis(diagnosing)}
+											isEmpty={false}
+											empty={null}
+										>
+											<div className="rounded-lg border p-3">
+												<p className="mb-2 text-sm font-medium">
+													{diagnosis.data?.host} · {diagnosis.data?.verdict}
+												</p>
+												<ul className="flex flex-col gap-3">
+													{diagnosis.data?.findings.map((finding) => (
+														<li key={finding.id} className="text-xs">
+															<p className="font-medium">
+																{finding.status}: {finding.title}
+															</p>
+															<p className="text-muted-foreground">{finding.detail}</p>
+															{finding.fix && <p className="mt-1">{finding.fix}</p>}
+														</li>
+													))}
+												</ul>
+											</div>
+										</QueryState>
+									)}
+								</div>
+							)}
+						</div>
+					)}
+				</QueryState>
+			</CardContent>
+		</Card>
 	);
 }
