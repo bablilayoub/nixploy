@@ -11,6 +11,14 @@ this file is the summary.
 
 ## Unreleased
 
+### Fixed
+
+- Docker and Compose container listings explicitly disable Docker's implicit size probe, so stale
+  tasks with missing writable-layer snapshots cannot block the Containers tab.
+  System keeps engine details visible when that snapshot error prevents disk
+  accounting, identifies the affected container and offers a retry. No containers
+  or volumes are removed automatically; other daemon failures remain errors.
+
 ## [0.8.0] — 2026-10-23
 
 ### Known regressions and upgrade requirements
