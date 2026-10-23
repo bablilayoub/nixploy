@@ -35,7 +35,7 @@ export function PageHeader({
 				)}
 			>
 				<div className="flex min-w-0 flex-1 flex-col gap-2">
-					<h1 className="text-2xl leading-tight font-semibold tracking-tight break-words sm:text-[1.75rem]">
+					<h1 className="text-2xl leading-tight font-semibold tracking-tight break-words sm:text-[2rem]">
 						{title}
 					</h1>
 					{/* Wraps rather than truncates: page descriptions carry links and

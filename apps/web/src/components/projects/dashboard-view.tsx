@@ -149,7 +149,7 @@ export function DashboardView() {
 					onRetry={() => refetch()}
 					isEmpty={!filtered?.length}
 					skeleton={
-						<div className="rounded-lg border bg-card">
+						<div className="rounded-[20px] border border-border bg-background">
 							<Table>
 								<TableBody>
 									{[1, 2, 3].map((index) => (
@@ -201,7 +201,7 @@ export function DashboardView() {
 						)
 					}
 				>
-					<div className="rounded-lg border bg-card">
+					<div className="rounded-[20px] border border-border bg-background">
 						<Table>
 							<caption className="sr-only">
 								Projects and their environments, service counts and health

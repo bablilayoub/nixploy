@@ -13,7 +13,7 @@ import { templateCount } from "./templates";
  */
 
 /** The fold's two lines; the second one is the quiet half of the promise. */
-export const heroTitle = ["Your stack.", "Your servers."] as const;
+export const heroTitle = ["Your apps and databases.", "On your servers."] as const;
 
 export const heroLead =
 	"Deploy applications, databases and Compose stacks on your servers. One workspace for releases and operations.";

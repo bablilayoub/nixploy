@@ -33,7 +33,12 @@
 		"apps/landing": {
 			"entry": ["next.config.ts", "postcss.config.mjs", "scripts/*.mts"],
 			"project": ["**/*.{ts,tsx,mts,mjs}"],
-			"ignore": ["next-env.d.ts", "src/components/ui/**", "src/components/kokonutui/**"],
+			"ignore": [
+				"next-env.d.ts",
+				".next*/**",
+				"src/components/ui/**",
+				"src/components/kokonutui/**"
+			],
 			"ignoreDependencies": ["postcss", "tailwindcss", "tw-animate-css"]
 		},
 		"apps/cli": {

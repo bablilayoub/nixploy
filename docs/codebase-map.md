@@ -278,9 +278,12 @@ The platform shell composes `components/ui/sidebar.tsx` through
 240px desktop sidebar and the library Sheet below1024px, with existing command,
 organization, activity and account controls. Project inventory uses shadcn Table;
 shared settings sections use Card header/content/footer. The public website
-composes NavigationMenu, Tabs, Input and existing Magic UI Safari/BlurFade/Bento
+composes NavigationMenu, Tabs, Input and existing Magic UI BlurFade/Marquee/Bento
 primitives; `src/app/site.css` owns its shared page-family geometry. Actual panel
 images are mapped in `src/lib/product-captures.ts` with content-addressed URLs.
+The latest user-provided Mobbin reference controls centered display hierarchy,
+pill actions, soft image panels, the gallery and both light/dark palettes; see
+`.ui-craft/mobbin-reference.md`.
 
 **Edits made to vendored components, and why** (each is commented in place):
 the navbar ships `sticky top-20` (overridden to `top-0` from the composition);

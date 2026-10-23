@@ -38,3 +38,11 @@ overlay #1c1c1c, primary/foreground #fafafa, secondary/inset #222222, muted text
 explicit labels/icons; chart series use distinct gray levels and labels. Brand
 icons may keep authentic colors. Saved custom branding values are preserved.
 Geist and Geist Mono remain; no new font or component runtime dependency.
+
+## Mobbin-reference geometry
+
+White #fff / graphite #141414 canvases; foreground #141414 / #fafafa. Soft panels
+#f5f5f5 / #222222, subdued boundaries #eaeaea / #333333. Supporting text #707070 /
+#b3b3b3. Geist650 display and600 controls;80/80 hero,44/48 section,56/56 close on
+desktop with fluid mobile sizes. Full-pill actions/nav;12px inputs,20px cards,
+24px dialog/image panels,32px large preview shell. Light/dark/System persist.

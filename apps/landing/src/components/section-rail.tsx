@@ -67,7 +67,7 @@ export function SectionRail({
 										: "text-muted-foreground hover:text-foreground",
 								)}
 							>
-								<span className="font-mono text-[11px] text-muted-foreground/70">
+								<span className="font-mono text-[11px] text-muted-foreground">
 									{String(index + 1).padStart(2, "0")}
 								</span>
 								{item.label}

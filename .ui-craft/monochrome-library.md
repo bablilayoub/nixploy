@@ -1,3 +1,6 @@
+Visual system superseded by [Mobbin-reference rebuild](mobbin-reference.md).
+The library integration and rollout notes below are retained as history.
+
 # Monochrome platform and website — 2026-10-23
 
 This is the current design authority. It supersedes the earlier Signal website

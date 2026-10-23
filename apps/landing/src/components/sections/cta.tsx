@@ -1,24 +1,35 @@
-import { ArrowRight } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import { InstallCommand } from "@/components/install-command";
 import { Button } from "@/components/ui/button";
+import { site } from "@/lib/site";
 export function Cta() {
 	return (
-		<section className="signal-cta border-t">
-			<div className="container-page grid min-w-0 items-center gap-8 lg:grid-cols-2">
-				<div>
-					<h2 className="text-3xl font-medium tracking-tight">Your next deployment starts here.</h2>
-					<p className="mt-4 max-w-md text-sm leading-relaxed text-muted-foreground">
-						One command on a Linux server. No license key, no per-seat charge, no feature gates.
-					</p>
-					<Button asChild variant="link" className="mt-5">
-						<Link href="/docs/install">
-							Read the installation guide
-							<ArrowRight aria-hidden="true" data-icon="inline-end" />
-						</Link>
+		<section className="signal-cta">
+			<div className="container-page text-center">
+				<h2>
+					Make room for
+					<br />
+					your next idea.
+				</h2>
+				<p className="mx-auto mt-6 max-w-md text-base leading-relaxed text-muted-foreground">
+					One command on your Linux server.
+					<br />
+					Your apps, your data, your platform.
+				</p>
+				<div className="mt-8 flex flex-wrap justify-center gap-2">
+					<Button asChild size="lg">
+						<Link href="/docs/install">Install Nixploy</Link>
+					</Button>
+					<Button asChild variant="secondary" size="lg">
+						<a href={site.github} target="_blank" rel="noreferrer">
+							View source <ArrowUpRight aria-hidden="true" className="size-4" />
+						</a>
 					</Button>
 				</div>
-				<InstallCommand />
+				<div className="mx-auto mt-10 max-w-2xl text-left">
+					<InstallCommand />
+				</div>
 			</div>
 		</section>
 	);

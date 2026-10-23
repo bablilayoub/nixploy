@@ -8,7 +8,7 @@
 <h1 align="center">Nixploy</h1>
 
 <p align="center">
-  <strong>Your stack. Your servers.</strong><br />
+  <strong>Your apps and databases. On your servers.</strong><br />
   Deploy applications, Compose stacks and databases on your own servers. One workspace for releases, domains, logs and backups.
 </p>
 
@@ -31,8 +31,8 @@
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="apps/landing/public/screenshots/workspace-dark-ad3d81f289.png" />
-    <img src="apps/landing/public/screenshots/workspace-light-d4f41b1fab.png" alt="Nixploy project overview with environments, service health and deployment activity" width="960" />
+    <source media="(prefers-color-scheme: dark)" srcset="apps/landing/public/screenshots/workspace-dark-590515bb09.png" />
+    <img src="apps/landing/public/screenshots/workspace-light-033ece53d2.png" alt="Nixploy project overview with environments, service health and deployment activity" width="960" />
   </picture>
 </p>
 
@@ -93,15 +93,15 @@ Product docs: [nixploy.com/docs](https://nixploy.com/docs) · API: [nixploy.com/
 Projects bring environments and services together. Every service keeps its source,
 deployments, runtime, domains, environment and backups in a consistent navigation.
 The workspace and public website share monochrome light, dark and system themes.
-Navigation, forms and resource tables use shadcn/ui components, with real product
-captures in the website’s Magic UI preview.
+Navigation, forms and resource tables use shadcn/ui components. The website uses
+a centered product introduction, soft image panels and real workspace captures.
 
 <details>
 <summary>Projects and environments</summary>
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="apps/landing/public/screenshots/project-dark-158badc764.png" />
-  <img src="apps/landing/public/screenshots/project-light-3a7d452069.png" alt="Project services organized by environment" width="960" />
+  <source media="(prefers-color-scheme: dark)" srcset="apps/landing/public/screenshots/project-dark-9afe35cc6d.png" />
+  <img src="apps/landing/public/screenshots/project-light-53e51d0d56.png" alt="Project services organized by environment" width="960" />
 </picture>
 
 </details>
@@ -110,8 +110,8 @@ captures in the website’s Magic UI preview.
 <summary>Deployment history</summary>
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="apps/landing/public/screenshots/deployments-dark-f881a13e5e.png" />
-  <img src="apps/landing/public/screenshots/deployments-light-c33ffe00b7.png" alt="Deployment history with commit details and release status" width="960" />
+  <source media="(prefers-color-scheme: dark)" srcset="apps/landing/public/screenshots/deployments-dark-e8b023aa23.png" />
+  <img src="apps/landing/public/screenshots/deployments-light-146b383060.png" alt="Deployment history with commit details and release status" width="960" />
 </picture>
 
 </details>
@@ -120,8 +120,8 @@ captures in the website’s Magic UI preview.
 <summary>Fleet monitoring</summary>
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="apps/landing/public/screenshots/monitoring-dark-ac7b2256af.png" />
-  <img src="apps/landing/public/screenshots/monitoring-light-a02192ab09.png" alt="Searchable service inventory and selected service monitoring" width="960" />
+  <source media="(prefers-color-scheme: dark)" srcset="apps/landing/public/screenshots/monitoring-dark-7ad8d9fc58.png" />
+  <img src="apps/landing/public/screenshots/monitoring-light-7b4fef7822.png" alt="Searchable service inventory and selected service monitoring" width="960" />
 </picture>
 
 </details>
@@ -130,8 +130,8 @@ captures in the website’s Magic UI preview.
 <summary>Template catalog</summary>
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="apps/landing/public/screenshots/templates-dark-5755950227.png" />
-  <img src="apps/landing/public/screenshots/templates-light-3913b88f9f.png" alt="Searchable catalog of applications and databases" width="960" />
+  <source media="(prefers-color-scheme: dark)" srcset="apps/landing/public/screenshots/templates-dark-81822f729b.png" />
+  <img src="apps/landing/public/screenshots/templates-light-898f48a702.png" alt="Searchable catalog of applications and databases" width="960" />
 </picture>
 
 </details>
@@ -140,8 +140,8 @@ captures in the website’s Magic UI preview.
 <summary>Servers</summary>
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="apps/landing/public/screenshots/servers-dark-47f7cdd142.png" />
-  <img src="apps/landing/public/screenshots/servers-light-3177335e6f.png" alt="Server inventory and infrastructure management" width="960" />
+  <source media="(prefers-color-scheme: dark)" srcset="apps/landing/public/screenshots/servers-dark-f2b0fbc84d.png" />
+  <img src="apps/landing/public/screenshots/servers-light-60ff85d0b7.png" alt="Server inventory and infrastructure management" width="960" />
 </picture>
 
 </details>

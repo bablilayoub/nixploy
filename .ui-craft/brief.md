@@ -82,3 +82,28 @@ repo tenancy/security constraints and existing component APIs. No global skills
 installation or preset overwrite is needed. Full-site source/family inventory,
 fixture browser tests, independent design/a11y review and preservation proof remain
 required before finishing. Do not mistake reachability counts for good design.
+
+## Latest authority — Mobbin reference (2026-10-23)
+
+The user provides a full-page Mobbin screenshot and explicitly asks to copy its
+visual system, with dark and light modes. This supersedes the split-hero,
+border-heavy monochrome composition. Preserve Nixploy branding, routes, content
+facts, conversion paths, library primitives and all primary data/settings.
+
+Measured reference: centered80px/80 headline,652 weight,44px/48 section titles,
+compact44px pill actions, white/#141414 neutrals, soft gray panels, generous
+vertical spacing, image gallery, six image-led capability tiles, split agent
+section, gray support band and centered closing CTA. Reuse existing Geist with
+these proportions; proprietary Saans font files and Mobbin imagery are not assets
+for this repository. Actual colored service marks remain allowed.
+
+Website before→after: split hero+duplicated screenshot → centered inline-brand
+hero+large tabbed product preview; bordered feature cards → screenshot gallery
+and six soft image tiles; governance list → gray open-platform band; split install
+close → centered CTA+copyable command; thin white footer → quiet dark sitemap.
+Platform: the same white/graphite surfaces, pill controls and navigation,20px
+panels,12px fields,24px dialogs and stronger headings; real resource/form density
+and responsive sidebar behavior remain. Do not import marketing animation into
+working forms. Craft9, variance4, density6 app/3 website, motion3 app/4 website.
+Signature: genuine service marks inside the centered headline, then real product
+screens shown as a gallery. The six equal tiles are an explicit reference choice.

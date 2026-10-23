@@ -52,7 +52,7 @@ export function TopNav() {
 		.find((item) => isSidebarNavActive(pathname, item.url));
 	return (
 		<div ref={chrome} className="sticky top-0 z-30 bg-background">
-			<header className="flex min-h-16 min-w-0 items-center justify-between gap-3 border-b px-4 sm:px-6">
+			<header className="flex min-h-16 min-w-0 items-center justify-between gap-3 border-b border-border/50 px-4 sm:px-6">
 				<div className="flex min-w-0 items-center gap-3">
 					<SidebarTrigger className="size-11 shrink-0" aria-controls="workspace-navigation" />
 					<Separator orientation="vertical" className="h-5" />

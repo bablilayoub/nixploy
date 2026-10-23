@@ -1,4 +1,4 @@
-Current design and verification: [Monochrome library rebuild](monochrome-library.md).
+Current design and verification: [Mobbin-reference rebuild](mobbin-reference.md).
 The checkpoints below describe previous implementations.
 
 # Fieldwork frontend verification — 2026-10-21

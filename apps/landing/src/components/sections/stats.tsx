@@ -1,25 +1,34 @@
+import { TemplateLogo } from "@/components/template-logo";
 import { stats } from "@/lib/landing-data";
+
+const integrations = [
+	{ name: "GitHub", logo: "github" },
+	{ name: "GitLab", logo: "gitlab" },
+	{ name: "Docker", logo: "docker" },
+	{ name: "PostgreSQL", logo: "postgresql" },
+	{ name: "Redis", logo: "redis" },
+];
 export function Stats() {
 	return (
-		<section aria-label="Included in the platform" className="container-page py-12">
-			<div className="signal-proof-strip">
-				<p className="max-w-xs text-lg font-medium tracking-tight">
-					Small control plane.
-					<br />
-					<span className="text-muted-foreground">Full platform.</span>
-				</p>
-				<dl className="grid flex-1 grid-cols-1 gap-8 sm:grid-cols-3">
-					{stats
-						.filter((stat) => stat.id !== "control-plane")
-						.map((stat) => (
-							<div key={stat.id}>
-								<dt className="text-xs text-muted-foreground">{stat.label}</dt>
-								<dd className="mt-2 font-mono text-3xl tracking-tight">{stat.value}</dd>
-								<dd className="mt-2 text-xs text-muted-foreground">{stat.note}</dd>
-							</div>
-						))}
-				</dl>
-			</div>
+		<section
+			aria-label="Supported tools and platform facts"
+			className="reference-integrations container-page"
+		>
+			<p className="text-xs text-muted-foreground">Made for the tools you already use</p>
+			<ul className="mt-7 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 sm:gap-x-12">
+				{integrations.map((tool) => (
+					<li key={tool.name} className="flex items-center gap-2 text-base font-semibold">
+						<TemplateLogo name={tool.name} logo={tool.logo} />
+						{tool.name}
+					</li>
+				))}
+			</ul>
+			<p className="mt-8 text-xs text-muted-foreground">
+				{stats
+					.filter((s) => s.id !== "control-plane")
+					.map((s) => `${s.value} ${s.label.toLowerCase()}`)
+					.join(" · ")}
+			</p>
 		</section>
 	);
 }

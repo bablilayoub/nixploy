@@ -58,7 +58,7 @@ export function OverviewCards({ onAttention }: { onAttention: () => void }) {
 		<section
 			aria-label="Workspace summary"
 			aria-busy={isPending}
-			className="grid grid-cols-2 gap-3 xl:grid-cols-4"
+			className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,8rem),1fr))] gap-3 xl:grid-cols-4"
 		>
 			{metrics.map((metric) => (
 				<Card key={metric.label} className="gap-2 py-4">

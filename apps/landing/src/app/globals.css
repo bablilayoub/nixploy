@@ -14,24 +14,24 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-	--radius: 0.5rem;
-	--background: #fafafa;
-	--foreground: #171717;
-	--card: #ffffff;
+	--radius: 0.75rem;
+	--background: #ffffff;
+	--foreground: #141414;
+	--card: #f5f5f5;
 	--card-foreground: var(--foreground);
 	--popover: #ffffff;
 	--popover-foreground: var(--foreground);
-	--primary: #171717;
+	--primary: #141414;
 	--primary-foreground: #ffffff;
 	--brand: var(--primary);
 	--secondary: #f5f5f5;
 	--secondary-foreground: var(--foreground);
 	--muted: #f5f5f5;
-	--muted-foreground: #636363;
+	--muted-foreground: #6b6b6b;
 	--accent: #f0f0f0;
 	--accent-foreground: var(--foreground);
 	--destructive: #242424;
-	--border: #e5e5e5;
+	--border: #eaeaea;
 	--input: #8a8a8a;
 	--ring: #525252;
 	--control: #ffffff;
@@ -46,11 +46,11 @@
 	--chart-3: color-mix(in oklab, var(--foreground) 60%, transparent);
 	--chart-4: color-mix(in oklab, var(--foreground) 45%, transparent);
 	--chart-5: color-mix(in oklab, var(--foreground) 30%, transparent);
-	--sidebar: #f5f5f5;
+	--sidebar: #ffffff;
 	--sidebar-foreground: var(--foreground);
 	--sidebar-primary: var(--primary);
 	--sidebar-primary-foreground: var(--primary-foreground);
-	--sidebar-accent: #e8e8e8;
+	--sidebar-accent: #f0f0f0;
 	--sidebar-accent-foreground: var(--foreground);
 	--sidebar-border: var(--border);
 	--sidebar-ring: var(--ring);
@@ -60,14 +60,14 @@
 }
 
 .dark {
-	--background: #0a0a0a;
+	--background: #141414;
 	--foreground: #fafafa;
-	--card: #141414;
+	--card: #222222;
 	--card-foreground: var(--foreground);
 	--popover: #1c1c1c;
 	--popover-foreground: var(--foreground);
 	--primary: #fafafa;
-	--primary-foreground: #171717;
+	--primary-foreground: #141414;
 	--brand: var(--primary);
 	--secondary: #222222;
 	--secondary-foreground: var(--foreground);
@@ -76,7 +76,7 @@
 	--accent: #262626;
 	--accent-foreground: var(--foreground);
 	--destructive: #e5e5e5;
-	--border: #303030;
+	--border: #333333;
 	--input: #737373;
 	--ring: #a3a3a3;
 	--control: #141414;
@@ -86,7 +86,7 @@
 	--success: #d4d4d4;
 	--warning: #bfbfbf;
 	--info: #a3a3a3;
-	--sidebar: #101010;
+	--sidebar: #141414;
 	--sidebar-accent: #242424;
 	--surface-shadow: 0 1px 3px rgb(0 0 0 / 18%), 0 1px 0 rgb(255 255 255 / 3%) inset;
 	--overlay-shadow: 0 24px 80px -20px rgb(0 0 0 / 65%), 0 0 0 1px rgb(255 255 255 / 3%) inset;
@@ -206,7 +206,7 @@
 @utility container-page {
 	margin-inline: auto;
 	width: 100%;
-	max-width: 86rem;
+	max-width: 76rem;
 	padding-inline: clamp(16px, 3vw, 24px);
 }
 
@@ -367,7 +367,7 @@
 
 @utility surface {
 	border: 1px solid var(--border);
-	border-radius: 14px;
+	border-radius: 20px;
 	background: var(--card);
 	box-shadow: var(--surface-shadow);
 }
@@ -414,7 +414,7 @@
 
 [data-slot="card"] {
 	min-width: 0;
-	border-radius: 14px;
+	border-radius: 20px;
 	background: var(--card);
 	box-shadow: var(--surface-shadow);
 }

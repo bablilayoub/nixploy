@@ -34,18 +34,8 @@ export function ProductShot() {
 			aria-label="Explore the Nixploy workspace"
 			className="signal-product container-page scroll-mt-24"
 		>
-			<div className="signal-product-heading">
-				<h2>Explore the workspace.</h2>
-				<p>
-					Projects, releases and operations, connected in one workspace. Explore the actual panel
-					below.
-				</p>
-			</div>
-			<Tabs
-				defaultValue="workspace"
-				className="overflow-hidden rounded-xl border bg-card shadow-[var(--surface-shadow)]"
-			>
-				<div className="flex flex-wrap items-center justify-between gap-x-5 border-b px-3 sm:px-5">
+			<Tabs defaultValue="workspace" className="reference-product-frame">
+				<div className="flex flex-wrap items-center justify-between gap-x-5 rounded-t-2xl bg-background px-3 sm:px-5">
 					<TabsList
 						aria-label="Workspace preview"
 						className="flex min-w-0 flex-wrap gap-x-2 sm:gap-x-5"
@@ -73,7 +63,7 @@ export function ProductShot() {
 								aria-label={`${view.label} screenshot, horizontally scrollable on small screens`}
 								// biome-ignore lint/a11y/noNoninteractiveTabindex: keyboard users need to scroll the screenshot viewport
 								tabIndex={0}
-								className="max-h-[600px] overflow-auto bg-background sm:max-h-[720px]"
+								className="max-h-[430px] overflow-auto bg-background sm:max-h-[620px]"
 							>
 								{(["light", "dark"] as const).map((theme) => (
 									<Image
@@ -88,7 +78,7 @@ export function ProductShot() {
 									/>
 								))}
 							</section>
-							<figcaption className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2 border-t px-5 py-4 text-sm">
+							<figcaption className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2 px-5 py-4 text-xs">
 								<p className="max-w-xl text-muted-foreground">{view.description}</p>
 								{(["light", "dark"] as const).map((theme) => (
 									<a

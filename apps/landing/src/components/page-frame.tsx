@@ -57,7 +57,10 @@ export function PageFrame({
 				{title ? (
 					<header className="signal-page-hero">
 						<Reveal
-							className={cn("container-page relative z-10", width === "prose" && "max-w-3xl")}
+							className={cn(
+								"container-page relative z-10 text-center",
+								width === "prose" && "max-w-3xl",
+							)}
 						>
 							{mark ? (
 								<span className="mb-5 inline-flex size-14 items-center justify-center rounded-xl border bg-card">
@@ -65,15 +68,17 @@ export function PageFrame({
 								</span>
 							) : null}
 							{eyebrow ? <p className="signal-kicker">{eyebrow}</p> : null}
-							<h1 className="mt-4 max-w-5xl text-4xl leading-[1.08] font-medium tracking-[-0.045em] text-balance sm:text-5xl lg:text-6xl">
+							<h1 className="mx-auto mt-4 max-w-5xl text-4xl leading-[1.08] font-medium tracking-[-0.045em] text-balance sm:text-5xl lg:text-6xl">
 								{title}
 							</h1>
 							{description ? (
-								<p className="mt-6 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
+								<p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
 									{description}
 								</p>
 							) : null}
-							{actions ? <div className="mt-8 flex flex-wrap gap-3">{actions}</div> : null}
+							{actions ? (
+								<div className="mt-8 flex flex-wrap justify-center gap-3">{actions}</div>
+							) : null}
 						</Reveal>
 					</header>
 				) : null}

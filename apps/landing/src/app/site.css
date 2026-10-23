@@ -56,7 +56,7 @@
 	max-height: 80svh;
 	overflow: auto;
 	border: 1px solid var(--border);
-	border-radius: 12px;
+	border-radius: 24px;
 	background: var(--popover);
 	color: var(--foreground);
 	box-shadow: var(--overlay-shadow);
@@ -67,13 +67,10 @@
 	justify-content: space-between;
 	gap: 16px;
 	padding: 12px 16px;
-	border-radius: 6px;
+	border-radius: 12px;
 }
 .signal-search-result:hover {
 	background: var(--accent);
-}
-.mono-hero {
-	padding: 160px 0 72px;
 }
 .signal-kicker {
 	font-size: 0.75rem;
@@ -99,14 +96,15 @@
 }
 .signal-page-hero {
 	border-bottom: 1px solid var(--border);
-	padding: 144px 0 48px;
+	padding: 176px 0 72px;
+	border: 0;
 }
 .signal-page-hero h1 {
 	max-width: 850px;
-	font-size: clamp(2.25rem, 4vw, 3.25rem);
+	font-size: clamp(2.5rem, 4.3vw, 3.5rem);
 	line-height: 1.12;
 	letter-spacing: -0.04em;
-	font-weight: 500;
+	font-weight: 650;
 }
 .signal-page-body {
 	padding-top: 48px;
@@ -116,8 +114,8 @@
 	scroll-margin-top: 100px;
 }
 .signal-product {
-	padding-top: 80px;
-	padding-bottom: 88px;
+	padding-top: 0;
+	padding-bottom: 0;
 }
 .signal-product-heading {
 	display: flex;
@@ -141,6 +139,7 @@
 }
 .signal-cta {
 	padding: 64px 0;
+	padding-block: 144px;
 }
 .install-command {
 	min-width: 0;
@@ -179,6 +178,19 @@
 	border-top: 1px solid var(--border);
 	padding: 56px 0 28px;
 	background: var(--background);
+	--background: #141414;
+	--foreground: #fafafa;
+	--card: #222222;
+	--primary: #fafafa;
+	--primary-foreground: #141414;
+	--muted-foreground: #b3b3b3;
+	--border: #333333;
+	--accent: #262626;
+	--input: #737373;
+	color: var(--foreground);
+	padding-top: 80px;
+	border: 0;
+	border-radius: 32px 32px 0 0;
 }
 .signal-footer a {
 	max-width: 100%;
@@ -282,7 +294,7 @@
 .signal-free-plan {
 	padding: 32px;
 	border: 1px solid var(--input);
-	border-radius: 12px;
+	border-radius: 24px;
 	background: var(--card);
 }
 .signal-price {
@@ -433,12 +445,311 @@ button[aria-label="Code copied"],
 	.signal-free-plan {
 		padding: 24px;
 	}
-	.signal-product {
-		padding-block: 64px;
-	}
 }
 @media (max-width: 380px) {
 	.site-topbar a[aria-label="Nixploy"] .font-display {
 		display: none;
 	}
+}
+
+/* Mobbin reference: centered type, pill actions and soft image-led panels. */
+.reference-hero {
+	padding-top: 176px;
+	padding-bottom: 104px;
+	text-align: center;
+}
+.reference-headline {
+	margin-inline: auto;
+	max-width: 60rem;
+	font-size: clamp(2rem, 5.6vw, 5rem);
+	font-weight: 650;
+	line-height: 1.02;
+	letter-spacing: -0.045em;
+}
+.reference-headline > span {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: center;
+	column-gap: 0.18em;
+}
+.reference-inline-mark {
+	width: 0.84em;
+	height: 0.84em;
+	margin-inline: 0.02em;
+	border-radius: 22%;
+	background: var(--muted);
+	vertical-align: middle;
+	font-size: inherit;
+}
+.reference-inline-mark img {
+	width: 70%;
+	height: 70%;
+	background: transparent;
+}
+.reference-hero-lead {
+	max-width: 27.5rem;
+	margin: 2rem auto 0;
+	font-size: 1rem;
+	line-height: 1.45;
+	color: var(--muted-foreground);
+}
+.reference-section {
+	padding-block: 112px;
+}
+.reference-section-heading {
+	margin: 0 auto 48px;
+	text-align: center;
+}
+.reference-section h2,
+.reference-open-platform h2 {
+	font-size: clamp(2rem, 3.1vw, 2.75rem);
+	font-weight: 650;
+	line-height: 1.1;
+	letter-spacing: -0.04em;
+}
+.reference-product-frame {
+	padding: 24px 24px 0;
+	gap: 0;
+	overflow: hidden;
+	border-radius: 32px;
+	background: var(--muted);
+}
+.reference-product-frame [role="tablist"] {
+	height: auto;
+	background: transparent;
+	box-shadow: none;
+}
+.reference-product-frame [role="tabpanel"] {
+	border-radius: 0 0 16px 16px;
+	overflow: hidden;
+}
+.reference-product-frame figcaption {
+	background: var(--background);
+}
+.reference-integrations {
+	padding-top: 56px;
+	padding-bottom: 32px;
+	text-align: center;
+}
+.reference-integrations li > span {
+	width: 24px;
+	height: 24px;
+	border: 0;
+}
+.reference-integrations :where(li) img {
+	width: 22px;
+	height: 22px;
+}
+.reference-gallery-intro {
+	max-width: 800px;
+	margin-bottom: 56px;
+}
+.reference-gallery-intro > p {
+	margin-top: 2rem;
+	font-size: clamp(1.375rem, 2.4vw, 2rem);
+	font-weight: 550;
+	line-height: 1.18;
+	letter-spacing: -0.035em;
+	color: var(--muted-foreground);
+}
+.reference-gallery-intro > a {
+	margin-top: 28px;
+}
+.reference-gallery-card {
+	width: min(520px, 85vw);
+	padding: 16px 16px 0;
+	overflow: hidden;
+	border-radius: 24px;
+	background: var(--muted);
+}
+.reference-gallery-image {
+	display: block;
+	height: 315px;
+	overflow: hidden;
+	border-radius: 12px 12px 0 0;
+	background: var(--background);
+}
+.reference-capabilities {
+	gap: 16px;
+}
+.reference-capability-card {
+	height: 350px;
+	padding-top: 28px;
+	padding-bottom: 0;
+	gap: 24px;
+	overflow: hidden;
+	border: 0;
+	border-radius: 24px;
+	background: var(--muted);
+	box-shadow: none;
+}
+.reference-capability-image {
+	position: relative;
+	height: 245px;
+	min-width: 0;
+	margin-left: 28px;
+	overflow: hidden;
+	border-radius: 12px 0 0 0;
+	background: var(--background);
+}
+.reference-capability-image img {
+	width: 680px;
+	height: 100%;
+	transform: translateX(-100px);
+}
+.reference-agent-layout {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+	gap: 80px;
+	align-items: center;
+}
+.reference-agent-visual {
+	min-width: 0;
+	position: relative;
+	padding: 32px 32px 0;
+	overflow: hidden;
+	border-radius: 24px;
+	background: var(--muted);
+}
+.reference-agent-prompt {
+	max-width: 270px;
+	margin-left: auto;
+	margin-bottom: 28px;
+	padding: 20px;
+	border-radius: 20px 20px 4px 20px;
+	background: var(--accent);
+}
+.reference-agent-image {
+	height: 340px;
+	overflow: hidden;
+	border-radius: 12px 12px 0 0;
+}
+.reference-agent-image img {
+	width: 760px;
+	height: auto;
+	transform: translateX(-160px);
+}
+.reference-agent-mark {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding-block: 20px;
+}
+.reference-open-platform {
+	padding-block: 112px;
+	background: var(--muted);
+}
+.reference-open-platform dl {
+	padding: 12px 24px;
+	border-radius: 24px;
+	background: var(--background);
+}
+.reference-open-platform dl > div {
+	border-color: var(--border);
+}
+
+.signal-cta h2 {
+	font-size: clamp(2.25rem, 4vw, 3.5rem);
+	font-weight: 650;
+	line-height: 1.02;
+	letter-spacing: -0.045em;
+}
+.signal-cta .install-command {
+	border-color: transparent;
+	border-radius: 20px;
+	background: var(--muted);
+}
+.signal-cta .install-command-title {
+	border-color: var(--border);
+}
+
+.signal-template-card,
+.signal-featured-template {
+	border: 0;
+	border-radius: 20px;
+	background: var(--muted);
+}
+.signal-template-card:hover,
+.signal-featured-template:hover {
+	background: var(--accent);
+}
+
+.signal-search-trigger,
+.signal-icon-button,
+.signal-motion-toggle,
+.signal-category-rail button {
+	border-radius: 9999px;
+}
+
+[data-slot="button"] {
+	min-height: 44px;
+	height: auto;
+	padding-block: 10px;
+	border-radius: 9999px;
+	font-weight: 600;
+}
+[data-slot="button"][data-variant="outline"] {
+	box-shadow: none;
+}
+[data-slot="input"] {
+	border-radius: 12px;
+}
+@media (max-width: 1023px) {
+	.reference-hero {
+		padding-top: 144px;
+		padding-bottom: 80px;
+	}
+	.reference-agent-layout {
+		gap: 40px;
+	}
+	.reference-section {
+		padding-block: 80px;
+	}
+}
+@media (max-width: 767px) {
+	.reference-hero {
+		padding-top: 132px;
+		padding-bottom: 64px;
+	}
+	.reference-headline {
+		font-size: clamp(1.9rem, 7.8vw, 3.5rem);
+	}
+	.reference-hero-lead {
+		max-width: 360px;
+		margin-top: 28px;
+	}
+	.reference-product-frame {
+		padding: 12px 12px 0;
+		border-radius: 24px;
+	}
+	.reference-section {
+		padding-block: 64px;
+	}
+	.reference-agent-layout {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.reference-agent-visual {
+		padding: 24px 24px 0;
+	}
+	.reference-open-platform {
+		padding-block: 64px;
+	}
+	.reference-gallery-image {
+		height: 230px;
+	}
+	.signal-cta {
+		padding-block: 88px;
+	}
+	.signal-page-hero {
+		padding: 136px 0 48px;
+	}
+}
+
+.signal-footer a[aria-label="Nixploy"] img {
+	filter: none;
+}
+
+.reference-gallery-track:focus-within > .animate-marquee {
+	animation-play-state: paused;
 }

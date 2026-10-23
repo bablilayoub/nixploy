@@ -19,7 +19,7 @@ import { openCore } from "@/lib/landing-data";
  */
 export function Platform() {
 	return (
-		<section id="open" className="py-20 lg:py-28">
+		<section id="open" className="reference-open-platform">
 			<div className="container-page grid gap-12 lg:grid-cols-12 lg:gap-16">
 				<div className="lg:col-span-5">
 					<p className="signal-kicker">Open by design</p>
@@ -32,10 +32,10 @@ export function Platform() {
 						it on.
 					</p>
 					<div className="mt-8 flex flex-wrap gap-3">
-						<Button asChild variant="outline" size="lg" className="rounded-lg">
+						<Button asChild variant="outline" size="lg" className="rounded-full">
 							<Link href="/pricing">What it costs</Link>
 						</Button>
-						<Button asChild variant="ghost" size="lg" className="rounded-lg">
+						<Button asChild variant="ghost" size="lg" className="rounded-full">
 							<Link href="/docs/teams">Roles and teams</Link>
 						</Button>
 					</div>

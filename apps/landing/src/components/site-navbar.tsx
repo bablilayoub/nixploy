@@ -40,7 +40,7 @@ export function SiteNavbar() {
 			>
 				Skip to content
 			</a>
-			<header className="site-topbar fixed inset-x-0 top-0 z-40 border-b bg-background">
+			<header className="site-topbar fixed inset-x-0 top-0 z-40 bg-background/95">
 				<div className="container-page flex min-h-18 items-center gap-4">
 					<Logo />
 					<NavigationMenu aria-label="Main navigation" className="hidden lg:flex">
@@ -75,7 +75,7 @@ export function SiteNavbar() {
 							GitHub
 							<GitHubLogoIcon aria-hidden="true" className="size-3.5" />
 						</a>
-						<Button asChild className="hidden h-10 rounded-md xl:inline-flex">
+						<Button asChild className="hidden h-11 rounded-full xl:inline-flex">
 							<Link href="/docs/install">Install Nixploy</Link>
 						</Button>
 						<Dialog.Root>

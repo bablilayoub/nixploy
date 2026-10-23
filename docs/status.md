@@ -5,6 +5,37 @@ and move items between the backlog sections. Durable knowledge belongs in
 [`../CLAUDE.md`](../CLAUDE.md) / [`codebase-map.md`](./codebase-map.md); this
 file is for **state** and **tasks**.
 
+## Mobbin-reference design system — 2026-10-23
+
+`codex/fieldwork-landing` applies the user's supplied Mobbin reference to both the
+public website and actual platform: centered display type with authentic service
+marks, pill actions/navigation, white/graphite canvases and soft panels. Home uses
+a large product preview, screenshot gallery, six capability tiles, split MCP
+section, gray open-platform band and centered install close. Shared public page
+headers and controls follow it; app resources, auth, settings and service layouts
+retain real workflows with the same type/surface/control geometry. Twelve fresh
+production fixture captures and README/documentation images show the new app.
+
+Local gates pass: four typechecks, strict Biome1,194 files, knip, both production
+builds,119 web tests and3,353 server tests (137 optional skipped). Browser proof:
+504 responsive cases,12 final dashboard reflow cases,710 production route/theme
+checks,16 settled public captures and12 final control checks. Independent design/
+accessibility findings are closed, including slider/skeleton visibility, supporting
+text contrast, keyboard gallery pause and enlarged metric labels. Scope/limits:
+[reference verification](../.ui-craft/mobbin-reference.md),
+[measured research](../.ui-craft/research/mobbin-reference.md).
+
+The latest production panel runs on3000 and public preview on3373. Restart hashes
+match all72 tables/240 rows and62 config files, with the original environment/keys
+and settings preserved. Later verification advances only the update-check timestamp.
+No primary reset/seed/migration/restore ran. Private DB/config backups and older
+panel builds remain; the Desktop checkout was not edited. PR34 stays a draft.
+
+Known separate CI baseline:60eefb9 already fails pnpm audit and both Docker/Trivy
+architecture jobs on Next.js16.3.8 advisories fixed in16.4.1+. This visual pass adds
+no dependency/version change and suppresses no security checks; remote security
+CI is not claimed green. Private receipts: `.nixploy-data/verification/mobbin-system/`.
+
 ## Monochrome library rebuild — 2026-10-23
 
 `codex/fieldwork-landing` now updates both the actual Next.js platform and every

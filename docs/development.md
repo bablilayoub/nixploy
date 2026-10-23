@@ -95,7 +95,7 @@ four things bite, in this order:
   `apps/web/.next/dev/lock`. A second `pnpm dev` (or a `pnpm build` racing a
   running dev server) fails or hangs on it. Stop the first one; if a process
   was killed hard, delete the stale lock before starting again. For an isolated
-  web review build, set `NIXPLOY_NEXT_DIST_DIR=.next-review` for both `pnpm build`
+  web or landing review build, set `NIXPLOY_NEXT_DIST_DIR=.next-review` for both `pnpm build`
   and the matching `pnpm start`, with its own port and fixture database. Never
   rebuild a directory that a running server is serving. The normal default is
   still `.next`; generated review directories are not source files.
