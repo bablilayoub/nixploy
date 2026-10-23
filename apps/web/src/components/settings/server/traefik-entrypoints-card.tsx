@@ -115,10 +115,12 @@ export function TraefikEntrypointsCard() {
 				title="TCP and UDP entrypoints"
 				description="Extra ports Traefik listens on, so a service can be routed at layer 4 instead of over HTTP."
 				actions={
-					<Button size="sm" onClick={openCreate}>
-						<Plus className="size-4" />
-						Add entrypoint
-					</Button>
+					entrypoints.length > 0 ? (
+						<Button size="sm" onClick={openCreate}>
+							<Plus className="size-4" />
+							Add entrypoint
+						</Button>
+					) : undefined
 				}
 			>
 				<p className="text-xs text-muted-foreground">

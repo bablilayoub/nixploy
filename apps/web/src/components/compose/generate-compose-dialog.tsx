@@ -58,7 +58,7 @@ export function GenerateComposeDialog({ onAccept }: { onAccept: (composeFile: st
 					<TooltipTrigger asChild>
 						<span className="inline-flex">
 							<Button size="sm" variant="outline" asChild>
-								<Link href="/dashboard/settings/server">
+								<Link href="/dashboard/settings/server#platform-administration">
 									<Sparkles className="size-4" />
 									Generate with Copilot
 								</Link>

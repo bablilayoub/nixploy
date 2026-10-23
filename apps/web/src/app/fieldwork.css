@@ -707,3 +707,83 @@ html {
 		gap: 8px;
 	}
 }
+
+/* Actual app: open working layouts, quiet collection surfaces, and focused forms. */
+.settings-stack {
+	container: settings / inline-size;
+}
+[data-settings-section]:first-child {
+	padding-top: 8px;
+}
+[data-settings-section]:last-child:not([data-danger="true"]) {
+	border-bottom: 0;
+}
+.focus-sections .fieldwork-form-group {
+	border-top: 0;
+	padding-top: 0;
+}
+.focus-sections [data-settings-section]:first-child {
+	padding-top: 8px;
+}
+@container settings (min-width: 880px) {
+	[data-settings-section][data-wide="false"] {
+		display: grid;
+		grid-template-columns: minmax(180px, 0.7fr) minmax(0, 1.8fr);
+		column-gap: 40px;
+		row-gap: 20px;
+		align-items: start;
+	}
+	[data-settings-section][data-wide="false"] > [data-slot="card-header"] {
+		grid-column: 1;
+		grid-row: 1 / 3;
+	}
+	[data-settings-section][data-wide="false"]
+		> :is([data-slot="card-content"], [data-slot="card-footer"]) {
+		grid-column: 2;
+	}
+}
+.fieldwork-workspace [data-slot="sidebar-inner"] {
+	border-right: 0;
+}
+.fieldwork-form-group > header > h2 {
+	font-size: 16px;
+}
+.fieldwork-section-links {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+}
+.fieldwork-section-links > a {
+	border-radius: 8px;
+	padding: 10px 12px;
+	background: var(--secondary);
+}
+.auth-workspace main > div > [data-slot="card"] {
+	border: 0;
+	background: transparent;
+	box-shadow: none;
+	padding: 0;
+	gap: 28px;
+}
+.auth-workspace [data-slot="card-header"],
+.auth-workspace [data-slot="card-content"],
+.auth-workspace [data-slot="card-footer"] {
+	padding-inline: 0;
+}
+.auth-workspace [data-slot="card-title"] {
+	font-size: 1.75rem;
+	font-weight: 600;
+	letter-spacing: -0.03em;
+}
+
+.focus-sections {
+	container: settings / inline-size;
+}
+@media (pointer: coarse) {
+	[data-slot="command-item"] {
+		min-height: 44px;
+	}
+}

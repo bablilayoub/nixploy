@@ -37,7 +37,10 @@ export function PrometheusCard() {
 			<p className="text-xs text-muted-foreground">
 				Service CPU and memory, deployment counts, uptime probes and the deploy queue in OpenMetrics
 				format, scoped to this organization. Authenticate with an API key (
-				<Link href="/dashboard/settings/profile" className="underline underline-offset-2">
+				<Link
+					href="/dashboard/settings/profile#developer-access"
+					className="underline underline-offset-2"
+				>
 					Settings → Profile → API keys
 				</Link>
 				) — a read-only key is enough.

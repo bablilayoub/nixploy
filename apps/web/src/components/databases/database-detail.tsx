@@ -23,7 +23,7 @@ import {
 	databaseIdInput,
 	type ServiceStatus,
 } from "@/components/databases/database-types";
-import { SectionLinks } from "@/components/layout/section-links";
+import { FocusSections } from "@/components/layout/focus-sections";
 import { SettingsSection, SettingsStack } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
 import { capabilityHint } from "@/components/services/capability-hint";
@@ -654,16 +654,15 @@ function GeneralTab({
 	});
 
 	return (
-		<SettingsStack>
-			<SectionLinks
-				label="Database configuration sections"
-				items={[
-					{ id: "database-identity", label: "Identity" },
-					{ id: "database-engine", label: "Engine and version" },
-					{ id: "database-credentials", label: "Credentials" },
-					{ id: "database-exposure", label: "External access" },
-				]}
-			/>
+		<FocusSections
+			label="Database configuration sections"
+			items={[
+				{ id: "database-identity", label: "Identity" },
+				{ id: "database-engine", label: "Engine and version" },
+				{ id: "database-credentials", label: "Credentials" },
+				{ id: "database-exposure", label: "External access" },
+			]}
+		>
 			<SettingsSection
 				id="database-identity"
 				title="Database identity"
@@ -847,7 +846,7 @@ function GeneralTab({
 					</div>
 				</div>
 			</SettingsSection>
-		</SettingsStack>
+		</FocusSections>
 	);
 }
 

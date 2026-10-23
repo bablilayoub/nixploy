@@ -506,7 +506,7 @@ export function CommandPalette({ className }: { className?: string }) {
 					"rbac",
 					"organization",
 				],
-				run: go("/dashboard/settings/organization"),
+				run: go("/dashboard/settings/organization#organization-access"),
 			},
 		);
 		if (!capabilitiesPending && can("gitops.manage")) {
@@ -527,7 +527,7 @@ export function CommandPalette({ className }: { className?: string }) {
 				group: "Pages",
 				icon: Bot,
 				keywords: ["ai", "openai", "ollama", "anthropic", "copilot", "llm"],
-				run: go("/dashboard/settings/server"),
+				run: go("/dashboard/settings/server#platform-administration"),
 			});
 		}
 		for (const item of settingsNavItems) {

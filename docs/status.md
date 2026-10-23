@@ -5,6 +5,35 @@ and move items between the backlog sections. Durable knowledge belongs in
 [`../CLAUDE.md`](../CLAUDE.md) / [`codebase-map.md`](./codebase-map.md); this
 file is for **state** and **tasks**.
 
+## Focused actual app rebuild — 2026-10-23
+
+The actual app now uses quiet monochrome working layouts with existing shadcn/
+Radix controls: compact project summary, open form sections, focused account/org/
+platform/application/Compose/database configuration, consistent lifecycle Actions,
+and a searchable mobile monitoring picker. Local section changes preserve drafts;
+canonical service tabs/aliases, role gates, destructive confirmations, contextual
+links, live feedback and all 582 tracked API bindings remain. No new dependency
+or backend/data-model change. The public Mobbin website remains unchanged.
+
+Validation: production build and web typecheck, strict Biome 1, 194 files, knip,
+119 web tests and 3, 353 server tests pass (137 optional server tests skipped).
+Browser proof: 392 production route/theme checks, 408 responsive cases, 216 verified
+dialog cases, 56 source/build variants, 18 template wizard steps, 12 real boundary
+checks and 16 final controls cases; fresh isolated setup completes all five steps.
+Independent design/a 11y findings are closed. Coverage and practical limits:
+[app workspace](../.ui-craft/app-workspace.md). Private receipts:
+`.nixploy-data/verification/app-rebuild/`.
+
+The latest production app is running on 3000 from the isolated `.next-app-ship`
+build; the public website stays on 3373. Health/readiness pass. Before/after restart
+hashes match all 72 tables/240 rows, 62 persistent files and original settings files.
+Existing-session checks pass in both themes. Later browser reads advance only
+`metrics_config.webServer.updateLastCheckedAt`; all record counts, saved settings
+and config hashes remain. A periodic health-report refresh happened before the
+backup. Private DB/config backups and the older `.next-mobbin` build remain.
+No primary reset/seed/migration/restore ran; the Desktop checkout was not edited.
+PR 34 remains a draft.
+
 ## Mobbin-reference design system — 2026-10-23
 
 `codex/fieldwork-landing` applies the user's supplied Mobbin reference to both the
@@ -16,7 +45,7 @@ headers and controls follow it; app resources, auth, settings and service layout
 retain real workflows with the same type/surface/control geometry. Twelve fresh
 production fixture captures and README/documentation images show the new app.
 
-Local gates pass: four typechecks, strict Biome1,194 files, knip, both production
+Local gates pass: four typechecks, strict Biome 1,194 files, knip, both production
 builds,119 web tests and3,353 server tests (137 optional skipped). Browser proof:
 504 responsive cases,12 final dashboard reflow cases,710 production route/theme
 checks,16 settled public captures and12 final control checks. Independent design/
@@ -176,7 +205,7 @@ No dependency, schema, API, CLI or deploy-engine change was introduced.
 The inventory reconciles344 visual sources (326 owned/18 vendor;72 directly
 changed) and55 page files. Consumers inherit rebuilt shared primitives and theme;
 unused vendor widgets stay explicitly classified. The local verification receipt
-records710 route captures,348 reflow cases,216 dialog cases,20 populated control
+records710 route captures,348 reflow cases, 216 dialog cases,20 populated control
 cases, saved source variants, actual setup/access/error states,32 normal/long
 branding cases and final keyboard/search/contrast follow-ups. Four workspace
 TypeScript checks, strict Biome (1,176 files), pinned knip,119 web tests,3,353 backend

@@ -1,5 +1,13 @@
 "use client";
 
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
+
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSyncedTab } from "@/hooks/use-synced-tab";
 
@@ -44,24 +52,24 @@ export function AdvancedTab() {
 			orientation="vertical"
 			className="fieldwork-category-workspace w-full"
 		>
-			<label className="grid gap-2 text-sm font-medium lg:hidden">
+			<div className="grid gap-2 text-sm font-medium lg:hidden">
 				Advanced section
-				<select
-					aria-label="Advanced section"
-					value={tab}
-					onChange={(event) => selectTab(event.target.value)}
-					className="h-11 w-full rounded-md border border-input bg-card px-3 font-normal"
-				>
-					{ADVANCED_CATEGORIES.map((category) => (
-						<option key={category.value} value={category.value}>
-							{category.label}
-						</option>
-					))}
-				</select>
+				<Select value={tab} onValueChange={selectTab}>
+					<SelectTrigger aria-label="Advanced section" className="w-full min-w-40">
+						<SelectValue />
+					</SelectTrigger>
+					<SelectContent>
+						{ADVANCED_CATEGORIES.map((category) => (
+							<SelectItem key={category.value} value={category.value}>
+								{category.label}
+							</SelectItem>
+						))}
+					</SelectContent>
+				</Select>
 				<span className="text-xs font-normal text-muted-foreground">
 					{ADVANCED_CATEGORIES.find((category) => category.value === tab)?.description}
 				</span>
-			</label>
+			</div>
 			<TabsList aria-label="Advanced configuration categories" className="fieldwork-category-list">
 				{ADVANCED_CATEGORIES.map((category) => (
 					<TabsTrigger key={category.value} value={category.value}>

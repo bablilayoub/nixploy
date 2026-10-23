@@ -10,6 +10,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 import { useTRPC } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 
@@ -112,43 +119,45 @@ export function RuntimeLogHistory({
 				</Button>
 			</form>
 			<div className="flex flex-wrap items-end gap-3">
-				<label className="grid gap-2 text-xs text-muted-foreground">
+				<div className="grid gap-2 text-xs text-muted-foreground">
 					<span>Log level</span>
-					<select
-						aria-label="Log level"
-						value={level}
-						onChange={(event) => setLevel(event.target.value)}
-						className="h-10 rounded-md border border-input bg-card px-3 text-sm text-foreground"
-					>
-						<option value="all">All levels</option>
-						<option value="error">Error</option>
-						<option value="warn">Warning</option>
-						<option value="info">Info</option>
-						<option value="debug">Debug</option>
-						<option value="success">Success</option>
-					</select>
-				</label>
+					<Select value={level} onValueChange={setLevel}>
+						<SelectTrigger aria-label="Log level" className="w-full min-w-40">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="all">All levels</SelectItem>
+							<SelectItem value="error">Error</SelectItem>
+							<SelectItem value="warn">Warning</SelectItem>
+							<SelectItem value="info">Info</SelectItem>
+							<SelectItem value="debug">Debug</SelectItem>
+							<SelectItem value="success">Success</SelectItem>
+						</SelectContent>
+					</Select>
+				</div>
 				{since === undefined && (
-					<label className="grid gap-2 text-xs text-muted-foreground">
+					<div className="grid gap-2 text-xs text-muted-foreground">
 						<span>Time range</span>
-						<select
-							aria-label="Log time range"
+						<Select
 							value={range}
-							onChange={(event) => {
-								const next = event.target.value;
+							onValueChange={(next) => {
 								setRange(next);
 								setRangeSince(
 									next === "all" ? undefined : Date.now() - Number(next) * 60 * 60 * 1000,
 								);
 							}}
-							className="h-10 rounded-md border border-input bg-card px-3 text-sm text-foreground"
 						>
-							<option value="all">All retained logs</option>
-							<option value="1">Last hour</option>
-							<option value="6">Last 6 hours</option>
-							<option value="24">Last 24 hours</option>
-						</select>
-					</label>
+							<SelectTrigger aria-label="Log time range" className="w-full min-w-40">
+								<SelectValue />
+							</SelectTrigger>
+							<SelectContent>
+								<SelectItem value="all">All retained logs</SelectItem>
+								<SelectItem value="1">Last hour</SelectItem>
+								<SelectItem value="6">Last 6 hours</SelectItem>
+								<SelectItem value="24">Last 24 hours</SelectItem>
+							</SelectContent>
+						</Select>
+					</div>
 				)}
 				{(query || level !== "all" || range !== "all") && (
 					<Button

@@ -8,7 +8,6 @@ import { QueryState } from "@/components/query-state";
 import { EmptyState } from "@/components/services/empty-state";
 import { StatusDot } from "@/components/shell";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader } from "@/components/ui/card";
 import { DateTime } from "@/components/ui/date-time";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRunningDeployments } from "@/hooks/use-running-deployments";
@@ -55,36 +54,38 @@ export function OverviewCards({ onAttention }: { onAttention: () => void }) {
 		{ label: "Need attention", value: services?.error ?? 0, detail: "Services reporting an error" },
 	];
 	return (
-		<section
-			aria-label="Workspace summary"
-			aria-busy={isPending}
-			className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,8rem),1fr))] gap-3 xl:grid-cols-4"
-		>
-			{metrics.map((metric) => (
-				<Card key={metric.label} className="gap-2 py-4">
-					<CardHeader>
-						<CardDescription>{metric.label}</CardDescription>
-					</CardHeader>
-					<CardContent>
-						{isPending ? (
-							<Skeleton className="h-9 w-16" />
-						) : (
-							<p className="text-3xl font-medium tracking-tight tabular-nums">{metric.value}</p>
-						)}
-					</CardContent>
-					<CardFooter className="hidden min-h-11 text-xs text-muted-foreground sm:flex">
-						{isPending ? (
-							<Skeleton className="h-3 w-32" />
-						) : metric.label === "Need attention" && (services?.error ?? 0) > 0 ? (
-							<Button variant="link" size="sm" onClick={onAttention}>
-								Review services
-							</Button>
-						) : (
-							metric.detail
-						)}
-					</CardFooter>
-				</Card>
-			))}
+		<section aria-label="Workspace summary" aria-busy={isPending} className="border-y py-4">
+			<dl className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-4">
+				{metrics.map((metric) => (
+					<div key={metric.label} className="min-w-0">
+						<dt className="text-xs text-muted-foreground">{metric.label}</dt>
+						<dd className="mt-1">
+							<div className="flex min-h-8 flex-wrap items-baseline gap-x-2 gap-y-1">
+								{isPending ? (
+									<Skeleton className="h-7 w-12" />
+								) : (
+									<span className="text-2xl font-medium tracking-tight tabular-nums">
+										{metric.value}
+									</span>
+								)}
+								{metric.label === "Need attention" && (services?.error ?? 0) > 0 ? (
+									<Button
+										variant="link"
+										size="sm"
+										className="h-auto min-h-0 px-0 py-0 text-xs"
+										onClick={onAttention}
+									>
+										Review services
+									</Button>
+								) : null}
+							</div>
+							<p className="mt-1 hidden text-xs leading-relaxed text-muted-foreground lg:block">
+								{metric.detail}
+							</p>
+						</dd>
+					</div>
+				))}
+			</dl>
 		</section>
 	);
 }
@@ -98,7 +99,7 @@ export function RecentDeployments() {
 	const deployments = all.slice(0, 4);
 
 	return (
-		<section className="flex h-full min-w-0 flex-col surface p-6">
+		<section className="flex h-full min-w-0 flex-col">
 			<div className="mb-5 space-y-1">
 				<h2 className="text-base font-medium tracking-tight">Recent deployments</h2>
 				{/* Static text: branching this on `isPending` made the server (which

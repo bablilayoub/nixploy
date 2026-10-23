@@ -43,7 +43,7 @@ export type TemplateSummary = inferRouterOutputs<AppRouter>["template"]["all"][n
  * templates, so a three-column grid left almost every section with one
  * stranded card on a row of its own.
  */
-const GRID_CLASS = "grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
+const GRID_CLASS = "grid gap-4 sm:grid-cols-2 2xl:grid-cols-3";
 
 /** A page of cards, and a page of rows. Both land just under one screenful. */
 const GRID_PAGE_SIZE = 24;
@@ -280,7 +280,7 @@ export function TemplatesWorkbench({
 				{/* The rail is navigation, so it stays put while the results scroll —
 				    and scrolls inside itself when a source brings more categories
 				    than fit, rather than making the page taller than the results. */}
-				<aside className="hidden w-56 shrink-0 lg:sticky lg:top-4 lg:block lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto lg:pe-1">
+				<aside className="hidden w-44 shrink-0 lg:sticky lg:top-24 lg:block lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto lg:pe-1">
 					{rail}
 				</aside>
 
@@ -495,7 +495,7 @@ function CardGrid({
 					{/* The rule carries the eye from the label across to the row it
 					    labels, which is what separates the sections — not the gap. */}
 					<div className="flex items-center gap-3">
-						<h2 className="text-[11px] font-medium normal-case tracking-wide text-muted-foreground">
+						<h2 className="text-sm font-medium normal-case tracking-normal text-muted-foreground">
 							{section.category}
 						</h2>
 						<span className="text-[11px] tabular-nums text-muted-foreground/60">

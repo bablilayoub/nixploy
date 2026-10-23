@@ -6,6 +6,7 @@ import { useState } from "react";
 import { QueryState } from "@/components/query-state";
 import { capabilityHint } from "@/components/services/capability-hint";
 import { EmptyState } from "@/components/services/empty-state";
+import { SubTabsList, SubTabsTrigger } from "@/components/services/sub-tabs";
 import { PageHeader, StatusDot } from "@/components/shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useTRPC } from "@/lib/trpc";
 import { CreateProjectDialog } from "./create-project-dialog";
@@ -62,8 +64,8 @@ export function DashboardView() {
 	return (
 		<div className="space-y-8">
 			<PageHeader
-				title="Overview"
-				description="Projects, environments and recent deployments."
+				title="Projects"
+				description="Your applications and databases, organized by environment."
 				actions={
 					<DisabledHint hint={createHint}>
 						<CreateProjectDialog handleDeepLink={!capabilitiesLoading && canCreate}>
@@ -149,7 +151,7 @@ export function DashboardView() {
 					onRetry={() => refetch()}
 					isEmpty={!filtered?.length}
 					skeleton={
-						<div className="rounded-[20px] border border-border bg-background">
+						<div className="rounded-xl border border-border bg-background">
 							<Table>
 								<TableBody>
 									{[1, 2, 3].map((index) => (
@@ -201,7 +203,7 @@ export function DashboardView() {
 						)
 					}
 				>
-					<div className="rounded-[20px] border border-border bg-background">
+					<div className="rounded-xl border border-border bg-background">
 						<Table>
 							<caption className="sr-only">
 								Projects and their environments, service counts and health
@@ -323,10 +325,18 @@ export function DashboardView() {
 					</div>
 				</QueryState>
 			</section>
-			<div id="deployments" className="fieldwork-evidence scroll-mt-40">
-				<DeploymentsChart />
-				<RecentDeployments />
-			</div>
+			<Tabs id="deployments" defaultValue="recent" className="scroll-mt-24 gap-5 border-t pt-6">
+				<SubTabsList aria-label="Workspace activity">
+					<SubTabsTrigger value="recent">Recent deployments</SubTabsTrigger>
+					<SubTabsTrigger value="trends">Deployment trends</SubTabsTrigger>
+				</SubTabsList>
+				<TabsContent value="recent">
+					<RecentDeployments />
+				</TabsContent>
+				<TabsContent value="trends">
+					<DeploymentsChart />
+				</TabsContent>
+			</Tabs>
 			<GettingStartedCard firstProjectId={projects?.[0]?.projectId} />
 		</div>
 	);

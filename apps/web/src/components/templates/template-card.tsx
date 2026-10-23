@@ -67,7 +67,7 @@ export function TemplateCard({
 								event.stopPropagation();
 								onTag(tag);
 							}}
-							className="fieldwork-template-tag relative z-10 rounded border px-1.5 py-0.5 text-xs text-muted-foreground hover:border-input hover:text-foreground"
+							className="fieldwork-template-tag relative z-10 rounded-md bg-secondary px-2 py-1 text-xs text-muted-foreground hover:border-input hover:text-foreground"
 						>
 							{tag}
 						</button>
@@ -91,7 +91,7 @@ export function TemplateCard({
 					{template.source && <span className="truncate">{template.source.name}</span>}
 				</div>
 			</div>
-			<footer className="flex items-center justify-between gap-2 rounded-b-xl border-t bg-panel-inset px-4 py-3">
+			<footer className="flex items-center justify-between gap-2 rounded-b-xl px-4 pb-4 pt-1">
 				<div className="flex items-center gap-1">
 					{links.map((link) => (
 						<a

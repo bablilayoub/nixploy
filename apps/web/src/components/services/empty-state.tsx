@@ -21,7 +21,7 @@ export function EmptyState({
 	action?: ReactNode;
 }) {
 	return (
-		<Empty className="min-h-56 border bg-card">
+		<Empty className="min-h-48 border-0 bg-transparent">
 			<EmptyHeader>
 				{Icon && (
 					<EmptyMedia variant="icon">

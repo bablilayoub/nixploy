@@ -26,7 +26,7 @@ export function PageHeader({
 		typeof description === "string" && description.length > 0 ? description : undefined;
 
 	return (
-		<header className={cn("fieldwork-page-header mb-6 flex min-w-0 flex-col gap-4", className)}>
+		<header className={cn("fieldwork-page-header mb-2 flex min-w-0 flex-col gap-3", className)}>
 			{breadcrumb && <div className="text-xs text-muted-foreground">{breadcrumb}</div>}
 			<div
 				className={cn(
@@ -34,8 +34,8 @@ export function PageHeader({
 					compactActions ? "flex-row items-start justify-between" : "flex-col",
 				)}
 			>
-				<div className="flex min-w-0 flex-1 flex-col gap-2">
-					<h1 className="text-2xl leading-tight font-semibold tracking-tight break-words sm:text-[2rem]">
+				<div className="flex min-w-0 flex-1 flex-col gap-1.5">
+					<h1 className="text-2xl leading-tight font-semibold tracking-tight break-words sm:text-[1.75rem]">
 						{title}
 					</h1>
 					{/* Wraps rather than truncates: page descriptions carry links and

@@ -474,8 +474,8 @@ export function SourceConfig({ application }: { application: Application }) {
 								</SelectContent>
 							</Select>
 						</div>
-						<div className="flex items-center justify-between rounded-md border p-3">
-							<div className="flex flex-col gap-1">
+						<div className="flex items-center justify-between gap-4 rounded-lg bg-secondary p-4">
+							<div className="flex min-w-0 flex-col gap-1">
 								<Label htmlFor="auto-update-image">Auto-update image</Label>
 								<p className="text-xs text-muted-foreground">
 									Check this tag&apos;s digest hourly and redeploy when it moves. Public registries
@@ -527,7 +527,7 @@ export function SourceConfig({ application }: { application: Application }) {
 								onChange={(e) => draft.patch({ buildPath: e.target.value })}
 							/>
 						</div>
-						<div className="flex items-center justify-between rounded-md border p-3">
+						<div className="flex items-center justify-between gap-4 rounded-lg bg-secondary p-4">
 							<div className="flex flex-col gap-1">
 								<Label htmlFor="auto-deploy">Auto deploy</Label>
 								<p className="text-xs text-muted-foreground">
@@ -561,7 +561,7 @@ export function SourceConfig({ application }: { application: Application }) {
 						</div>
 						{isGitProviderSource(sourceType) && (
 							<>
-								<div className="flex items-center justify-between rounded-md border p-3">
+								<div className="flex items-center justify-between gap-4 rounded-lg bg-secondary p-4">
 									<div className="flex flex-col gap-1">
 										<Label htmlFor="preview-deploys">Preview deployments</Label>
 										<p className="text-xs text-muted-foreground">
@@ -576,7 +576,7 @@ export function SourceConfig({ application }: { application: Application }) {
 										}
 									/>
 								</div>
-								<div className="flex items-center justify-between rounded-md border p-3">
+								<div className="flex items-center justify-between gap-4 rounded-lg bg-secondary p-4">
 									<div className="flex flex-col gap-1">
 										<Label htmlFor="preview-fork-gate">Fork PRs require approval</Label>
 										<p className="text-xs text-muted-foreground">

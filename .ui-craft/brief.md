@@ -107,3 +107,29 @@ and responsive sidebar behavior remain. Do not import marketing animation into
 working forms. Craft9, variance4, density6 app/3 website, motion3 app/4 website.
 Signature: genuine service marks inside the centered headline, then real product
 screens shown as a gallery. The six equal tiles are an explicit reference choice.
+
+## Actual app authority — focused workspace (2026-10-23)
+
+The latest request is a complete rebuild of the actual Nixploy app with a clean,
+straightforward interface, low overwhelm and every existing feature preserved.
+Clarification of “fully ChatGPT” was requested asynchronously. Without a reply, proceed with
+ChatGPT-like restraint and the existing shadcn/Radix controls. No chatbot replaces
+operational controls. The public Mobbin website is outside this composition pass.
+
+App craft9 / motion2 / density5 / variance3. Sidebar is a quiet, tinted utility
+rail; canvas is white / neutral charcoal. Page headings are compact, controls
+rounded rather than capsule-heavy. Layout, dividers and typography do the work;
+remove repeated card-on-card chrome. Signature: focused configuration workspaces
+that show one related group at a time while retaining drafts across local section
+switches. Deep links, service tab order and aliases, editor behavior, auth, role
+checks, every query/mutation, destructive confirmations and background-operation
+feedback remain. Settings/data/encryption keys and persistent config are untouched.
+
+Feature families: projects/environments/tags/upstreams/GitOps/recovery; all seven
+service kinds; source/build/resources; deployment history/preview/schedules; logs/
+metrics/events/terminal/history; domains/env/backups/advanced/settings; Docker's
+six tools; template catalog/filter/details/deploy; migration wizard; monitoring/
+alerts/logs/Prometheus; schedules; account/security/API/MCP; organization/members/
+teams/quotas/shared variables; server/SSH/certs; Git/registry/storage/template
+integrations; branding/SSO/platform/AI/updates/users; activity/incidents; all auth,
+setup, public status and failure states. Verify each family in both themes.

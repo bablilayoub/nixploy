@@ -91,7 +91,9 @@ export function EnvironmentVariablesTab({
 				description="Inherited by every project, environment and service; lower levels override on key conflicts."
 				actions={
 					<Button asChild variant="outline" size="sm">
-						<Link href="/dashboard/settings/organization">Edit in organization settings</Link>
+						<Link href="/dashboard/settings/organization#organization-variables">
+							Edit in organization settings
+						</Link>
 					</Button>
 				}
 			>

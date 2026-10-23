@@ -13,7 +13,7 @@ export function SubTabsList({ className, ...props }: ComponentProps<typeof TabsL
 	return (
 		<TabsList
 			className={cn(
-				"h-auto w-full justify-start gap-1 overflow-x-auto rounded-lg border bg-panel-inset p-1",
+				"h-auto w-full justify-start gap-1 overflow-x-auto rounded-none border-0 bg-transparent p-0",
 				className,
 			)}
 			{...props}
@@ -25,7 +25,7 @@ export function SubTabsTrigger({ className, ...props }: ComponentProps<typeof Ta
 	return (
 		<TabsTrigger
 			className={cn(
-				"h-9 flex-none rounded-md border border-transparent bg-transparent px-2.5 text-xs font-medium text-muted-foreground shadow-none transition-colors hover:text-foreground data-[state=active]:border-border data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-none",
+				"h-9 flex-none rounded-md border border-transparent bg-transparent px-2.5 text-xs font-medium text-muted-foreground shadow-none transition-colors hover:text-foreground data-[state=active]:border-transparent data-[state=active]:bg-secondary data-[state=active]:text-foreground data-[state=active]:shadow-none",
 				className,
 			)}
 			{...props}

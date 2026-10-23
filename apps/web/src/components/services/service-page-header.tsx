@@ -31,8 +31,7 @@ import { useTRPC } from "@/lib/trpc";
 
 /**
  * One lifecycle button (Deploy / Redeploy / Start / Stop / Reload). `primary`
- * actions stay visible at every width; the rest collapse into the overflow
- * menu below `sm`.
+ * actions stay visible; related lifecycle operations share the labelled Actions menu.
  */
 export interface ServiceAction {
 	key: string;
@@ -94,10 +93,7 @@ function useServiceBreadcrumb({
 function ActionButton({ action }: { action: ServiceAction }) {
 	const Icon = action.icon;
 	return (
-		<DisabledHint
-			hint={action.hint}
-			className={action.primary ? undefined : "hidden sm:inline-flex"}
-		>
+		<DisabledHint hint={action.hint}>
 			<Button
 				variant={action.variant ?? (action.primary ? "default" : "outline")}
 				disabled={action.disabled}
@@ -285,20 +281,22 @@ export function ServicePageHeader({
 				list.length > 0 || before ? (
 					<>
 						{before}
-						{list.map((action) => (
-							<ActionButton key={action.key} action={action} />
-						))}
+						{list
+							.filter((action) => action.primary)
+							.map((action) => (
+								<ActionButton key={action.key} action={action} />
+							))}
 						{overflow.length > 0 ? (
 							<DropdownMenu>
 								<DropdownMenuTrigger asChild>
 									<Button
 										variant="outline"
-										size="icon"
-										className="sm:hidden"
+										size="default"
 										aria-label="More actions"
 										disabled={anyPending}
 									>
 										<MoreVertical className="size-4" />
+										Actions
 									</Button>
 								</DropdownMenuTrigger>
 								<DropdownMenuContent align="end">

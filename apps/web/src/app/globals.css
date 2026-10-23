@@ -60,10 +60,10 @@
 }
 
 :root {
-	--radius: 0.75rem;
+	--radius: 0.5rem;
 	--background: #ffffff;
 	--foreground: #141414;
-	--card: #f5f5f5;
+	--card: #ffffff;
 	--card-foreground: var(--foreground);
 	--popover: #ffffff;
 	--popover-foreground: var(--foreground);
@@ -92,7 +92,7 @@
 	--chart-3: color-mix(in oklab, var(--foreground) 60%, transparent);
 	--chart-4: color-mix(in oklab, var(--foreground) 45%, transparent);
 	--chart-5: color-mix(in oklab, var(--foreground) 30%, transparent);
-	--sidebar: #ffffff;
+	--sidebar: #f9f9f9;
 	--sidebar-foreground: var(--foreground);
 	--sidebar-primary: var(--primary);
 	--sidebar-primary-foreground: var(--primary-foreground);
@@ -106,11 +106,11 @@
 }
 
 .dark {
-	--background: #141414;
+	--background: #212121;
 	--foreground: #fafafa;
-	--card: #222222;
+	--card: #262626;
 	--card-foreground: var(--foreground);
-	--popover: #1c1c1c;
+	--popover: #292929;
 	--popover-foreground: var(--foreground);
 	--primary: #fafafa;
 	--primary-foreground: #141414;
@@ -125,14 +125,14 @@
 	--border: #333333;
 	--input: #737373;
 	--ring: #a3a3a3;
-	--control: #141414;
-	--panel-inset: #171717;
+	--control: #212121;
+	--panel-inset: #262626;
 	--selection: #333333;
 	--chart-axis: #b3b3b3;
 	--success: #d4d4d4;
 	--warning: #bfbfbf;
 	--info: #a3a3a3;
-	--sidebar: #141414;
+	--sidebar: #171717;
 	--sidebar-accent: #242424;
 	--surface-shadow: 0 1px 2px rgb(0 0 0 / 10%);
 	--overlay-shadow: 0 24px 80px -20px rgb(0 0 0 / 65%), 0 0 0 1px rgb(255 255 255 / 3%) inset;
@@ -305,8 +305,8 @@ body[data-activity-tray="1"] [data-sonner-toaster][data-y-position="bottom"] {
 }
 
 @utility surface {
-	border: 1px solid transparent;
-	border-radius: 20px;
+	border: 1px solid var(--border);
+	border-radius: 12px;
 	background: var(--card);
 }
 @utility workspace-grid {

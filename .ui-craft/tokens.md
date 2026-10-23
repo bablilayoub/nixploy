@@ -46,3 +46,15 @@ White #fff / graphite #141414 canvases; foreground #141414 / #fafafa. Soft panel
 #b3b3b3. Geist650 display and600 controls;80/80 hero,44/48 section,56/56 close on
 desktop with fluid mobile sizes. Full-pill actions/nav;12px inputs,20px cards,
 24px dialog/image panels,32px large preview shell. Light/dark/System persist.
+
+## Focused actual app geometry — 2026-10-23
+
+App-only override: canvas #ffffff / #212121, sidebar #f9f9f9 / #171717,
+surface #ffffff / #262626, inset #f5f5f5 / #2b2b2b, foreground #141414 / #fafafa.
+Keep existing accessible supporting text/input/focus values and neutral chart/status
+semantics. Existing branding data is retained. Geist14px body,12px support,
+16px section,24–28px page title. Primary content max1280px; settings max1040px.
+Controls8px; collection surfaces12px; overlays16px; icon buttons circular.
+Spacing4/8/12/16/20/24/32/40; forms grouped by task with dividers, no card nesting.
+Hover/focus120–150ms only, OS reduced motion respected. Desktop controls36–40px,
+touch44px. Working forms use library behavior and the existing save/dirty guards.

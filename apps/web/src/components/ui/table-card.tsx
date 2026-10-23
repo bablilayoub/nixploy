@@ -22,18 +22,22 @@ export function TableCard({
 	toolbarFramed?: boolean;
 }) {
 	return (
-		<div className={cn("flex min-w-0 flex-col gap-3", className)}>
+		<div className={cn("flex min-w-0 flex-col gap-4", className)}>
 			{toolbar ? (
 				<div
 					className={cn(
 						"flex flex-wrap items-center gap-2",
-						toolbarFramed && "rounded-lg border bg-card px-3 py-2",
+						toolbarFramed && "rounded-lg bg-secondary px-3 py-2",
 					)}
 				>
 					{toolbar}
 				</div>
 			) : null}
-			{framed ? <div className="surface relative overflow-x-auto">{children}</div> : children}
+			{framed ? (
+				<div className="relative overflow-x-auto rounded-xl border bg-card">{children}</div>
+			) : (
+				children
+			)}
 			{footer}
 		</div>
 	);

@@ -245,7 +245,7 @@ export function CopilotChatDrawer({ target }: { target: CopilotTarget }) {
 					<TooltipTrigger asChild>
 						<span className="inline-flex">
 							<Button variant="outline" asChild>
-								<Link href="/dashboard/settings/server">
+								<Link href="/dashboard/settings/server#platform-administration">
 									<Bot className="size-4" />
 									Copilot
 								</Link>
@@ -356,7 +356,10 @@ export function CopilotChatDrawer({ target }: { target: CopilotTarget }) {
 
 				<div className="flex items-center gap-2 border-t px-4 py-2 text-xs text-muted-foreground">
 					<Settings2 className="size-3.5" />
-					<Link href="/dashboard/settings/server" className="underline-offset-2 hover:underline">
+					<Link
+						href="/dashboard/settings/server#platform-administration"
+						className="underline-offset-2 hover:underline"
+					>
 						AI settings
 					</Link>
 				</div>
