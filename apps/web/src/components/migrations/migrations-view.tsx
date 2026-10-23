@@ -26,7 +26,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { describeError, toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
-import { cn } from "@/lib/utils";
 import { MigrationReview } from "./migration-review";
 
 const selectClass =
@@ -73,14 +72,6 @@ export function MigrationsView() {
 	const makePlan = useMutation({ ...trpc.import.plan.mutationOptions(), gcTime: 0 });
 	const apply = useMutation({ ...trpc.import.runApply.mutationOptions(), gcTime: 0 });
 	const projects = useQuery({ ...trpc.project.all.queryOptions(), enabled: can("gitops.manage") });
-	const [sourceOpen, setSourceOpen] = useState(true);
-	useEffect(() => {
-		setSourceOpen(!inventory);
-		if (inventory) document.getElementById("migration-selection")?.focus();
-	}, [inventory]);
-	useEffect(() => {
-		if (plan) document.getElementById("migration-review")?.focus();
-	}, [plan]);
 	const busy = uploading || inspect.isPending || makePlan.isPending || apply.isPending;
 	useTrackedActivity({
 		id: "migration-import",
@@ -279,242 +270,158 @@ export function MigrationsView() {
 					</>
 				}
 			/>
-			<ol
-				aria-label="Migration progress"
-				className="grid gap-1 rounded-xl border bg-card p-2 sm:grid-cols-3"
-			>
-				{[
-					{
-						title: "Connect source",
-						detail: "Read configuration",
-						complete: Boolean(inventory),
-						current: !inventory,
-					},
-					{
-						title: "Choose and review",
-						detail: "Select services and target",
-						complete: Boolean(plan),
-						current: Boolean(inventory) && !plan,
-					},
-					{
-						title: "Import configuration",
-						detail: result ? "Import finished" : "Confirm the reviewed plan",
-						complete: Boolean(result),
-						current: Boolean(plan),
-					},
-				].map((step, index) => (
-					<li
-						key={step.title}
-						aria-current={step.current ? "step" : undefined}
-						className={cn(
-							"flex items-start gap-3 rounded-lg px-4 py-3",
-							step.current && "bg-secondary",
-						)}
-					>
-						<span
-							aria-hidden="true"
-							className="flex size-6 shrink-0 items-center justify-center rounded-full border text-xs tabular-nums"
-						>
-							{step.complete ? "✓" : index + 1}
-						</span>
-						<span>
-							<span className="block text-sm font-medium">{step.title}</span>
-							<span className="mt-1 block text-xs text-muted-foreground">{step.detail}</span>
-						</span>
-					</li>
-				))}
-			</ol>
-			<div className="grid gap-5 border-y py-5 sm:grid-cols-2">
-				<div className="flex gap-3">
-					<LockKeyhole
-						aria-hidden="true"
-						className="mt-0.5 size-4 shrink-0 text-muted-foreground"
-					/>
-					<div>
-						<p className="text-sm font-medium">Configuration import</p>
-						<p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-							Copies service settings and readable environment values. Restore database data,
-							persistent files and encrypted source secrets separately.
-						</p>
-					</div>
-				</div>
-				<div>
-					<p className="text-sm font-medium">Your source stays in place</p>
-					<p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-						Review the plan before importing. Deploy imported services when you are ready. The
-						source API key stays in this page’s memory and is cleared when you leave or finish.
-					</p>
-				</div>
+			<div className="flex items-start gap-3 rounded-lg border bg-muted/30 p-4 text-sm">
+				<LockKeyhole className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+				<p className="text-muted-foreground">
+					Dokploy and Coolify live APIs are supported; database dumps are supported for Dokploy.
+					Imports copy configuration and readable environment values. Database data, persistent
+					files and encrypted source secrets need separate restoration. Source API keys stay in this
+					page's memory and are cleared when you change the source, finish or leave.
+				</p>
 			</div>
-			<div>
-				{inventory && (
-					<div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card px-5 py-4">
-						<div>
-							<p className="text-sm font-medium">Source connected</p>
-							<p className="mt-1 break-all text-xs text-muted-foreground">
-								{IMPORT_SOURCE_LABELS[provider]} ·{" "}
-								{mode === "live" ? url : (dump?.filename ?? "Database dump")}
-							</p>
-						</div>
-						<Button
-							variant="outline"
-							size="sm"
-							onClick={() => setSourceOpen(!sourceOpen)}
-							aria-expanded={sourceOpen}
-							aria-controls="migration-source-form"
+			<Card>
+				<CardHeader>
+					<CardTitle>1. Connect your source</CardTitle>
+					<CardDescription>
+						Use a source API key with read access. Coolify also needs API access enabled and
+						read:sensitive to copy environment values and raw Compose content. Dokploy supports
+						PostgreSQL dump uploads.
+					</CardDescription>
+				</CardHeader>
+				<CardContent className="space-y-5">
+					<div className="max-w-sm space-y-2">
+						<Label htmlFor="migration-provider">Source panel</Label>
+						<select
+							id="migration-provider"
+							className={selectClass}
+							value={provider}
+							disabled={apply.isPending}
+							onChange={(event) => {
+								clearSource();
+								setProvider(event.target.value as ImportSource);
+								setMode("live");
+							}}
 						>
-							{sourceOpen ? "Hide connection" : "Change connection"}
-						</Button>
+							{IMPORT_SOURCES.map((value) => (
+								<option key={value} value={value}>
+									{IMPORT_SOURCE_LABELS[value]}
+								</option>
+							))}
+						</select>
 					</div>
-				)}
-				<div id="migration-source-form" hidden={!sourceOpen}>
-					<Card>
-						<CardHeader>
-							<CardTitle>1. Connect your source</CardTitle>
-							<CardDescription>
-								Use a source API key with read access. Coolify also needs API access enabled and
-								read:sensitive to copy environment values and raw Compose content. Dokploy supports
-								PostgreSQL dump uploads.
-							</CardDescription>
-						</CardHeader>
-						<CardContent className="space-y-5">
-							<div className="max-w-sm space-y-2">
-								<Label htmlFor="migration-provider">Source panel</Label>
-								<select
-									id="migration-provider"
-									className={selectClass}
-									value={provider}
+					<fieldset disabled={busy} className="flex flex-wrap gap-2">
+						<legend className="sr-only">Source connection</legend>
+						<Button
+							type="button"
+							variant={mode === "live" ? "default" : "outline"}
+							aria-pressed={mode === "live"}
+							onClick={() => {
+								clearSource();
+								setMode("live");
+							}}
+						>
+							<PlugZap className="size-4" />
+							Live API
+						</Button>
+						<Button
+							type="button"
+							variant={mode === "dump" ? "default" : "outline"}
+							disabled={provider !== "dokploy"}
+							aria-pressed={mode === "dump"}
+							onClick={() => {
+								clearSource();
+								setMode("dump");
+							}}
+						>
+							<FileUp className="size-4" />
+							Upload dump
+						</Button>
+					</fieldset>
+					{mode === "live" ? (
+						<div className="grid gap-4 sm:grid-cols-2">
+							<div className="space-y-2">
+								<Label htmlFor="migration-url">Source panel URL</Label>
+								<Input
+									id="migration-url"
+									type="url"
+									placeholder="https://panel.example.com"
+									value={url}
 									disabled={apply.isPending}
 									onChange={(event) => {
 										clearSource();
-										setProvider(event.target.value as ImportSource);
-										setMode("live");
+										setUrl(event.target.value);
 									}}
-								>
-									{IMPORT_SOURCES.map((value) => (
-										<option key={value} value={value}>
-											{IMPORT_SOURCE_LABELS[value]}
-										</option>
-									))}
-								</select>
+									autoComplete="off"
+								/>
+								<p className="text-xs text-muted-foreground">
+									Private addresses require the instance's private-egress setting.
+								</p>
 							</div>
-							<fieldset disabled={busy} className="flex flex-wrap gap-2">
-								<legend className="sr-only">Source connection</legend>
-								<Button
-									type="button"
-									variant={mode === "live" ? "default" : "outline"}
-									aria-pressed={mode === "live"}
-									onClick={() => {
+							<div className="space-y-2">
+								<Label htmlFor="migration-key">Source API key</Label>
+								<Input
+									id="migration-key"
+									type="password"
+									value={apiKey}
+									disabled={apply.isPending}
+									onChange={(event) => {
 										clearSource();
-										setMode("live");
+										setApiKey(event.target.value);
 									}}
-								>
-									<PlugZap className="size-4" />
-									Live API
-								</Button>
-								<Button
-									type="button"
-									variant={mode === "dump" ? "default" : "outline"}
-									disabled={provider !== "dokploy"}
-									aria-pressed={mode === "dump"}
-									onClick={() => {
-										clearSource();
-										setMode("dump");
-									}}
-								>
-									<FileUp className="size-4" />
-									Upload dump
-								</Button>
-							</fieldset>
-							{mode === "live" ? (
-								<div className="grid gap-4 sm:grid-cols-2">
-									<div className="space-y-2">
-										<Label htmlFor="migration-url">Source panel URL</Label>
-										<Input
-											id="migration-url"
-											type="url"
-											placeholder="https://panel.example.com"
-											value={url}
-											disabled={apply.isPending}
-											onChange={(event) => {
-												clearSource();
-												setUrl(event.target.value);
-											}}
-											autoComplete="off"
-										/>
-										<p className="text-xs text-muted-foreground">
-											Private addresses require the instance's private-egress setting.
-										</p>
-									</div>
-									<div className="space-y-2">
-										<Label htmlFor="migration-key">Source API key</Label>
-										<Input
-											id="migration-key"
-											type="password"
-											value={apiKey}
-											disabled={apply.isPending}
-											onChange={(event) => {
-												clearSource();
-												setApiKey(event.target.value);
-											}}
-											autoComplete="off"
-										/>
-										<p className="text-xs text-muted-foreground">
-											Sent in request bodies; never saved in the browser or reports.
-										</p>
-									</div>
-								</div>
-							) : (
-								<div className="space-y-2">
-									<Label htmlFor="migration-file">PostgreSQL dump</Label>
-									<Input
-										id="migration-file"
-										ref={uploadInput}
-										type="file"
-										accept=".sql,.dump,.backup,.gz"
-										disabled={busy}
-										onChange={(event) => {
-											clearSource();
-											const next = event.target.files?.[0] ?? null;
-											if (next && next.size > MAX_DUMP) {
-												setFile(null);
-												setError("The dump exceeds 512 MiB.");
-											} else setFile(next);
-										}}
-									/>
-									<p className="text-xs text-muted-foreground">
-										SQL or pg_dump custom format, optionally gzip, up to 512 MiB. Uploaded dumps are
-										organization-scoped and expire after 24 hours.
-									</p>
-									{dump && (
-										<p className="text-xs text-muted-foreground">
-											Uploaded {dump.filename}. Expires {new Date(dump.expiresAt).toLocaleString()}.
-											reupload after expiry.
-										</p>
-									)}
-								</div>
+									autoComplete="off"
+								/>
+								<p className="text-xs text-muted-foreground">
+									Sent in request bodies; never saved in the browser or reports.
+								</p>
+							</div>
+						</div>
+					) : (
+						<div className="space-y-2">
+							<Label htmlFor="migration-file">PostgreSQL dump</Label>
+							<Input
+								id="migration-file"
+								ref={uploadInput}
+								type="file"
+								accept=".sql,.dump,.backup,.gz"
+								disabled={busy}
+								onChange={(event) => {
+									clearSource();
+									const next = event.target.files?.[0] ?? null;
+									if (next && next.size > MAX_DUMP) {
+										setFile(null);
+										setError("The dump exceeds 512 MiB.");
+									} else setFile(next);
+								}}
+							/>
+							<p className="text-xs text-muted-foreground">
+								SQL or pg_dump custom format, optionally gzip, up to 512 MiB. Uploaded dumps are
+								organization-scoped and expire after 24 hours.
+							</p>
+							{dump && (
+								<p className="text-xs text-muted-foreground">
+									Uploaded {dump.filename}. Expires {new Date(dump.expiresAt).toLocaleString()}.
+									reupload after expiry.
+								</p>
 							)}
-							<Button
-								disabled={
-									busy || (mode === "live" ? !url.trim() || !apiKey.trim() : !file && !dump)
-								}
-								onClick={() => void inspectSource()}
-							>
-								{inspect.isPending || uploading ? (
-									<Loader2 className="size-4 animate-spin" />
-								) : (
-									<ArrowRight className="size-4" />
-								)}
-								{uploading
-									? "Uploading dump…"
-									: inspect.isPending
-										? "Inspecting source…"
-										: "Inspect source"}
-							</Button>
-						</CardContent>
-					</Card>
-				</div>
-			</div>
+						</div>
+					)}
+					<Button
+						disabled={busy || (mode === "live" ? !url.trim() || !apiKey.trim() : !file && !dump)}
+						onClick={() => void inspectSource()}
+					>
+						{inspect.isPending || uploading ? (
+							<Loader2 className="size-4 animate-spin" />
+						) : (
+							<ArrowRight className="size-4" />
+						)}
+						{uploading
+							? "Uploading dump…"
+							: inspect.isPending
+								? "Inspecting source…"
+								: "Inspect source"}
+					</Button>
+				</CardContent>
+			</Card>
 			{error && (
 				<div
 					role="alert"
@@ -524,11 +431,7 @@ export function MigrationsView() {
 				</div>
 			)}
 			{inventory && (
-				<Card
-					id="migration-selection"
-					tabIndex={-1}
-					className="scroll-mt-8 focus-visible:outline-2 focus-visible:outline-ring"
-				>
+				<Card>
 					<CardHeader>
 						<CardTitle>2. Choose configuration and target</CardTitle>
 						<CardDescription className="break-all">
@@ -592,7 +495,7 @@ export function MigrationsView() {
 								</div>
 								{currentEnvironment && (
 									<section className="space-y-2">
-										<div className="flex flex-wrap items-center justify-between gap-3">
+										<div className="flex items-center justify-between gap-3">
 											<h3 className="text-sm font-medium">
 												Services{" "}
 												<span className="text-muted-foreground tabular-nums">
@@ -754,26 +657,20 @@ export function MigrationsView() {
 				</Card>
 			)}
 			{plan && (
-				<div
-					id="migration-review"
-					tabIndex={-1}
-					className="scroll-mt-8 focus-visible:outline-2 focus-visible:outline-ring"
-				>
-					<MigrationReview
-						key={plan.reviewToken}
-						plan={plan}
-						result={result}
-						pending={apply.isPending}
-						can={can}
-						onApply={() => void runApply()}
-						onReplan={() => {
-							clearReview();
-							if (mode === "live")
-								setError("Re-enter the source API key above, inspect and generate a fresh plan.");
-							else void review();
-						}}
-					/>
-				</div>
+				<MigrationReview
+					key={plan.reviewToken}
+					plan={plan}
+					result={result}
+					pending={apply.isPending}
+					can={can}
+					onApply={() => void runApply()}
+					onReplan={() => {
+						clearReview();
+						if (mode === "live")
+							setError("Re-enter the source API key above, inspect and generate a fresh plan.");
+						else void review();
+					}}
+				/>
 			)}
 		</div>
 	);

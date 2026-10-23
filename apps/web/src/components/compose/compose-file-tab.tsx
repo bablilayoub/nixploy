@@ -144,7 +144,6 @@ export function ComposeFileTab({ compose }: { compose: ComposeService }) {
 					</div>
 				) : (
 					<CodeEditor
-						label="Compose file"
 						value={value}
 						onChange={setValue}
 						locked={!editable}

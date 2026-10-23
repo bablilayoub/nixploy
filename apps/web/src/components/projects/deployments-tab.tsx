@@ -29,7 +29,7 @@ function StatCard({
 	isPending?: boolean;
 }) {
 	return (
-		<div className="flex flex-col gap-1 surface p-5">
+		<div className="flex flex-col gap-1 rounded-lg border p-4">
 			<span className="flex items-center gap-2 text-sm text-muted-foreground">
 				<StatusDot status={dot} />
 				{label}

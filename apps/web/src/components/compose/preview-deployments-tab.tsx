@@ -105,7 +105,7 @@ function PreviewSettingsCard({ compose }: { compose: ComposeService }) {
 			title="Preview settings"
 			description="Pull-request previews, environment overrides, the cap on simultaneous previews, and how long a preview lives."
 		>
-			<div className="flex min-w-0 flex-col gap-5">
+			<div className="flex flex-col gap-4">
 				{!gitBacked && (
 					<p className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
 						This compose service has no git provider, so no pull-request webhooks reach it. Point it

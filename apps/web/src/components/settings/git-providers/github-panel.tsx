@@ -220,9 +220,9 @@ export function GithubPanel() {
 										{format(new Date(github.createdAt), "MMM d, yyyy")}
 									</TableCell>
 									<TableCell>
-										<div className="flex flex-wrap items-center justify-end gap-2">
+										<div className="flex items-center justify-end gap-1">
 											<Button
-												variant={configured ? "outline" : "default"}
+												variant="outline"
 												size="sm"
 												title={manageHint}
 												disabled={

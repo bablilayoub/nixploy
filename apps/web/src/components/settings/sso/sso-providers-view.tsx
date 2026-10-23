@@ -5,11 +5,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { KeyRound, Loader2, Pencil, Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+
+import { SettingsSection } from "@/components/layout/settings-section";
 import { LoadError } from "@/components/query-state";
 import { CopyButton } from "@/components/services/copy-button";
 import { EmptyState } from "@/components/services/empty-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
-import { PageHeader } from "@/components/shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -54,7 +55,7 @@ import { useTRPC } from "@/lib/trpc";
  */
 
 const DESCRIPTION =
-	"Identity providers for this instance. Require SSO per organization in Organization settings. Only instance admins can change these providers.";
+	"Identity providers for this whole instance. They appear on the login page for everyone, so only instance admins can change them.";
 
 type ProviderRow = {
 	ssoProviderId: string;
@@ -249,17 +250,17 @@ export function SsoProvidersView() {
 	const pending = create.isPending || update.isPending;
 
 	return (
-		<div className="flex min-w-0 flex-col gap-6">
-			<PageHeader
-				title="Single sign-on"
-				description={DESCRIPTION}
-				actions={
-					<Button size="sm" onClick={openCreate}>
-						<Plus className="size-4" />
-						Add provider
-					</Button>
-				}
-			/>
+		<SettingsSection
+			wide
+			title="Single sign-on"
+			description={DESCRIPTION}
+			actions={
+				<Button size="sm" onClick={openCreate}>
+					<Plus className="size-4" />
+					Add provider
+				</Button>
+			}
+		>
 			{providersQuery.isPending ? (
 				<Skeleton className="h-24 w-full" />
 			) : providersQuery.isError ? (
@@ -272,6 +273,12 @@ export function SsoProvidersView() {
 					icon={KeyRound}
 					title="No identity provider yet"
 					description="Add one and a “Continue with …” button appears on the login page. Password sign-in keeps working alongside it."
+					action={
+						<Button size="sm" onClick={openCreate}>
+							<Plus className="size-4" />
+							Add provider
+						</Button>
+					}
 				/>
 			) : (
 				<Table>
@@ -342,7 +349,7 @@ export function SsoProvidersView() {
 					</DialogHeader>
 
 					<form
-						className="flex min-w-0 flex-col gap-5"
+						className="flex flex-col gap-4"
 						onSubmit={(event) => {
 							event.preventDefault();
 							if (editing) {
@@ -472,7 +479,6 @@ export function SsoProvidersView() {
 							</div>
 						) : null}
 
-						<h3 className="mt-3 border-b pb-3 text-sm font-semibold">Connection</h3>
 						<div className="grid gap-4 sm:grid-cols-2">
 							<div className="flex flex-col gap-1.5">
 								<Label htmlFor="sso-client-id">Client ID</Label>
@@ -530,7 +536,6 @@ export function SsoProvidersView() {
 							</div>
 						</div>
 
-						<h3 className="mt-3 border-b pb-3 text-sm font-semibold">Access</h3>
 						<div className="grid gap-4 sm:grid-cols-2">
 							<div className="flex flex-col gap-1.5">
 								<Label htmlFor="sso-default-org">New users join</Label>
@@ -642,7 +647,7 @@ export function SsoProvidersView() {
 					</form>
 				</DialogContent>
 			</Dialog>
-		</div>
+		</SettingsSection>
 	);
 }
 

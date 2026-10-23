@@ -62,8 +62,8 @@ export function InheritedEnv({
 	const ownKeys = new Set(parseEnvFile(ownEnv ?? "").map((entry) => entry.key));
 
 	return (
-		<div className="overflow-hidden rounded-lg border border-border bg-card">
-			<div className="flex items-center justify-between gap-2 bg-panel-inset px-4 py-3">
+		<div className="rounded-lg border border-border">
+			<div className="flex items-center justify-between gap-2 px-3 py-2">
 				<button
 					type="button"
 					className="flex min-w-0 items-center gap-2 text-sm"
@@ -120,7 +120,7 @@ export function InheritedEnv({
 										{revealed ? entry.value || <span className="italic">(empty)</span> : MASK}
 									</span>
 									{overridden && (
-										<span className="shrink-0 rounded bg-secondary px-1.5 py-0.5 font-sans text-[11px] text-muted-foreground">
+										<span className="shrink-0 rounded bg-secondary px-1.5 py-0.5 font-sans text-[10px] text-muted-foreground">
 											overridden here
 										</span>
 									)}

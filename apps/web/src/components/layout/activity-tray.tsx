@@ -143,7 +143,7 @@ function Row({
 					<Button
 						size="icon"
 						variant="ghost"
-						className="size-9"
+						className="size-6"
 						aria-label="Dismiss"
 						onClick={onDismiss}
 					>
@@ -222,11 +222,11 @@ export function ActivityTray() {
 	return (
 		<div
 			data-slot="activity-tray"
-			className="fixed bottom-4 end-4 z-40 w-[min(24rem,calc(100vw-2rem))]"
+			className="fixed bottom-4 end-4 z-40 w-[min(22rem,calc(100vw-2rem))]"
 		>
 			{expanded ? (
-				<div className="overflow-hidden rounded-xl border bg-popover shadow-[var(--overlay-shadow)]">
-					<div className="flex items-center justify-between gap-2 border-b bg-panel-inset px-4 py-3">
+				<div className="overflow-hidden rounded-lg border bg-popover shadow-lg">
+					<div className="flex items-center justify-between gap-2 border-b px-3 py-2">
 						<p className="text-sm font-medium">
 							Activity
 							<span className="ms-1.5 text-xs font-normal text-muted-foreground">
@@ -236,14 +236,14 @@ export function ActivityTray() {
 						<Button
 							size="icon"
 							variant="ghost"
-							className="size-9"
+							className="size-6"
 							aria-label="Collapse activity"
 							onClick={() => setExpanded(false)}
 						>
 							<ChevronDown className="size-4" />
 						</Button>
 					</div>
-					<ul className="max-h-[min(28rem,65dvh)] divide-y overflow-y-auto">
+					<ul className="max-h-72 divide-y overflow-y-auto">
 						{deployments.map((row) => (
 							<Row
 								key={row.id}
@@ -264,7 +264,11 @@ export function ActivityTray() {
 								title={incident.title}
 								detail={incident.serviceName ?? "Proposed remediation"}
 								href="/dashboard/monitoring?tab=incidents"
-								badge={<span className="text-xs text-warning">Needs a decision</span>}
+								badge={
+									<span className="text-xs text-amber-600 dark:text-amber-400">
+										Needs a decision
+									</span>
+								}
 							/>
 						))}
 						{items.map((item) => (

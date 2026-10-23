@@ -3,8 +3,8 @@ import { SaveBarProvider } from "@/components/services/save-bar";
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
 	return (
-		<div className="flex flex-col gap-10 lg:flex-row lg:items-start">
-			<NavSettings className="lg:sticky lg:top-40 lg:w-48 lg:shrink-0" />
+		<div className="flex flex-col gap-6 md:flex-row md:items-start">
+			<NavSettings className="md:sticky md:top-16 md:w-52 md:shrink-0" />
 			{/*
 			 * One save bar for the settings page being viewed: the cards of the
 			 * other routes are unmounted, so only this page's dirty forms can

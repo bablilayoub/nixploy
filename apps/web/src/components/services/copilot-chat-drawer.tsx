@@ -291,7 +291,7 @@ export function CopilotChatDrawer({ target }: { target: CopilotTarget }) {
 									<button
 										key={suggestion}
 										type="button"
-										className="rounded-lg border bg-panel-inset px-3 py-2 text-left text-sm transition-colors hover:bg-muted/60 disabled:opacity-50"
+										className="rounded-md border bg-muted/30 px-3 py-2 text-left text-sm transition-colors hover:bg-muted/60 disabled:opacity-50"
 										onClick={() => send(suggestion)}
 										disabled={chat.isPending || !canChat}
 										title={canChat ? undefined : capabilityHint("ai.use")}

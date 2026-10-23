@@ -173,7 +173,7 @@ export function EnvironmentVariablesTab({
 						isEmpty={false}
 						empty={null}
 					>
-						<pre className="max-h-96 overflow-auto surface p-4 font-mono text-[13px] whitespace-pre-wrap text-foreground">
+						<pre className="max-h-96 overflow-auto rounded-lg border border-border bg-card p-4 font-mono text-[13px] whitespace-pre-wrap text-foreground">
 							{resolvedQuery.data?.env || "# No variables defined"}
 						</pre>
 					</QueryState>

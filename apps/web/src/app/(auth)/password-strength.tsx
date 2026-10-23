@@ -72,12 +72,7 @@ export function PasswordStrengthHint({ value }: { value: string }) {
 		<div className="grid gap-2" aria-live="polite">
 			<div className="flex items-center gap-2">
 				<div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
-					<div
-						className={cn(
-							"h-full rounded-full transition-[color,background-color,border-color,box-shadow] duration-150",
-							STRENGTH_BAR[strength],
-						)}
-					/>
+					<div className={cn("h-full rounded-full transition-all", STRENGTH_BAR[strength])} />
 				</div>
 				<span className={cn("text-xs font-medium", STRENGTH_TEXT[strength])}>
 					{STRENGTH_LABEL[strength]}

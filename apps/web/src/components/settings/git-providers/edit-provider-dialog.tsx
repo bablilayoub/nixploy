@@ -101,7 +101,7 @@ export function EditProviderDialog({
 						{description ? <DialogDescription>{description}</DialogDescription> : null}
 					</DialogHeader>
 					<form
-						className="grid gap-5"
+						className="grid gap-4"
 						onSubmit={(event) => {
 							event.preventDefault();
 							void submit();

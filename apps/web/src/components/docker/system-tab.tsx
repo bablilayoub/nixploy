@@ -60,8 +60,7 @@ export function SystemTab({ serverId }: DockerTabProps) {
 	);
 
 	if (infoQuery.isLoading) return <Skeleton className="h-64 w-full" />;
-	if (infoQuery.isError)
-		return <DockerError error={infoQuery.error} onRetry={() => void infoQuery.refetch()} />;
+	if (infoQuery.isError) return <DockerError error={infoQuery.error} />;
 
 	const info = infoQuery.data;
 	const server = info?.version?.Server;

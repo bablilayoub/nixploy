@@ -1,168 +1,177 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { ArrowUpRight, Download, Menu } from "lucide-react";
+import { Download, Menu } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useBranding } from "@/components/branding-provider";
 import { CommandPalette } from "@/components/command-palette";
 import { ProfileDropdown } from "@/components/layout/profile-dropdown";
 import { isSidebarNavActive, sidebarNavGroups } from "@/components/layout/sidebar-data";
 import { ModeToggle } from "@/components/mode-toggle";
 import { OrgSwitcher } from "@/components/org-switcher";
-import { Logo } from "@/components/shell/logo";
+import { Logo, LogoMark } from "@/components/shell/logo";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useTRPC } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 
-/** Fieldwork keeps the entire workspace in the same horizontal frame. */
-export function TopNav() {
-	const pathname = usePathname();
-	const chrome = useRef<HTMLDivElement>(null);
-	useEffect(() => {
-		if (!chrome.current) return;
-		const root = document.documentElement;
-		const update = () =>
-			root.style.setProperty(
-				"--fieldwork-chrome-height",
-				`${Math.ceil(chrome.current?.getBoundingClientRect().height ?? 0)}px`,
-			);
-		update();
-		const observer = new ResizeObserver(update);
-		observer.observe(chrome.current);
-		return () => {
-			observer.disconnect();
-			root.style.removeProperty("--fieldwork-chrome-height");
-		};
-	}, []);
-	const { can } = useCapabilities({ strict: true });
-	const branding = useBranding();
-	const [mobileOpen, setMobileOpen] = useState(false);
+const allNavItems = sidebarNavGroups.flatMap((group) => group.items);
+
+function useUpdateAvailable() {
 	const trpc = useTRPC();
-	const banner = useQuery({
+	const bannerQuery = useQuery({
 		...trpc.updates.banner.queryOptions(),
 		refetchInterval: 5 * 60_000,
 		retry: false,
 	});
-	const updateAvailable = Boolean(banner.data?.updateAvailable && banner.data?.canManageUpdate);
-	const items = sidebarNavGroups
-		.flatMap((group) => group.items)
-		.filter((item) => !item.capability || can(item.capability));
+	return Boolean(bannerQuery.data?.updateAvailable) && Boolean(bannerQuery.data?.canManageUpdate);
+}
+
+function NavLink({
+	href,
+	label,
+	active,
+	onNavigate,
+	badge,
+}: {
+	href: string;
+	label: string;
+	active: boolean;
+	onNavigate?: () => void;
+	badge?: boolean;
+}) {
 	return (
-		<div ref={chrome} className="fieldwork-chrome">
-			<header className="workspace-topbar fieldwork-identity">
-				<div className="fieldwork-identity-inner">
-					<div className="fieldwork-identity-start">
-						<Link href="/dashboard" aria-label={branding.productName} className="fieldwork-logo">
-							<Logo />
-						</Link>
-						<span className="fieldwork-brand-divider" aria-hidden="true" />
-						<OrgSwitcher className="fieldwork-org-switcher" />
-					</div>
-					<div className="fieldwork-identity-tools">
-						{updateAvailable && (
-							<Button asChild variant="outline" size="sm" className="hidden xl:inline-flex">
-								<Link href="/dashboard/settings/server">
-									<Download aria-hidden="true" className="size-3.5" />
-									Update available
-								</Link>
-							</Button>
-						)}
-						<CommandPalette className="fieldwork-command" />
-						<ModeToggle />
-						<div className="fieldwork-account">
-							<ProfileDropdown />
-						</div>
-						<Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-							<SheetTrigger asChild>
-								<Button
-									variant="ghost"
-									size="icon"
-									className="lg:hidden"
-									aria-label="Open workspace navigation"
-								>
-									<Menu className="size-5" />
-								</Button>
-							</SheetTrigger>
-							<SheetContent
-								side="right"
-								className="flex w-80 max-w-[calc(100vw-24px)] flex-col gap-0 p-0"
+		<Link
+			href={href}
+			aria-current={active ? "page" : undefined}
+			onClick={onNavigate}
+			className={cn(
+				"relative inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+				active
+					? "bg-muted font-medium text-foreground"
+					: "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+			)}
+		>
+			{label}
+			{badge ? (
+				<span className="relative flex size-1.5">
+					<span className="absolute inline-flex size-full animate-ping rounded-full bg-success opacity-75" />
+					<span className="relative inline-flex size-1.5 rounded-full bg-success" />
+				</span>
+			) : null}
+		</Link>
+	);
+}
+
+/** Vercel-style sticky top navigation — brand, links, search, account. */
+export function TopNav() {
+	const pathname = usePathname();
+	const { can } = useCapabilities({ strict: true });
+	const navItems = allNavItems.filter((item) => !item.capability || can(item.capability));
+	const branding = useBranding();
+	const [mobileOpen, setMobileOpen] = useState(false);
+	const updateAvailable = useUpdateAvailable();
+
+	return (
+		<header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-md">
+			<div className="mx-auto flex h-14 w-full max-w-[1400px] items-center gap-1 px-4 sm:gap-3 sm:px-6">
+				<div className="flex min-w-0 items-center gap-0 sm:gap-2">
+					<Link href="/dashboard" className="hidden shrink-0 sm:inline-flex">
+						<Logo />
+					</Link>
+					<Link
+						href="/dashboard"
+						className="inline-flex size-11 shrink-0 items-center justify-center sm:hidden"
+						aria-label={branding.productName}
+					>
+						<LogoMark className="size-7" />
+					</Link>
+					<Separator orientation="vertical" className="hidden h-4 sm:block" />
+					<OrgSwitcher className="h-11 gap-1 px-1 sm:h-8 sm:gap-2 sm:px-2" />
+				</div>
+
+				<nav className="ms-1 hidden items-center gap-0.5 xl:flex">
+					{navItems.map((item) => (
+						<NavLink
+							key={item.url}
+							href={item.url}
+							label={item.title}
+							active={isSidebarNavActive(pathname, item.url)}
+							badge={item.url === "/dashboard/settings" ? updateAvailable : false}
+						/>
+					))}
+				</nav>
+
+				<div className="ms-auto flex shrink-0 items-center gap-0 sm:gap-1.5">
+					{updateAvailable ? (
+						<Button
+							asChild
+							variant="outline"
+							size="sm"
+							className="hidden h-8 gap-1.5 lg:inline-flex"
+						>
+							<Link href="/dashboard/settings/server">
+								<Download className="size-3.5" />
+								Update
+							</Link>
+						</Button>
+					) : null}
+					<CommandPalette />
+					<ModeToggle />
+					<ProfileDropdown />
+
+					<Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+						<SheetTrigger asChild>
+							<Button
+								variant="ghost"
+								size="icon"
+								className="size-11 sm:size-9 xl:hidden"
+								aria-label="Open menu"
 							>
-								<SheetHeader className="border-b px-6 py-6 text-start">
-									<SheetTitle>Workspace navigation</SheetTitle>
-									<div className="mt-3">
-										<OrgSwitcher />
-									</div>
-								</SheetHeader>
-								<nav aria-label="Workspace mobile" className="flex-1 space-y-1 overflow-y-auto p-4">
-									{items.map((item) => (
+								<Menu className="size-5" />
+							</Button>
+						</SheetTrigger>
+						<SheetContent side="left" className="w-72 p-0">
+							<SheetHeader className="border-b px-4 py-3 text-start">
+								<SheetTitle className="flex items-center gap-2">
+									<LogoMark className="size-5" />
+									{branding.productName}
+								</SheetTitle>
+							</SheetHeader>
+							<nav className="flex flex-col gap-1 p-3">
+								{navItems.map((item) => {
+									const Icon = item.icon;
+									const active = isSidebarNavActive(pathname, item.url);
+									return (
 										<Link
 											key={item.url}
 											href={item.url}
-											aria-current={isSidebarNavActive(pathname, item.url) ? "page" : undefined}
+											aria-current={active ? "page" : undefined}
 											onClick={() => setMobileOpen(false)}
 											className={cn(
-												"flex min-h-12 items-center gap-3 rounded-md px-3 py-2 text-sm",
-												isSidebarNavActive(pathname, item.url)
-													? "bg-accent font-medium text-foreground"
-													: "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+												"flex min-h-11 items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+												active
+													? "bg-muted font-medium text-foreground"
+													: "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
 											)}
 										>
-											<item.icon aria-hidden="true" className="size-4" strokeWidth={1.6} />
+											<Icon className="size-4 shrink-0" />
 											{item.title}
+											{item.url === "/dashboard/settings" && updateAvailable ? (
+												<span className="ms-auto size-1.5 rounded-full bg-success" />
+											) : null}
 										</Link>
-									))}
-								</nav>
-								<div className="mx-6 mb-5 flex items-center justify-between gap-4 border-t pt-4 flex-wrap">
-									<a
-										href={branding.docsUrl ?? "https://nixploy.com/docs"}
-										target="_blank"
-										rel="noreferrer"
-										className="flex min-h-11 items-center gap-3 text-sm text-muted-foreground hover:text-foreground"
-									>
-										Documentation
-										<ArrowUpRight aria-hidden="true" className="size-4" />
-									</a>
-									<ProfileDropdown onNavigate={() => setMobileOpen(false)} />
-								</div>
-							</SheetContent>
-						</Sheet>
-					</div>
-				</div>
-			</header>
-			<div className="fieldwork-primary-row">
-				<div className="fieldwork-primary-inner">
-					<nav aria-label="Workspace" className="fieldwork-primary-nav">
-						{items.map((item) => (
-							<Link
-								key={item.url}
-								href={item.url}
-								aria-current={isSidebarNavActive(pathname, item.url) ? "page" : undefined}
-								className="fieldwork-primary-link"
-							>
-								{item.title}
-								{item.url === "/dashboard/settings" && updateAvailable && (
-									<span className="size-1.5 rounded-full bg-success">
-										<span className="sr-only">Update available</span>
-									</span>
-								)}
-							</Link>
-						))}
-					</nav>
-					<a
-						href={branding.docsUrl ?? "https://nixploy.com/docs"}
-						target="_blank"
-						rel="noreferrer"
-						className="fieldwork-docs-link"
-					>
-						Documentation
-						<ArrowUpRight aria-hidden="true" className="size-3.5" />
-					</a>
+									);
+								})}
+							</nav>
+						</SheetContent>
+					</Sheet>
 				</div>
 			</div>
-		</div>
+		</header>
 	);
 }

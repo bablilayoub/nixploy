@@ -110,11 +110,12 @@ export function OrgSwitcher({ className }: { className?: string }) {
 					<Button
 						variant="ghost"
 						size="sm"
-						className={cn("h-10 min-w-0 shrink gap-2 px-2 font-normal", className)}
+						aria-label={`Switch organization: ${displayName ?? "Organization"}`}
+						className={cn("h-8 min-w-0 shrink gap-2 px-2 font-normal", className)}
 					>
 						{isPending ? (
 							<>
-								<Skeleton className="size-6 rounded-md" />
+								<Skeleton className="size-5 rounded" />
 								<Skeleton className="h-3.5 w-20" />
 							</>
 						) : (
@@ -123,13 +124,13 @@ export function OrgSwitcher({ className }: { className?: string }) {
 									// biome-ignore lint/performance/noImgElement: user-supplied white-label URL
 									<img src={logoUrl} alt="" className="size-5 shrink-0 rounded object-cover" />
 								) : (
-									<span className="flex size-5 shrink-0 items-center justify-center rounded border bg-panel-inset text-xs font-medium text-foreground">
+									<span className="flex size-5 shrink-0 items-center justify-center rounded bg-foreground text-[10px] font-semibold text-background">
 										{displayName?.charAt(0).toUpperCase() ?? "?"}
 									</span>
 								)}
-								{/* A floor so the name ellipsises instead of shrinking to nothing;
-								    the search trigger next to it gives up the space instead. */}
-								<span className="min-w-12 max-w-24 truncate text-[13px] font-medium lg:max-w-48">
+								{/* Keep a name floor on desktop; phones can shrink the text
+								    while the logo and full accessible name identify the organization. */}
+								<span className="min-w-0 max-w-24 truncate text-sm font-medium sm:min-w-12 lg:max-w-36">
 									{displayName ?? "Organization"}
 								</span>
 								<ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" />
@@ -147,7 +148,7 @@ export function OrgSwitcher({ className }: { className?: string }) {
 							onSelect={() => switchOrganization(org.id)}
 							className="gap-2"
 						>
-							<span className="flex size-5 shrink-0 items-center justify-center rounded border text-[11px] font-semibold">
+							<span className="flex size-5 shrink-0 items-center justify-center rounded border text-[10px] font-semibold">
 								{org.name.charAt(0).toUpperCase()}
 							</span>
 							<span className="truncate">{org.name}</span>

@@ -91,8 +91,8 @@ export function ServiceSettingsBody({
 	return (
 		<SettingsStack>
 			<SettingsSection title={copy.sectionTitle} description={copy.sectionDescription}>
-				<div className="flex flex-col gap-5">
-					<div className="flex flex-col gap-2.5">
+				<div className="flex flex-col gap-4">
+					<div className="flex flex-col gap-2">
 						<Label htmlFor="service-name">Name</Label>
 						<Input
 							id="service-name"
@@ -101,7 +101,7 @@ export function ServiceSettingsBody({
 							onChange={(event) => draft.patch({ name: event.target.value })}
 						/>
 					</div>
-					<div className="flex flex-col gap-2.5">
+					<div className="flex flex-col gap-2">
 						<Label htmlFor="service-description">Description</Label>
 						<Textarea
 							id="service-description"

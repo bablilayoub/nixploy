@@ -29,7 +29,7 @@ export function PrometheusCard() {
 	const curl = `curl -H "x-api-key: $NIXPLOY_API_KEY" ${url}`;
 
 	return (
-		<section className="surface flex flex-col gap-4 px-5 py-5">
+		<section className="flex flex-col gap-3 rounded-xl border bg-card px-4 py-3">
 			<div className="flex items-center gap-2">
 				<Activity className="size-4 shrink-0 text-muted-foreground" />
 				<h2 className="text-sm font-medium">Prometheus endpoint</h2>

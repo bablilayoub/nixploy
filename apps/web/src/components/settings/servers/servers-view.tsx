@@ -6,6 +6,7 @@ import { format } from "date-fns";
 import { Loader2, Pencil, Plug, Server, Wrench } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { SettingsSection } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
 import { EmptyState } from "@/components/services/empty-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
@@ -156,15 +157,18 @@ export function ServersView() {
 						. Pin apps with Advanced → Placement constraints.
 					</span>
 				}
+			/>
+			{/* The page header already says "Servers" and what they are. */}
+			<SettingsSection
+				title="Connected hosts"
+				wide
 				actions={
 					<>
 						<TableSearch view={view} placeholder="Search hosts…" />
 						<CreateServerDialog disabled={!canManage} disabledReason={manageHint} />
 					</>
 				}
-			/>
-			{/* The page header already says "Servers" and what they are. */}
-			<div className="min-w-0">
+			>
 				<QueryState
 					isPending={isPending}
 					isError={isError}
@@ -338,7 +342,7 @@ export function ServersView() {
 					</Table>
 					<TablePagination view={view} noun="hosts" className="mt-3" />
 				</QueryState>
-			</div>
+			</SettingsSection>
 			<Dialog open={editing !== null} onOpenChange={(isOpen) => !isOpen && setEditing(null)}>
 				<DialogContent>
 					<DialogHeader>
@@ -363,7 +367,7 @@ export function ServersView() {
 								});
 							}
 						}}
-						className="grid gap-5"
+						className="grid gap-4"
 					>
 						<div className="grid gap-2">
 							<Label htmlFor="edit-server-name">Name</Label>
@@ -381,7 +385,7 @@ export function ServersView() {
 								onChange={(e) => setEditDescription(e.target.value)}
 							/>
 						</div>
-						<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+						<div className="grid grid-cols-2 gap-4">
 							<div className="grid gap-2">
 								<Label htmlFor="edit-server-ip">IP address</Label>
 								<Input
@@ -420,7 +424,7 @@ export function ServersView() {
 								value={editSshKeyId ?? "none"}
 								onValueChange={(value) => setEditSshKeyId(value === "none" ? null : value)}
 							>
-								<SelectTrigger aria-label="SSH key">
+								<SelectTrigger>
 									<SelectValue placeholder="Select an SSH key" />
 								</SelectTrigger>
 								<SelectContent>
@@ -439,7 +443,7 @@ export function ServersView() {
 								value={editSwarmRole}
 								onValueChange={(value) => setEditSwarmRole(value as "worker" | "manager")}
 							>
-								<SelectTrigger aria-label="Swarm role">
+								<SelectTrigger>
 									<SelectValue />
 								</SelectTrigger>
 								<SelectContent>
@@ -452,7 +456,7 @@ export function ServersView() {
 								<HelpLink slug="servers" />
 							</p>
 						</div>
-						<div className="flex flex-wrap items-center justify-between gap-4 rounded-md border px-3 py-2">
+						<div className="flex items-center justify-between gap-4 rounded-md border px-3 py-2">
 							<div className="grid gap-0.5">
 								<Label htmlFor="edit-server-metrics">Metrics history</Label>
 								<p className="text-xs text-muted-foreground">

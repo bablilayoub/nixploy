@@ -729,7 +729,7 @@ export function CommandPalette({ className }: { className?: string }) {
 			>
 				<Search aria-hidden className="size-4 shrink-0 opacity-70" />
 				<span className="truncate">Search…</span>
-				<kbd className="pointer-events-none absolute end-1.5 top-1/2 hidden h-5 -translate-y-1/2 items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[11px] font-medium select-none sm:inline-flex">
+				<kbd className="pointer-events-none absolute end-1.5 top-1/2 hidden h-5 -translate-y-1/2 items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium select-none sm:inline-flex">
 					<span className="text-xs">⌘</span>K
 				</kbd>
 			</button>
@@ -739,7 +739,7 @@ export function CommandPalette({ className }: { className?: string }) {
 				onClick={() => setOpen(true)}
 				aria-label="Search"
 				className={cn(
-					"inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground sm:hidden",
+					"inline-flex size-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground sm:hidden",
 					className,
 				)}
 			>
@@ -781,15 +781,15 @@ export function CommandPalette({ className }: { className?: string }) {
 				<CommandSeparator className="mx-0" />
 				<div className="flex items-center gap-4 px-3 py-2 text-[11px] text-muted-foreground">
 					<span className="flex items-center gap-1.5">
-						<kbd className="rounded border bg-secondary px-1 font-mono text-[11px]">↑↓</kbd>
+						<kbd className="rounded border bg-secondary px-1 font-mono text-[10px]">↑↓</kbd>
 						Navigate
 					</span>
 					<span className="flex items-center gap-1.5">
-						<kbd className="rounded border bg-secondary px-1 font-mono text-[11px]">↵</kbd>
+						<kbd className="rounded border bg-secondary px-1 font-mono text-[10px]">↵</kbd>
 						Select
 					</span>
 					<span className="flex items-center gap-1.5">
-						<kbd className="rounded border bg-secondary px-1 font-mono text-[11px]">esc</kbd>
+						<kbd className="rounded border bg-secondary px-1 font-mono text-[10px]">esc</kbd>
 						Close
 					</span>
 				</div>

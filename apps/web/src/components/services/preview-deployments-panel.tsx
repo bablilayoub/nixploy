@@ -102,7 +102,7 @@ function CommitLine({ preview }: { preview: PreviewDeployment }) {
 	if (!author && !preview.commitSha) return null;
 	return (
 		<span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-			{author && <span className="break-words">{author}</span>}
+			{author && <span className="truncate">{author}</span>}
 			{preview.commitSha &&
 				(preview.commitUrl ? (
 					<a
@@ -485,7 +485,7 @@ export function PreviewDeploymentsPanel({
 										    title stands in for them. */}
 											{(preview.commitMessage || preview.pullRequestTitle) && (
 												<span
-													className="block max-w-64 break-words text-xs text-muted-foreground"
+													className="block max-w-64 truncate text-xs text-muted-foreground"
 													title={preview.commitMessage ?? preview.pullRequestTitle ?? undefined}
 												>
 													{preview.commitMessage ?? preview.pullRequestTitle}

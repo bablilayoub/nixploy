@@ -35,7 +35,9 @@ export default async function ComparePage({ params }: { params: Promise<{ slug: 
 }
 
 const Label = ({ children }: { children: React.ReactNode }) => (
-	<dt className="text-xs text-muted-foreground normal-case">{children}</dt>
+	<dt className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
+		{children}
+	</dt>
 );
 
 /*

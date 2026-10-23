@@ -95,7 +95,7 @@ export function ConfigurationRelease({ scope }: { scope: ConfigurationScope }) {
 					<DialogTitle>
 						{apply.isSuccess ? "Configuration release queued" : "Review variable changes"}
 					</DialogTitle>
-					<DialogDescription className="rounded-lg border bg-panel-inset px-4 py-3 text-xs leading-relaxed">
+					<DialogDescription>
 						Organization → project → environment → service. Lower levels win, including empty
 						values. Values stay hidden in this review.
 					</DialogDescription>
@@ -116,7 +116,7 @@ export function ConfigurationRelease({ scope }: { scope: ConfigurationScope }) {
 								Each job uses the encrypted variables approved in this review. Later edits need
 								another deployment.
 							</p>
-							<ul className="divide-y divide-border rounded-lg border border-border bg-card">
+							<ul className="divide-y divide-border rounded-lg border border-border">
 								{apply.data.deployments.map((job) => {
 									const target = targets.find(
 										(target) => target.id === job.id && target.kind === job.kind,
@@ -162,14 +162,11 @@ export function ConfigurationRelease({ scope }: { scope: ConfigurationScope }) {
 									No applications or Compose stacks in this scope. Managed databases are excluded.
 								</p>
 							) : (
-								<ul className="divide-y divide-border rounded-lg border border-border bg-card">
+								<ul className="divide-y divide-border rounded-lg border border-border">
 									{targets.map((target) => {
 										const key = `${target.kind}:${target.id}`;
 										return (
-											<li
-												key={key}
-												className="p-4 transition-colors has-[[data-state=checked]]:bg-accent/50"
-											>
+											<li key={key} className="p-3">
 												<label
 													htmlFor={`${controlPrefix}-${key}`}
 													className="flex min-h-11 cursor-pointer items-start gap-3"

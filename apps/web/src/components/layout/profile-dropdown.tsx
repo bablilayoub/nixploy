@@ -31,7 +31,7 @@ const settingsItems = [
 ];
 
 /** Compact avatar menu for the top header — shadcn-admin ProfileDropdown pattern. */
-export function ProfileDropdown({ onNavigate }: { onNavigate?: () => void }) {
+export function ProfileDropdown() {
 	const router = useRouter();
 	const queryClient = useQueryClient();
 	const { data: session, isPending } = useSession();
@@ -56,17 +56,21 @@ export function ProfileDropdown({ onNavigate }: { onNavigate?: () => void }) {
 	};
 
 	if (!mounted || isPending) {
-		return <Skeleton className="size-9 rounded-lg" />;
+		return <Skeleton className="size-11 rounded-full sm:size-8" />;
 	}
 
 	return (
 		<DropdownMenu modal={false}>
 			<DropdownMenuTrigger asChild>
-				<Button variant="ghost" className="relative size-9 rounded-lg" aria-label="Account menu">
+				<Button
+					variant="ghost"
+					className="relative size-11 rounded-full sm:size-8"
+					aria-label="Account menu"
+				>
 					<UserAvatar user={user} className="size-8" fallbackClassName="text-xs" size={64} />
 				</Button>
 			</DropdownMenuTrigger>
-			<DropdownMenuContent className="w-64" align="end" forceMount>
+			<DropdownMenuContent className="w-56" align="end" forceMount>
 				<DropdownMenuLabel className="font-normal">
 					<div className="flex flex-col gap-1.5">
 						<p className="text-sm leading-none font-medium">{user?.name ?? "User"}</p>
@@ -77,7 +81,7 @@ export function ProfileDropdown({ onNavigate }: { onNavigate?: () => void }) {
 				<DropdownMenuGroup>
 					{settingsItems.map((item) => (
 						<DropdownMenuItem key={item.label} asChild>
-							<Link href={item.href} onClick={onNavigate}>
+							<Link href={item.href}>
 								<item.icon className="size-4" />
 								{item.label}
 							</Link>

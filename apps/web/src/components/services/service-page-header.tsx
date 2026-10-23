@@ -189,7 +189,6 @@ export function ServicePageHeader({
 
 	return (
 		<PageHeader
-			className="fieldwork-service-header"
 			breadcrumb={
 				<nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1.5">
 					<Link
@@ -222,7 +221,7 @@ export function ServicePageHeader({
 			}
 			title={
 				<span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
-					<span className="min-w-0 break-words">{name}</span>
+					<span className="min-w-0 wrap-anywhere">{name}</span>
 					{inFlight ? (
 						<DeploymentStatusBadge
 							status={inFlight.status as "queued" | "running"}
@@ -234,26 +233,26 @@ export function ServicePageHeader({
 				</span>
 			}
 			description={
-				<span className="flex flex-col gap-2">
-					{subtitle ? <span className="break-words">{subtitle}</span> : null}
+				<span className="flex flex-col gap-1">
+					{subtitle ? <span className="truncate">{subtitle}</span> : null}
 					{(domainsQuery.data?.length ?? 0) > 0 ? (
 						<ServiceUrlBar domains={domainsQuery.data ?? []} onShowAll={showDomainsTab} />
 					) : null}
 					{lastDeploy?.finishedAt && !lastError ? (
-						<span className="flex flex-wrap items-center gap-1.5">
+						<span className="flex items-center gap-1.5">
 							Deployed <DateTime value={lastDeploy.finishedAt} />
 							{describeTriggeredBy(lastDeploy) ? ` ${describeTriggeredBy(lastDeploy)}` : null}
 						</span>
 					) : null}
 					{notice && !lastError ? (
-						<span className="flex flex-wrap items-center gap-1.5">
+						<span className="flex items-center gap-1.5">
 							<Info className="size-3.5 shrink-0" />
 							<span className="min-w-0">{notice}</span>
 						</span>
 					) : null}
 					{lastError ? (
 						<span className="flex flex-wrap items-center gap-1.5 text-destructive">
-							<span className="min-w-0 break-words">Last deployment failed: {lastError}</span>
+							<span className="min-w-0 wrap-anywhere">Last deployment failed: {lastError}</span>
 							{onViewLogs ? (
 								<button
 									type="button"

@@ -9,7 +9,6 @@ import { toast } from "sonner";
 import { settleActivity, trackActivity } from "@/components/layout/activity-tray";
 import { SettingsSection } from "@/components/layout/settings-section";
 import { LoadError } from "@/components/query-state";
-import { CopyButton } from "@/components/services/copy-button";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -350,12 +349,9 @@ export function RecoveryCopies({
 									: "No recovery copies in this project. Open a PostgreSQL service’s Backups tab to create one from a stored dump."}
 						</p>
 					) : copyRows.length > 0 ? (
-						<ul className="surface divide-y">
+						<ul className="divide-y rounded-lg border">
 							{copyRows.map((row) => (
-								<li
-									key={row.recoveryCopyId}
-									className="relative flex flex-wrap items-start gap-4 border-s-2 border-s-muted-foreground/40 px-5 py-5"
-								>
+								<li key={row.recoveryCopyId} className="flex flex-wrap items-start gap-3 p-4">
 									<div className="min-w-0 flex-1 basis-52">
 										<div className="flex flex-wrap items-center gap-2">
 											<p className="break-words text-sm font-medium">{row.name}</p>
@@ -374,18 +370,13 @@ export function RecoveryCopies({
 											{row.status === "ready" &&
 												` · ${row.tableCount ?? 0} ${row.tableCount === 1 ? "table" : "tables"} verified`}
 										</p>
-										<details className="mt-3 text-xs text-muted-foreground">
-											<summary className="cursor-pointer py-2">Backup object details</summary>
-											<div className="flex items-start justify-between gap-3 rounded-md bg-panel-inset p-3">
-												<code className="min-w-0 break-all">{row.objectKey}</code>
-												<CopyButton value={row.objectKey} label="Copy backup object key" />
-											</div>
-										</details>
-										{row.error && (
-											<p className="mt-3 rounded-md border border-destructive/25 bg-destructive/5 p-3 text-sm text-destructive">
-												{row.error}
-											</p>
-										)}
+										<p
+											className="mt-1 truncate font-mono text-xs text-muted-foreground"
+											title={row.objectKey}
+										>
+											{row.objectKey}
+										</p>
+										{row.error && <p className="mt-2 text-sm text-destructive">{row.error}</p>}
 										{!row.backupId && (
 											<p className="mt-1 text-xs text-muted-foreground">Backup schedule removed</p>
 										)}
@@ -397,7 +388,7 @@ export function RecoveryCopies({
 											</p>
 										)}
 									</div>
-									<div className="flex shrink-0 items-center gap-2 border-s ps-4">
+									<div className="flex shrink-0 items-center gap-1">
 										{row.targetPostgresId && (
 											<Button asChild size="sm" variant="outline">
 												<Link

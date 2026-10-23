@@ -18,7 +18,6 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
-import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -159,13 +158,7 @@ export function InstanceBackups() {
 			<SettingsSection
 				wide
 				title="Instance backups"
-				description={
-					<>
-						Scheduled copies of the platform database and configuration, including routing and
-						certificates. Restore them manually with the{" "}
-						<HelpLink slug="backups" label="backup guide" />.
-					</>
-				}
+				description="Scheduled dumps of this Nixploy instance itself — the platform database plus the config directory (Traefik configs, certificates). Restore is manual, see docs/instance-backup.md."
 				actions={
 					<Button
 						size="sm"
@@ -240,7 +233,6 @@ export function InstanceBackups() {
 									<TableCell className="font-mono text-xs">{backup.prefix}</TableCell>
 									<TableCell>
 										<Switch
-											aria-label={`Enable instance backup ${backup.prefix}`}
 											checked={backup.enabled}
 											disabled={!canManage || updateMutation.isPending}
 											title={manageHint}
@@ -413,7 +405,7 @@ function InstanceBackupFormDialog({
 							value={form.destinationId}
 							onValueChange={(destinationId) => setForm({ ...form, destinationId })}
 						>
-							<SelectTrigger aria-label="Destination" className="w-full">
+							<SelectTrigger className="w-full">
 								<SelectValue placeholder="Select an S3 destination" />
 							</SelectTrigger>
 							<SelectContent>
@@ -425,7 +417,7 @@ function InstanceBackupFormDialog({
 							</SelectContent>
 						</Select>
 					</div>
-					<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+					<div className="grid grid-cols-2 gap-4">
 						<div className="space-y-1.5">
 							<Label htmlFor="instance-backup-prefix">Prefix</Label>
 							<Input

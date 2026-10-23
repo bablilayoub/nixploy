@@ -131,7 +131,7 @@ export function ActivityView({ embedded = false }: { embedded?: boolean } = {}) 
 	};
 
 	return (
-		<div className="flex min-w-0 flex-col gap-7">
+		<div className="flex flex-col gap-6">
 			{embedded ? null : (
 				<PageHeader
 					title="Audit log"
@@ -144,7 +144,6 @@ export function ActivityView({ embedded = false }: { embedded?: boolean } = {}) 
 					<Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
 					<Input
 						placeholder="Search targets…"
-						aria-label="Search audit targets"
 						value={search}
 						onChange={(event) => {
 							setSearch(event.target.value);

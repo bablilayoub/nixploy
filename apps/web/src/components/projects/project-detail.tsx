@@ -398,67 +398,9 @@ export function ProjectDetail({
 		);
 	}
 
-	const serviceFilters = (
-		<>
-			<div className="relative min-w-40 flex-1 lg:max-w-80">
-				<Search
-					aria-hidden
-					className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-				/>
-				<Input
-					placeholder="Search services and upstreams…"
-					aria-label="Search services and upstreams"
-					value={search}
-					onChange={(event) => setSearch(event.target.value)}
-					className="h-10 ps-9 pe-9"
-				/>
-				{search ? (
-					<Button
-						type="button"
-						variant="ghost"
-						size="icon-sm"
-						aria-label="Clear service search"
-						className="absolute end-0.5 top-0.5"
-						onClick={() => setSearch("")}
-					>
-						<X className="size-3.5" />
-					</Button>
-				) : null}
-			</div>
-			<div className="flex min-w-0 flex-wrap items-center gap-2">
-				{(tagsCatalogQuery.data?.length ?? 0) > 0 ? (
-					<Select
-						value={tagFilter ?? "all"}
-						onValueChange={(value) => setTagFilter(value === "all" ? null : value)}
-					>
-						<SelectTrigger aria-label="Filter services by tag" className="max-w-56">
-							<SelectValue />
-						</SelectTrigger>
-						<SelectContent>
-							<SelectItem value="all">All tags</SelectItem>
-							{tagsCatalogQuery.data?.map((tag) => (
-								<SelectItem key={tag.tagId} value={tag.tagId}>
-									<span
-										aria-hidden
-										className="size-2 shrink-0 rounded-full"
-										style={{ backgroundColor: tag.color }}
-									/>
-									{tag.name}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
-				) : null}
-				{activeEnvironment ? <ManageTagsDialog /> : null}
-			</div>
-		</>
-	);
-
 	return (
-		<div className="flex min-w-0 flex-col gap-4 sm:gap-6">
+		<div className="flex flex-col gap-6">
 			<PageHeader
-				className="mb-0"
-				compactActions
 				breadcrumb={
 					<Link
 						href="/dashboard"
@@ -497,19 +439,16 @@ export function ProjectDetail({
 			</Tabs>
 
 			{(tab === "services" || tab === "environment") && (
-				<div className="min-w-0 space-y-3">
-					<div className="flex flex-wrap items-center justify-between gap-3 py-1">
-						<div className="flex min-w-0 max-w-full flex-nowrap items-center gap-2">
-							<span className="hidden text-xs text-muted-foreground sm:block">Environment</span>
+				<div className="space-y-4">
+					<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+						<div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+							<span className="text-xs text-muted-foreground">Environment</span>
 							{environmentsQuery.isPending ? (
 								<Skeleton className="h-9 w-40" />
 							) : activeEnvironment ? (
 								<>
 									<Select value={activeEnvironmentName} onValueChange={switchEnvironment}>
-										<SelectTrigger
-											aria-label="Select environment"
-											className="w-40 min-w-0 max-w-56"
-										>
+										<SelectTrigger aria-label="Select environment" className="max-w-56 min-w-32">
 											<SelectValue />
 										</SelectTrigger>
 										<SelectContent>
@@ -535,25 +474,17 @@ export function ProjectDetail({
 										}}
 									/>
 								</>
-							) : null}{" "}
-							<DisabledHint hint={canWriteProject ? undefined : capabilityHint("project.write")}>
-								<CreateEnvironmentDialog projectId={projectId} onCreated={selectEnvironment}>
-									<Button
-										variant="outline"
-										size="icon"
-										className="sm:w-auto sm:px-3"
-										aria-label="New environment"
-										title="New environment"
-										disabled={!canWriteProject}
-									>
-										<Plus className="size-4" />
-										<span className="hidden sm:inline">New environment</span>
-									</Button>
-								</CreateEnvironmentDialog>
-							</DisabledHint>
+							) : null}
 						</div>
 						{tab === "services" ? (
 							<div className="flex flex-wrap items-center gap-2">
+								<DisabledHint hint={canWriteProject ? undefined : capabilityHint("project.write")}>
+									<CreateEnvironmentDialog projectId={projectId} onCreated={selectEnvironment}>
+										<Button variant="outline" disabled={!canWriteProject}>
+											<Plus className="size-4" /> New environment
+										</Button>
+									</CreateEnvironmentDialog>
+								</DisabledHint>
 								{activeEnvironment ? (
 									<AddServiceMenu
 										projectId={projectId}
@@ -568,21 +499,63 @@ export function ProjectDetail({
 							</div>
 						) : null}
 					</div>
+					{tab === "services" ? (
+						<div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-start sm:justify-between">
+							<div className="relative w-full sm:w-72">
+								<Search
+									aria-hidden
+									className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+								/>
+								<Input
+									placeholder="Search services and upstreams…"
+									aria-label="Search services and upstreams"
+									value={search}
+									onChange={(event) => setSearch(event.target.value)}
+									className="h-9 ps-9 pe-9"
+								/>
+								{search ? (
+									<Button
+										type="button"
+										variant="ghost"
+										size="icon-sm"
+										aria-label="Clear service search"
+										className="absolute end-0.5 top-0.5"
+										onClick={() => setSearch("")}
+									>
+										<X className="size-3.5" />
+									</Button>
+								) : null}
+							</div>
+							<div className="flex min-w-0 flex-wrap items-center gap-2">
+								{(tagsCatalogQuery.data?.length ?? 0) > 0 ? (
+									<Select
+										value={tagFilter ?? "all"}
+										onValueChange={(value) => setTagFilter(value === "all" ? null : value)}
+									>
+										<SelectTrigger aria-label="Filter services by tag" className="max-w-56">
+											<SelectValue />
+										</SelectTrigger>
+										<SelectContent>
+											<SelectItem value="all">All tags</SelectItem>
+											{tagsCatalogQuery.data?.map((tag) => (
+												<SelectItem key={tag.tagId} value={tag.tagId}>
+													<span
+														aria-hidden
+														className="size-2 shrink-0 rounded-full"
+														style={{ backgroundColor: tag.color }}
+													/>
+													{tag.name}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+								) : null}
+								{activeEnvironment ? <ManageTagsDialog /> : null}
+							</div>
+						</div>
+					) : null}
 				</div>
 			)}
-
-			{tab === "services" && activeEnvironment && !environmentsQuery.isError ? (
-				<ServicesTable
-					key={activeEnvironment?.environmentId}
-					toolbarStart={serviceFilters}
-					renderTable={!isLoadingServices && services.length > 0}
-					onResetFilters={resetFilters}
-					projectId={projectId}
-					environmentName={activeEnvironmentName}
-					services={filteredServices}
-					currentEnvironmentId={activeEnvironment?.environmentId}
-				/>
-			) : null}
 
 			{(tab === "services" || tab === "environment") && environmentsQuery.isError ? (
 				<LoadError
@@ -660,13 +633,22 @@ export function ProjectDetail({
 							</div>
 						))}
 					</div>
-				) : services.length > 0 ? (
-					<UpstreamsTable
-						projectId={projectId}
-						upstreams={tagFilter ? [] : (upstreamsQuery.data ?? [])}
-						primaryDomains={primaryDomains}
-						search={search}
-					/>
+				) : filteredServices.length > 0 ? (
+					<>
+						<ServicesTable
+							key={activeEnvironment?.environmentId}
+							projectId={projectId}
+							environmentName={activeEnvironmentName}
+							services={filteredServices}
+							currentEnvironmentId={activeEnvironment?.environmentId}
+						/>
+						<UpstreamsTable
+							projectId={projectId}
+							upstreams={tagFilter ? [] : (upstreamsQuery.data ?? [])}
+							primaryDomains={primaryDomains}
+							search={search}
+						/>
+					</>
 				) : hasMatchingUpstreams ? (
 					<UpstreamsTable
 						projectId={projectId}

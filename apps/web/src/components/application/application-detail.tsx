@@ -69,8 +69,8 @@ const SUB_TAB_DEFAULT: Record<string, string> = {
 
 export function PageSkeleton() {
 	return (
-		<div className="flex min-w-0 flex-col gap-7">
-			<div className="flex flex-wrap items-center justify-between gap-3">
+		<div className="flex flex-col gap-6">
+			<div className="flex items-center justify-between">
 				<div className="flex flex-col gap-2">
 					<Skeleton className="h-7 w-48" />
 					<Skeleton className="h-4 w-72" />
@@ -179,7 +179,7 @@ export function ApplicationDetail({ projectId, id }: { projectId: string; id: st
 
 	return (
 		<ApplicationProvider application={application}>
-			<div className="flex min-w-0 flex-col gap-7">
+			<div className="flex flex-col gap-6">
 				<ApplicationHeader
 					application={application}
 					projectId={projectId}
@@ -246,11 +246,11 @@ export function ApplicationDetail({ projectId, id }: { projectId: string; id: st
 							className="w-full gap-4"
 						>
 							<SubTabsList>
-								<SubTabsTrigger value="logs">Live logs</SubTabsTrigger>
+								<SubTabsTrigger value="logs">Logs</SubTabsTrigger>
 								<SubTabsTrigger value="monitoring">Monitoring</SubTabsTrigger>
 								<SubTabsTrigger value="events">Events</SubTabsTrigger>
 								<SubTabsTrigger value="terminal">Terminal</SubTabsTrigger>
-								<SubTabsTrigger value="history">Log history</SubTabsTrigger>
+								<SubTabsTrigger value="history">History</SubTabsTrigger>
 							</SubTabsList>
 							<TabsContent value="logs" className="mt-0">
 								<SettingsSection bare title="Logs" description="Live container output.">

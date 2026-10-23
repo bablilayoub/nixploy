@@ -72,7 +72,7 @@ function FacetRow({
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
 	return (
 		<div className="flex flex-col gap-1">
-			<h3 className="px-2 text-[11px] font-medium normal-case tracking-wide text-muted-foreground/70">
+			<h3 className="px-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
 				{title}
 			</h3>
 			{children}

@@ -23,7 +23,6 @@ import {
 	databaseIdInput,
 	type ServiceStatus,
 } from "@/components/databases/database-types";
-import { SectionLinks } from "@/components/layout/section-links";
 import { SettingsSection, SettingsStack } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
 import { capabilityHint } from "@/components/services/capability-hint";
@@ -151,7 +150,7 @@ function maskUrlPassword(url: string): string {
 }
 
 /** Connection URL with the password masked by default, a reveal toggle and copy (copies the real URL). */
-function ConnectionUrlField({ url, label }: { url: string; label: string }) {
+function ConnectionUrlField({ url }: { url: string }) {
 	const [revealed, setRevealed] = useState(false);
 	const masked = maskUrlPassword(url);
 	const hasPassword = masked !== url;
@@ -159,7 +158,6 @@ function ConnectionUrlField({ url, label }: { url: string; label: string }) {
 		<div className="flex items-center gap-1">
 			<Input
 				readOnly
-				aria-label={label}
 				value={revealed || !hasPassword ? url : masked}
 				className="font-mono text-xs"
 			/>
@@ -471,11 +469,11 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 						className="w-full gap-4"
 					>
 						<SubTabsList>
-							<SubTabsTrigger value="logs">Live logs</SubTabsTrigger>
+							<SubTabsTrigger value="logs">Logs</SubTabsTrigger>
 							<SubTabsTrigger value="monitoring">Monitoring</SubTabsTrigger>
 							<SubTabsTrigger value="events">Events</SubTabsTrigger>
 							<SubTabsTrigger value="terminal">Terminal</SubTabsTrigger>
-							<SubTabsTrigger value="history">Log history</SubTabsTrigger>
+							<SubTabsTrigger value="history">History</SubTabsTrigger>
 						</SubTabsList>
 						<TabsContent value="logs" className="mt-0">
 							<SettingsSection bare title="Logs" description="Live container output.">
@@ -655,20 +653,7 @@ function GeneralTab({
 
 	return (
 		<SettingsStack>
-			<SectionLinks
-				label="Database configuration sections"
-				items={[
-					{ id: "database-identity", label: "Identity" },
-					{ id: "database-engine", label: "Engine and version" },
-					{ id: "database-credentials", label: "Credentials" },
-					{ id: "database-exposure", label: "External access" },
-				]}
-			/>
-			<SettingsSection
-				id="database-identity"
-				title="Database identity"
-				description={`The name and description shown throughout your ${label} workspace.`}
-			>
+			<SettingsSection title="General" description={`Basic settings for this ${label} instance.`}>
 				<div className="space-y-4">
 					<div className="space-y-1.5">
 						<Label htmlFor="db-name">Name</Label>
@@ -688,14 +673,6 @@ function GeneralTab({
 							rows={3}
 						/>
 					</div>
-				</div>
-			</SettingsSection>
-			<SettingsSection
-				id="database-engine"
-				title="Engine and version"
-				description="Choose the database version or a custom container image. Saving these fields also saves the name and description above."
-			>
-				<div className="space-y-4">
 					<div className="space-y-1.5">
 						<Label htmlFor="db-version">Version</Label>
 						<Select
@@ -740,8 +717,8 @@ function GeneralTab({
 					)}
 
 					{versionChange.kind === "confirm" && (
-						<div className="space-y-2 rounded-lg border border-warning/40 bg-warning/5 p-3">
-							<p className="text-sm text-warning">{versionChange.reason}</p>
+						<div className="space-y-2 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3">
+							<p className="text-sm text-amber-700 dark:text-amber-400">{versionChange.reason}</p>
 							<div className="flex items-start gap-2 text-sm">
 								<Checkbox
 									id="db-upgrade-ack"
@@ -783,7 +760,6 @@ function GeneralTab({
 			</SettingsSection>
 
 			<SettingsSection
-				id="database-credentials"
 				title="Credentials"
 				description="Auto-generated credentials for this instance."
 			>
@@ -800,7 +776,6 @@ function GeneralTab({
 			</SettingsSection>
 
 			<SettingsSection
-				id="database-exposure"
 				title="External port"
 				description="Off by default. Your own services in this environment already reach the database by name — a port is only needed for tools outside the platform."
 			>
@@ -809,10 +784,6 @@ function GeneralTab({
 						<Label htmlFor="db-port">Port</Label>
 						<Input
 							id="db-port"
-							aria-invalid={!portValid}
-							aria-describedby={
-								portValid ? "database-port-help" : "database-port-help database-port-error"
-							}
 							type="number"
 							min={1}
 							max={65535}
@@ -820,7 +791,7 @@ function GeneralTab({
 							value={port.value}
 							onChange={(e) => port.set(e.target.value)}
 						/>
-						<p id="database-port-help" className="text-sm text-muted-foreground">
+						<p className="text-sm text-muted-foreground">
 							Swarm publishes host ports on <strong>every</strong> network interface — there is no
 							localhost-only option — so the database becomes reachable from anywhere that can route
 							to this server. Firewall the port, keep the password strong, and leave this empty
@@ -828,9 +799,7 @@ function GeneralTab({
 							own ports are rejected.
 						</p>
 						{!portValid && (
-							<p id="database-port-error" role="alert" className="text-sm text-destructive">
-								Enter a port between 1 and 65535.
-							</p>
+							<p className="text-sm text-destructive">Enter a port between 1 and 65535.</p>
 						)}
 					</div>
 					<div className="flex items-center justify-end gap-3">
@@ -988,10 +957,7 @@ function LogicalDatabasesSection({
 								</DisabledHint>
 							</div>
 							{row.connectionUrl ? (
-								<ConnectionUrlField
-									url={row.connectionUrl}
-									label={`Connection URL for ${row.name}`}
-								/>
+								<ConnectionUrlField url={row.connectionUrl} />
 							) : (
 								<p className="text-sm text-muted-foreground">
 									{canReadSecrets
@@ -1143,27 +1109,11 @@ function ConnectionTab({
 			empty={<p className="text-sm text-muted-foreground">Connection URL unavailable.</p>}
 		>
 			<SettingsStack>
-				<div className="mb-6 grid gap-4 sm:grid-cols-2">
-					<div className="rounded-xl border bg-card p-5">
-						<p className="text-sm font-medium">From another Nixploy service</p>
-						<p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-							Use the internal URL. Services share the private network; no host port is needed.
-						</p>
-					</div>
-					<div className="rounded-xl border bg-card p-5">
-						<p className="text-sm font-medium">From your own tools</p>
-						<p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-							{hasExternalPort
-								? "An external port is configured. Restrict access with your server firewall."
-								: "External access is off. Configure a host port only if you need a connection from outside the platform."}
-						</p>
-					</div>
-				</div>
 				<SettingsSection
 					title="Internal connection URL"
 					description="Use this URL from services deployed on the internal network."
 				>
-					<ConnectionUrlField url={urls?.internal ?? ""} label="Internal connection URL" />
+					<ConnectionUrlField url={urls?.internal ?? ""} />
 				</SettingsSection>
 
 				<SettingsSection
@@ -1171,7 +1121,7 @@ function ConnectionTab({
 					description="Use this URL to connect from outside this server (requires an external port)."
 				>
 					{urls?.external ? (
-						<ConnectionUrlField url={urls.external} label="External connection URL" />
+						<ConnectionUrlField url={urls.external} />
 					) : hasExternalPort ? (
 						<p className="text-sm text-muted-foreground">External URL unavailable.</p>
 					) : (

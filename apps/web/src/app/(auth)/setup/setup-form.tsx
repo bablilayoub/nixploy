@@ -248,11 +248,11 @@ export function SetupForm() {
 	if (status.isPending) {
 		return (
 			<Card>
-				<CardHeader className="text-start">
+				<CardHeader className="text-center">
 					<Skeleton className="mx-auto h-7 w-48" />
 					<Skeleton className="mx-auto mt-2 h-4 w-64" />
 				</CardHeader>
-				<CardContent className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
+				<CardContent className="grid gap-4">
 					<Skeleton className="h-10 w-full" />
 					<Skeleton className="h-10 w-full" />
 					<Skeleton className="h-10 w-full" />
@@ -271,16 +271,14 @@ export function SetupForm() {
 			<Card>
 				{step === "welcome" && (
 					<>
-						<CardHeader className="text-start">
-							<CardTitle as="h1" className="text-[1.75rem] leading-tight tracking-tight">
-								Welcome to {branding.productName}
-							</CardTitle>
+						<CardHeader className="text-center">
+							<CardTitle className="text-xl">Welcome to {branding.productName}</CardTitle>
 							<CardDescription>
 								Self-hosted PaaS on this server. A short setup creates your owner account and
 								organization — public registration stays closed afterward.
 							</CardDescription>
 						</CardHeader>
-						<CardContent className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
+						<CardContent className="grid gap-4">
 							<ul className="grid gap-2 text-sm text-muted-foreground">
 								<li className="flex gap-2">
 									<Check className="mt-0.5 size-4 shrink-0 text-foreground" />
@@ -305,10 +303,8 @@ export function SetupForm() {
 
 				{step === "owner" && (
 					<>
-						<CardHeader className="text-start">
-							<CardTitle as="h1" className="text-[1.75rem] leading-tight tracking-tight">
-								Owner account
-							</CardTitle>
+						<CardHeader className="text-center">
+							<CardTitle className="text-xl">Owner account</CardTitle>
 							<CardDescription>
 								This is the first admin. You will sign in with this email and password.
 							</CardDescription>
@@ -317,7 +313,7 @@ export function SetupForm() {
 							<Form {...ownerForm}>
 								<form
 									onSubmit={ownerForm.handleSubmit(() => void goOrgFromOwner())}
-									className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4"
+									className="grid gap-4"
 								>
 									{formError && step === "owner" && <FormError message={formError} />}
 									{ownerCreated && (
@@ -417,7 +413,7 @@ export function SetupForm() {
 															{...field}
 														/>
 													</FormControl>
-													<p className="text-xs leading-relaxed break-words text-muted-foreground">
+													<p className="text-xs text-muted-foreground">
 														This instance requires the token from{" "}
 														<code className="font-mono">NIXPLOY_SETUP_TOKEN</code> (
 														<code className="font-mono">/etc/nixploy/.env</code>) to claim the first
@@ -454,10 +450,8 @@ export function SetupForm() {
 
 				{step === "org" && (
 					<>
-						<CardHeader className="text-start">
-							<CardTitle as="h1" className="text-[1.75rem] leading-tight tracking-tight">
-								Organization
-							</CardTitle>
+						<CardHeader className="text-center">
+							<CardTitle className="text-xl">Organization</CardTitle>
 							<CardDescription>
 								Projects, services, and teammates live under this organization.
 							</CardDescription>
@@ -466,7 +460,7 @@ export function SetupForm() {
 							<Form {...orgForm}>
 								<form
 									onSubmit={orgForm.handleSubmit(() => void goReadyFromOrg())}
-									className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4"
+									className="grid gap-4"
 								>
 									{formError && step === "org" && <FormError message={formError} />}
 									{createdOrgId && (
@@ -518,15 +512,13 @@ export function SetupForm() {
 
 				{step === "ready" && !complete && (
 					<>
-						<CardHeader className="text-start">
-							<CardTitle as="h1" className="text-[1.75rem] leading-tight tracking-tight">
-								Ready to create
-							</CardTitle>
+						<CardHeader className="text-center">
+							<CardTitle className="text-xl">Ready to create</CardTitle>
 							<CardDescription>
 								Confirm the details below. This creates your owner account and organization.
 							</CardDescription>
 						</CardHeader>
-						<CardContent className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
+						<CardContent className="grid gap-4">
 							{formError && <FormError message={formError} />}
 							<dl className="grid gap-3 rounded-lg border bg-muted/40 p-4 text-sm">
 								<div className="grid gap-0.5">
@@ -568,15 +560,13 @@ export function SetupForm() {
 
 				{step === "ready" && complete && (
 					<>
-						<CardHeader className="text-start">
-							<CardTitle as="h1" className="text-[1.75rem] leading-tight tracking-tight">
-								You&apos;re in
-							</CardTitle>
+						<CardHeader className="text-center">
+							<CardTitle className="text-xl">You&apos;re in</CardTitle>
 							<CardDescription>
 								{orgForm.getValues("orgName").trim()} is ready. Here&apos;s a sensible next path.
 							</CardDescription>
 						</CardHeader>
-						<CardContent className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
+						<CardContent className="grid gap-4">
 							<ul className="grid gap-3 text-sm">
 								<li className="flex gap-3">
 									<LayoutTemplate className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
@@ -613,7 +603,7 @@ export function SetupForm() {
 					</>
 				)}
 			</Card>
-			<p className="text-center text-xs leading-relaxed break-words text-muted-foreground">
+			<p className="text-center text-xs text-muted-foreground">
 				Step {Math.min(stepIndex + 1, STEPS.length)} of {STEPS.length}
 				{step !== "welcome" ? ` · ${STEP_LABELS[step]}` : null}
 			</p>

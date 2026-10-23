@@ -94,7 +94,11 @@ four things bite, in this order:
 - **One dev server at a time.** Next 16 takes an exclusive
   `apps/web/.next/dev/lock`. A second `pnpm dev` (or a `pnpm build` racing a
   running dev server) fails or hangs on it. Stop the first one; if a process
-  was killed hard, delete the stale lock before starting again.
+  was killed hard, delete the stale lock before starting again. For an isolated
+  web or landing review build, set `NIXPLOY_NEXT_DIST_DIR=.next-review` for both `pnpm build`
+  and the matching `pnpm start`, with its own port and fixture database. Never
+  rebuild a directory that a running server is serving. The normal default is
+  still `.next`; generated review directories are not source files.
 - **`BETTER_AUTH_URL` must match the port you browse to.** It is the trusted
   origin, not a display string: running on `PORT=3136` while
   `BETTER_AUTH_URL=http://localhost:3000` makes every sign-in fail with

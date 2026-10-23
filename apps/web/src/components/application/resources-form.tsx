@@ -1,6 +1,7 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
+import { useId } from "react";
 import { SettingsSection } from "@/components/layout/settings-section";
 import { capabilityHint } from "@/components/services/capability-hint";
 import { useSaveBar } from "@/components/services/save-bar";
@@ -70,6 +71,7 @@ function RangeNotice({ label, value }: { label: string; value: string }) {
 }
 
 export function ResourcesForm({ application }: { application: Application }) {
+	const resourceId = useId();
 	const trpc = useTRPC();
 	const { can } = useCapabilities();
 	const applicationId = application.applicationId;
@@ -121,15 +123,15 @@ export function ResourcesForm({ application }: { application: Application }) {
 			title="Resources"
 			description="Replicas and CPU / memory reservations and limits."
 		>
-			<div className="flex min-w-0 flex-col gap-7">
+			<div className="flex flex-col gap-6">
 				<div className="flex flex-col gap-3">
-					<div className="flex flex-wrap items-center justify-between gap-3">
-						<Label>Replicas</Label>
+					<div className="flex items-center justify-between">
+						<Label id={`${resourceId}-replicas`}>Replicas</Label>
 						<span className="text-sm text-muted-foreground">{replicas}</span>
 					</div>
 					<Slider
-						aria-label="Replicas"
 						value={[replicas]}
+						thumbProps={{ "aria-labelledby": `${resourceId}-replicas` }}
 						onValueChange={edit("replicas")}
 						min={0}
 						max={Math.max(10, application.replicas)}
@@ -142,15 +144,15 @@ export function ResourcesForm({ application }: { application: Application }) {
 
 				<div className="grid gap-6 sm:grid-cols-2">
 					<div className="flex flex-col gap-3">
-						<div className="flex flex-wrap items-center justify-between gap-3">
-							<Label>Memory reservation</Label>
+						<div className="flex items-center justify-between">
+							<Label id={`${resourceId}-memory-reservation`}>Memory reservation</Label>
 							<span className="text-sm text-muted-foreground">
 								{memoryReservation === 0 ? "None" : formatMemory(memoryReservation)}
 							</span>
 						</div>
 						<Slider
-							aria-label="Memory reservation"
 							value={[memoryReservation]}
+							thumbProps={{ "aria-labelledby": `${resourceId}-memory-reservation` }}
 							onValueChange={edit("memoryReservation")}
 							min={0}
 							max={sliderMax(storedMemoryReservation, MEMORY_MAX_MB, MEMORY_STEP_MB)}
@@ -161,13 +163,13 @@ export function ResourcesForm({ application }: { application: Application }) {
 						)}
 					</div>
 					<div className="flex flex-col gap-3">
-						<div className="flex flex-wrap items-center justify-between gap-3">
-							<Label>Memory limit</Label>
+						<div className="flex items-center justify-between">
+							<Label id={`${resourceId}-memory-limit`}>Memory limit</Label>
 							<span className="text-sm text-muted-foreground">{formatMemory(memoryLimit)}</span>
 						</div>
 						<Slider
-							aria-label="Memory limit"
 							value={[memoryLimit]}
+							thumbProps={{ "aria-labelledby": `${resourceId}-memory-limit` }}
 							onValueChange={edit("memoryLimit")}
 							min={0}
 							max={sliderMax(storedMemoryLimit, MEMORY_MAX_MB, MEMORY_STEP_MB)}
@@ -178,15 +180,15 @@ export function ResourcesForm({ application }: { application: Application }) {
 						)}
 					</div>
 					<div className="flex flex-col gap-3">
-						<div className="flex flex-wrap items-center justify-between gap-3">
-							<Label>CPU reservation</Label>
+						<div className="flex items-center justify-between">
+							<Label id={`${resourceId}-cpu-reservation`}>CPU reservation</Label>
 							<span className="text-sm text-muted-foreground">
 								{cpuReservation === 0 ? "None" : formatCpu(cpuReservation)}
 							</span>
 						</div>
 						<Slider
-							aria-label="CPU reservation"
 							value={[cpuReservation]}
+							thumbProps={{ "aria-labelledby": `${resourceId}-cpu-reservation` }}
 							onValueChange={edit("cpuReservation")}
 							min={0}
 							max={sliderMax(storedCpuReservation, CPU_MAX_CORES, CPU_STEP)}
@@ -197,13 +199,13 @@ export function ResourcesForm({ application }: { application: Application }) {
 						)}
 					</div>
 					<div className="flex flex-col gap-3">
-						<div className="flex flex-wrap items-center justify-between gap-3">
-							<Label>CPU limit</Label>
+						<div className="flex items-center justify-between">
+							<Label id={`${resourceId}-cpu-limit`}>CPU limit</Label>
 							<span className="text-sm text-muted-foreground">{formatCpu(cpuLimit)}</span>
 						</div>
 						<Slider
-							aria-label="CPU limit"
 							value={[cpuLimit]}
+							thumbProps={{ "aria-labelledby": `${resourceId}-cpu-limit` }}
 							onValueChange={edit("cpuLimit")}
 							min={0}
 							max={sliderMax(storedCpuLimit, CPU_MAX_CORES, CPU_STEP)}

@@ -5,6 +5,7 @@ import type { inferRouterOutputs } from "@trpc/server";
 import { AlertTriangle, LayoutGrid, Loader2, Plus, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { useTrackedActivity } from "@/components/layout/activity-tray";
+import { SettingsSection } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
 import { PageHeader } from "@/components/shell";
 import {
@@ -167,10 +168,20 @@ export function TemplateSourcesView() {
 	});
 
 	return (
-		<div className="flex min-w-0 flex-col gap-7">
+		<div className="flex flex-col gap-6">
 			<PageHeader
 				title="Templates"
 				description="Bring your own template catalogs alongside the built-in ones."
+			/>
+			<SettingsSection
+				wide
+				title={
+					<span className="flex items-center gap-2">
+						<LayoutGrid className="size-4 text-muted-foreground" />
+						Template sources
+					</span>
+				}
+				description="Add your own index, Dokploy blueprints, or a Coolify catalog. Every sync validates Compose and checks image availability."
 				actions={
 					<Dialog open={open} onOpenChange={setOpen}>
 						<DialogTrigger asChild>
@@ -181,7 +192,7 @@ export function TemplateSourcesView() {
 						</DialogTrigger>
 						<DialogContent>
 							<form
-								className="grid gap-5"
+								className="grid gap-4"
 								onSubmit={(event) => {
 									event.preventDefault();
 									if (!canManage || createMutation.isPending) return;
@@ -203,7 +214,7 @@ export function TemplateSourcesView() {
 										<HelpLink slug="templates" />
 									</DialogDescription>
 								</DialogHeader>
-								<div className="grid gap-5">
+								<div className="grid gap-4">
 									<div className="grid gap-2">
 										<Label htmlFor="source-name">Name</Label>
 										<Input
@@ -293,8 +304,7 @@ export function TemplateSourcesView() {
 						</DialogContent>
 					</Dialog>
 				}
-			/>
-			<div className="min-w-0">
+			>
 				<QueryState
 					isPending={isPending}
 					isError={isError}
@@ -412,7 +422,7 @@ export function TemplateSourcesView() {
 						</TableBody>
 					</Table>
 				</QueryState>
-			</div>
+			</SettingsSection>
 
 			<Dialog open={report !== null} onOpenChange={(next) => !next && setReport(null)}>
 				<DialogContent className="sm:max-w-2xl">

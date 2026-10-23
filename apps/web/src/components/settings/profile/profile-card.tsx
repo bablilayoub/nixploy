@@ -84,12 +84,12 @@ export function ProfileCard() {
 	// The page is already titled "Profile"; the card names what it holds.
 	return (
 		<SettingsSection title="Name and avatar">
-			<div className="flex min-w-0 flex-col gap-7">
+			<div className="flex flex-col gap-6">
 				<div className="flex items-center gap-4">
 					<UserAvatar
 						user={user}
 						className="size-14"
-						fallbackClassName="text-xl leading-snug font-semibold tracking-tight"
+						fallbackClassName="text-lg font-semibold"
 						size={112}
 					/>
 					<div className="grid gap-1">

@@ -80,20 +80,15 @@ export function ResetPasswordForm({ token }: { token: string }) {
 
 	return (
 		<Card>
-			<CardHeader className="text-start">
-				<CardTitle as="h1" className="text-[1.75rem] leading-tight tracking-tight">
-					Choose a new password
-				</CardTitle>
+			<CardHeader className="text-center">
+				<CardTitle className="text-xl">Choose a new password</CardTitle>
 				<CardDescription>
 					Reset links expire one hour after they are sent and can only be used once.
 				</CardDescription>
 			</CardHeader>
 			<CardContent>
 				<Form {...form}>
-					<form
-						onSubmit={form.handleSubmit(onSubmit)}
-						className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4"
-					>
+					<form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4">
 						{formError && (
 							<div className="flex items-start gap-2 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
 								<AlertCircle className="mt-0.5 size-4 shrink-0" />

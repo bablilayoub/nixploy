@@ -78,7 +78,9 @@ function TemplateMark({ logo }: { logo: string }) {
 function Fact({ label, children }: { label: string; children: ReactNode }) {
 	return (
 		<div className="rounded-lg border bg-accent/30 px-4 py-4">
-			<dt className="text-xs text-muted-foreground normal-case">{label}</dt>
+			<dt className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
+				{label}
+			</dt>
 			<dd className="mt-2 font-mono text-xs">{children}</dd>
 		</div>
 	);

@@ -87,7 +87,7 @@ function PickList({
 				<label
 					key={item.id}
 					htmlFor={`${name}-${item.id}`}
-					className="flex cursor-pointer items-center gap-3 rounded-sm px-2 py-1.5 hover:bg-accent/50"
+					className="flex cursor-pointer items-center gap-3 rounded-sm px-2 py-1.5 hover:bg-muted/50"
 				>
 					<Checkbox
 						id={`${name}-${item.id}`}

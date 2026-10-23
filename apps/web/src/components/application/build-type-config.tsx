@@ -174,36 +174,27 @@ export function BuildTypeConfig({ application }: { application: Application }) {
 	return (
 		<SettingsSection title="Build" description="How the source is built into a deployable image.">
 			<div className="flex flex-col gap-5">
-				<fieldset>
-					<legend className="mb-3 text-sm font-medium">Image builder</legend>
-					<div className="grid gap-2 sm:grid-cols-2">
-						{BUILD_TYPES.map((option) => (
-							<label
-								key={option.value}
-								className={cn(
-									"relative flex cursor-pointer flex-col gap-1 rounded-lg border p-4 pl-10 text-left transition-colors focus-within:ring-2 focus-within:ring-ring",
-									buildType === option.value
-										? "border-foreground bg-secondary/60 ring-1 ring-foreground"
-										: "border-border hover:border-foreground/40 hover:bg-secondary/40",
-								)}
-							>
-								<input
-									type="radio"
-									name="application-builder"
-									value={option.value}
-									checked={buildType === option.value}
-									onChange={() => draft.patch({ buildType: option.value })}
-									className="absolute left-4 top-5 accent-primary"
-								/>
-								<span className="flex items-center gap-2 text-sm font-medium">
-									<option.icon className="size-4 text-muted-foreground" />
-									{option.label}
-								</span>
-								<span className="text-xs text-muted-foreground">{option.description}</span>
-							</label>
-						))}
-					</div>
-				</fieldset>
+				<div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+					{BUILD_TYPES.map((option) => (
+						<button
+							key={option.value}
+							type="button"
+							onClick={() => draft.patch({ buildType: option.value })}
+							className={cn(
+								"flex flex-col gap-1 rounded-lg border p-3 text-left transition-colors",
+								buildType === option.value
+									? "border-foreground bg-secondary/60 ring-1 ring-foreground"
+									: "border-border hover:border-foreground/40 hover:bg-secondary/40",
+							)}
+						>
+							<span className="flex items-center gap-2 text-sm font-medium">
+								<option.icon className="size-4 text-muted-foreground" />
+								{option.label}
+							</span>
+							<span className="text-xs text-muted-foreground">{option.description}</span>
+						</button>
+					))}
+				</div>
 
 				{buildType === "dockerfile" && (
 					<div className="grid gap-4 sm:grid-cols-3">
@@ -226,7 +217,7 @@ export function BuildTypeConfig({ application }: { application: Application }) {
 							/>
 						</div>
 						<div className="flex flex-col gap-2">
-							<Label htmlFor="docker-stage">Build stage (optional)</Label>
+							<Label htmlFor="docker-stage">Build Stage (optional)</Label>
 							<Input
 								id="docker-stage"
 								placeholder="builder"

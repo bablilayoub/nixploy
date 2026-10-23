@@ -133,7 +133,7 @@ function StepRail({
 						>
 							<span
 								className={cn(
-									"flex size-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold",
+									"flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold",
 									active && "bg-foreground text-background",
 									done && "bg-foreground/15 text-foreground",
 									!active && !done && "bg-muted text-muted-foreground",
@@ -373,7 +373,7 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 									setEnvironmentName("");
 								}}
 							>
-								<SelectTrigger aria-label="Project" className="w-full">
+								<SelectTrigger className="w-full">
 									<SelectValue placeholder="Select a project" />
 								</SelectTrigger>
 								<SelectContent>
@@ -392,7 +392,7 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 								onValueChange={setEnvironmentName}
 								disabled={!project}
 							>
-								<SelectTrigger aria-label="Environment" className="w-full">
+								<SelectTrigger className="w-full">
 									<SelectValue placeholder="Select an environment" />
 								</SelectTrigger>
 								<SelectContent>
@@ -408,7 +408,7 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 				)}
 
 				{step === "configure" && (
-					<div className="flex min-w-0 flex-col gap-5">
+					<div className="flex flex-col gap-4">
 						<p className="text-sm text-muted-foreground">
 							Leave generated secrets blank to create them automatically on deploy. Override any
 							value you want to control yourself.
@@ -429,7 +429,7 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 											{entry.required ? " (required)" : ""}
 										</Label>
 										{generated && (
-											<Badge variant="outline" className="text-[11px]">
+											<Badge variant="outline" className="text-[10px]">
 												auto-generated
 											</Badge>
 										)}
@@ -515,7 +515,7 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 						)}
 
 						<div className="flex flex-col gap-3 rounded-lg border p-3">
-							<div className="flex flex-wrap items-center justify-between gap-4">
+							<div className="flex items-center justify-between gap-4">
 								<div className="flex items-start gap-3">
 									<Globe className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
 									<div className="flex flex-col gap-1">
@@ -577,7 +577,7 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 				)}
 			</div>
 
-			<SheetFooter className="flex-row flex-wrap items-center justify-between gap-2 border-t sm:space-x-0">
+			<SheetFooter className="flex-row items-center justify-between gap-2 border-t sm:space-x-0">
 				<Button
 					type="button"
 					variant="ghost"

@@ -6,6 +6,7 @@ import { format } from "date-fns";
 import { Check, Copy, KeyRound, Loader2, Pencil, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { SettingsSection } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
 import { EmptyState } from "@/components/services/empty-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
@@ -132,7 +133,9 @@ export function SshKeysView() {
 
 	return (
 		<div className="flex flex-col gap-8">
-			<PageHeader
+			<PageHeader title="SSH keys" description="Keypairs used to connect to remote servers." />
+			<SettingsSection
+				wide
 				title="SSH keys"
 				description="Keypairs used to connect to remote servers."
 				actions={
@@ -152,7 +155,7 @@ export function SshKeysView() {
 										: "Generate a fresh ed25519 keypair."}
 								</DialogDescription>
 							</DialogHeader>
-							<div className="grid gap-5">
+							<div className="grid gap-4">
 								<div className="grid gap-2">
 									<Label htmlFor="ssh-key-name">Name</Label>
 									<Input
@@ -165,7 +168,7 @@ export function SshKeysView() {
 								{generated && (
 									<>
 										<div className="grid gap-2">
-											<div className="flex flex-wrap items-center justify-between gap-3">
+											<div className="flex items-center justify-between">
 												<Label>Private key</Label>
 												<CopyButton value={generated.privateKey} />
 											</div>
@@ -177,7 +180,7 @@ export function SshKeysView() {
 											/>
 										</div>
 										<div className="grid gap-2">
-											<div className="flex flex-wrap items-center justify-between gap-3">
+											<div className="flex items-center justify-between">
 												<Label>Public key</Label>
 												<CopyButton value={generated.publicKey} />
 											</div>
@@ -221,8 +224,7 @@ export function SshKeysView() {
 						</DialogContent>
 					</Dialog>
 				}
-			/>
-			<div className="min-w-0">
+			>
 				<QueryState
 					isPending={isPending}
 					isError={isError}
@@ -300,7 +302,7 @@ export function SshKeysView() {
 					</Table>
 					<TablePagination view={view} noun="keys" className="mt-3" />
 				</QueryState>
-			</div>
+			</SettingsSection>
 			<Dialog open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
 				<DialogContent>
 					<DialogHeader>
@@ -320,7 +322,7 @@ export function SshKeysView() {
 								});
 							}
 						}}
-						className="grid gap-5"
+						className="grid gap-4"
 					>
 						<div className="grid gap-2">
 							<Label htmlFor="edit-ssh-key-name">Name</Label>

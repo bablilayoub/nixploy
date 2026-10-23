@@ -45,8 +45,7 @@ export function CreateServerDialog({
 	const [sshKeyId, setSshKeyId] = useState<string | null>(null);
 	const [swarmRole, setSwarmRole] = useState<"worker" | "manager">("worker");
 
-	const sshKeysQuery = useQuery(trpc.sshKey.all.queryOptions());
-	const sshKeys = sshKeysQuery.data;
+	const { data: sshKeys } = useQuery(trpc.sshKey.all.queryOptions());
 
 	const createMutation = useSaveMutation(trpc.server.create.mutationOptions(), {
 		successMessage: "Server added",
@@ -76,28 +75,11 @@ export function CreateServerDialog({
 					<DialogTitle>Add server</DialogTitle>
 					<DialogDescription>Register a remote Docker host reachable over SSH.</DialogDescription>
 				</DialogHeader>
-				<form
-					id="create-server"
-					className="grid gap-5"
-					onSubmit={(event) => {
-						event.preventDefault();
-						if (createMutation.isPending || disabled) return;
-						createMutation.mutate({
-							name: name.trim(),
-							description: description.trim() || undefined,
-							ipAddress: ipAddress.trim(),
-							port: Number(port),
-							username: username.trim() || undefined,
-							sshKeyId,
-							swarmRole,
-						});
-					}}
-				>
+				<div className="grid gap-4">
 					<div className="grid gap-2">
 						<Label htmlFor="server-name">Name</Label>
 						<Input
 							id="server-name"
-							required
 							placeholder="e.g. production-eu-1"
 							value={name}
 							onChange={(e) => setName(e.target.value)}
@@ -111,12 +93,11 @@ export function CreateServerDialog({
 							onChange={(e) => setDescription(e.target.value)}
 						/>
 					</div>
-					<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+					<div className="grid grid-cols-2 gap-4">
 						<div className="grid gap-2">
 							<Label htmlFor="server-ip">IP address</Label>
 							<Input
 								id="server-ip"
-								required
 								placeholder="203.0.113.10"
 								value={ipAddress}
 								onChange={(e) => setIpAddress(e.target.value)}
@@ -126,7 +107,6 @@ export function CreateServerDialog({
 							<Label htmlFor="server-port">SSH port</Label>
 							<Input
 								id="server-port"
-								required
 								type="number"
 								min={1}
 								max={65535}
@@ -149,7 +129,7 @@ export function CreateServerDialog({
 							value={sshKeyId ?? "none"}
 							onValueChange={(value) => setSshKeyId(value === "none" ? null : value)}
 						>
-							<SelectTrigger aria-label="SSH key">
+							<SelectTrigger>
 								<SelectValue placeholder="Select an SSH key" />
 							</SelectTrigger>
 							<SelectContent>
@@ -161,19 +141,6 @@ export function CreateServerDialog({
 								))}
 							</SelectContent>
 						</Select>
-						{sshKeysQuery.isError && (
-							<div role="alert" className="text-sm">
-								<p className="text-muted-foreground">Couldn’t load SSH keys.</p>
-								<Button
-									type="button"
-									size="sm"
-									variant="ghost"
-									onClick={() => void sshKeysQuery.refetch()}
-								>
-									Retry SSH keys
-								</Button>
-							</div>
-						)}
 					</div>
 					<div className="grid gap-2">
 						<Label>Swarm role</Label>
@@ -181,7 +148,7 @@ export function CreateServerDialog({
 							value={swarmRole}
 							onValueChange={(value) => setSwarmRole(value as "worker" | "manager")}
 						>
-							<SelectTrigger aria-label="Swarm role">
+							<SelectTrigger>
 								<SelectValue />
 							</SelectTrigger>
 							<SelectContent>
@@ -194,20 +161,21 @@ export function CreateServerDialog({
 							schedule Traefik. <HelpLink slug="servers" />
 						</p>
 					</div>
-				</form>
+				</div>
 				<DialogFooter>
 					<Button
-						type="button"
-						variant="outline"
-						disabled={createMutation.isPending}
-						onClick={() => setOpen(false)}
-					>
-						Cancel
-					</Button>
-					<Button
-						disabled={createMutation.isPending || disabled || !name.trim() || !ipAddress.trim()}
-						type="submit"
-						form="create-server"
+						disabled={createMutation.isPending || !name || !ipAddress}
+						onClick={() =>
+							createMutation.mutate({
+								name,
+								description: description || undefined,
+								ipAddress,
+								port: Number(port) || 22,
+								username: username || undefined,
+								sshKeyId,
+								swarmRole,
+							})
+						}
 					>
 						{createMutation.isPending && <Loader2 className="size-4 animate-spin" />}
 						Add server

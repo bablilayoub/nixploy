@@ -204,7 +204,7 @@ export default function AgentsPage() {
 		>
 			{/* The four facts that decide whether any of this is a good idea, in the
 			    same divided panel the features page opens with. */}
-			<ul className="grid grid-cols-2 divide-border overflow-hidden rounded-2xl border bg-card lg:grid-cols-4 lg:divide-x">
+			<ul className="grid grid-cols-2 divide-border overflow-hidden rounded-2xl border bg-card/40 lg:grid-cols-4 lg:divide-x">
 				{[
 					{ label: "MCP tools", value: `${mcpToolCount} annotated` },
 					{ label: "Auth", value: "Scoped API keys" },
@@ -212,7 +212,7 @@ export default function AgentsPage() {
 					{ label: "Trail", value: "Every mutation audited" },
 				].map((item) => (
 					<li key={item.label} className="border-b p-5 last:border-b-0 lg:border-b-0">
-						<p className="font-mono text-[11px] tracking-[0.18em] text-muted-foreground normal-case">
+						<p className="font-mono text-[11px] tracking-[0.18em] text-muted-foreground uppercase">
 							{item.label}
 						</p>
 						<p className="mt-2 font-semibold tracking-tight text-balance">{item.value}</p>

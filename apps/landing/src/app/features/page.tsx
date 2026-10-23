@@ -80,10 +80,10 @@ export default function FeaturesPage() {
 				<h2 id="at-a-glance" className="sr-only">
 					At a glance
 				</h2>
-				<ul className="grid grid-cols-2 divide-border overflow-hidden rounded-2xl border bg-card sm:grid-cols-3 sm:divide-x xl:grid-cols-6">
+				<ul className="grid grid-cols-2 divide-border overflow-hidden rounded-2xl border bg-card/40 sm:grid-cols-3 sm:divide-x xl:grid-cols-6">
 					{featureHighlights.map((item) => (
 						<li key={item.label} className="border-b p-5 last:border-b-0 sm:border-b-0">
-							<p className="font-mono text-[11px] tracking-[0.18em] text-muted-foreground normal-case">
+							<p className="font-mono text-[11px] tracking-[0.18em] text-muted-foreground uppercase">
 								{item.label}
 							</p>
 							<p className="mt-2 font-semibold tracking-tight text-balance">{item.value}</p>
@@ -148,25 +148,17 @@ export default function FeaturesPage() {
 										) : null}
 									</div>
 
-									{section.image ? (
+									{section.imageSrc ? (
 										<div className="lg:col-span-7">
 											<Card className="overflow-hidden p-2">
-												<div className="overflow-hidden rounded-lg border bg-background">
+												<div className="overflow-hidden rounded-lg border [mask-image:linear-gradient(to_bottom,#000_60%,transparent)]">
 													<Image
-														src={section.image.light}
+														src={section.imageSrc}
 														alt={section.imageAlt ?? ""}
-														width={1440}
-														height={1000}
+														width={3200}
+														height={2000}
 														sizes="(min-width: 1024px) 720px, 100vw"
-														className="h-auto w-full dark:hidden"
-													/>
-													<Image
-														src={section.image.dark}
-														alt={section.imageAlt ?? ""}
-														width={1440}
-														height={1000}
-														sizes="(min-width: 1024px) 720px, 100vw"
-														className="hidden h-auto w-full dark:block"
+														className="h-auto w-[140%] max-w-none"
 													/>
 												</div>
 											</Card>

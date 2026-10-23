@@ -47,7 +47,7 @@ export function SectionRail({
 
 	return (
 		<nav aria-label="On this page" className={className}>
-			<p className="px-3 font-mono text-[11px] tracking-[0.18em] text-muted-foreground normal-case">
+			<p className="px-3 font-mono text-[11px] tracking-[0.18em] text-muted-foreground uppercase">
 				Sections
 			</p>
 			<ul className="mt-3 flex flex-col">
@@ -59,7 +59,7 @@ export function SectionRail({
 								href={`#${item.id}`}
 								aria-current={active ? "true" : undefined}
 								className={cn(
-									"flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm transition-colors",
+									"flex min-h-9 items-center gap-3 rounded-lg px-3 text-sm transition-colors",
 									active
 										? "bg-accent font-medium text-foreground"
 										: "text-muted-foreground hover:text-foreground",

@@ -7,95 +7,97 @@
  * (@shadcn, @magicui, @aceternity, @cult-ui, @kokonutui) renders correctly
  * without being re-styled by hand. Values are ours; names are theirs.
  *
- * Fieldwork supports the visitor's saved light/dark/system preference.
- * Both palettes give registry components the same semantic surface roles.
+ * The site is dark, and `<html>` carries `.dark` — the light block is the
+ * fallback a component's `dark:` variant needs to have something to vary
+ * from, and it keeps the registry previews honest.
  */
 @custom-variant dark (&:is(.dark *));
 
 :root {
-	--radius: 0.5rem;
-	--background: #f6f7f8;
-	--foreground: #202327;
-	--card: #ffffff;
-	--card-foreground: var(--foreground);
-	--popover: #ffffff;
-	--popover-foreground: var(--foreground);
-	--primary: #24272b;
-	--primary-foreground: #ffffff;
-	--brand: var(--primary);
-	--secondary: #edf0f2;
-	--secondary-foreground: var(--foreground);
-	--muted: #edf0f2;
-	--muted-foreground: #616973;
-	--accent: #edf0f2;
-	--accent-foreground: var(--foreground);
-	--destructive: #b42332;
-	--border: #e0e4e8;
-	--input: #8a939f;
-	--ring: #6b7480;
-	--control: #f0f2f4;
-	--panel-inset: #f0f2f4;
-	--selection: #edf0f2;
-	--chart-axis: #616973;
-	--success: #187040;
-	--warning: #965b08;
-	--info: #285eb0;
-	--chart-1: var(--foreground);
-	--chart-2: color-mix(in oklab, var(--foreground) 75%, transparent);
-	--chart-3: color-mix(in oklab, var(--foreground) 60%, transparent);
-	--chart-4: color-mix(in oklab, var(--foreground) 45%, transparent);
-	--chart-5: color-mix(in oklab, var(--foreground) 30%, transparent);
-	--sidebar: #f6f7f8;
-	--sidebar-foreground: var(--foreground);
-	--sidebar-primary: var(--primary);
-	--sidebar-primary-foreground: var(--primary-foreground);
-	--sidebar-accent: #e5e7ea;
-	--sidebar-accent-foreground: var(--foreground);
-	--sidebar-border: var(--border);
-	--sidebar-ring: var(--ring);
-	--surface-shadow: 0 1px 2px rgb(17 19 23 / 2%);
-	--overlay-shadow: 0 24px 80px -20px rgb(17 19 23 / 24%), 0 4px 12px rgb(17 19 23 / 8%);
-	color-scheme: light;
+	/*
+	 * One radius scale, used consistently:
+	 *   rounded-lg  (--radius, 12px) — buttons, inputs, chips with square ends
+	 *   rounded-xl  (16px)           — cards, code blocks, media frames
+	 *   rounded-2xl (20px)           — full-width section panels and the footer
+	 *   rounded-full                 — badges, pills and the nav island
+	 * A control and a card should never share a radius; two cards always should.
+	 */
+	--radius: 0.75rem;
+
+	--background: oklch(1 0 0);
+	--foreground: oklch(0.16 0 0);
+	--card: oklch(1 0 0);
+	--card-foreground: oklch(0.16 0 0);
+	--popover: oklch(1 0 0);
+	--popover-foreground: oklch(0.16 0 0);
+	--primary: oklch(0.2 0 0);
+	--primary-foreground: oklch(0.99 0 0);
+	--secondary: oklch(0.96 0 0);
+	--secondary-foreground: oklch(0.22 0 0);
+	--muted: oklch(0.96 0 0);
+	--muted-foreground: oklch(0.5 0 0);
+	--accent: oklch(0.96 0 0);
+	--accent-foreground: oklch(0.22 0 0);
+	--destructive: oklch(0.45 0 0);
+	--border: oklch(0.91 0 0);
+	--input: oklch(0.91 0 0);
+	--ring: oklch(0.6 0 0);
+
+	--chart-1: oklch(0.2 0 0);
+	--chart-2: oklch(0.36 0 0);
+	--chart-3: oklch(0.52 0 0);
+	--chart-4: oklch(0.68 0 0);
+	--chart-5: oklch(0.82 0 0);
+
+	--sidebar: oklch(0.99 0 0);
+	--sidebar-foreground: oklch(0.16 0 0);
+	--sidebar-primary: oklch(0.2 0 0);
+	--sidebar-primary-foreground: oklch(0.99 0 0);
+	--sidebar-accent: oklch(0.96 0 0);
+	--sidebar-accent-foreground: oklch(0.22 0 0);
+	--sidebar-border: oklch(0.91 0 0);
+	--sidebar-ring: oklch(0.6 0 0);
 }
 
 .dark {
-	--background: #17191c;
-	--foreground: #f0f2f4;
-	--card: #202327;
-	--card-foreground: var(--foreground);
-	--popover: #2a2e33;
-	--popover-foreground: var(--foreground);
-	--primary: #eceff2;
-	--primary-foreground: #202327;
-	--brand: var(--primary);
-	--secondary: #30353c;
-	--secondary-foreground: var(--foreground);
-	--muted: #30353c;
-	--muted-foreground: #abb1ba;
-	--accent: #30353c;
-	--accent-foreground: var(--foreground);
-	--destructive: #ff8b94;
-	--border: #383e46;
-	--input: #737f8f;
-	--ring: #a3afbc;
-	--control: #1a1c20;
-	--panel-inset: #1a1c20;
-	--selection: #30353c;
-	--chart-axis: #abb1ba;
-	--success: #7adea0;
-	--warning: #eac379;
-	--info: #91b7ee;
-	--sidebar: #1a1c20;
-	--sidebar-accent: #30353c;
-	--surface-shadow: 0 1px 3px rgb(0 0 0 / 18%), 0 1px 0 rgb(255 255 255 / 3%) inset;
-	--overlay-shadow: 0 24px 80px -20px rgb(0 0 0 / 65%), 0 0 0 1px rgb(255 255 255 / 3%) inset;
-	color-scheme: dark;
+	--background: oklch(0.145 0 0);
+	--foreground: oklch(0.985 0 0);
+	--card: oklch(0.185 0 0);
+	--card-foreground: oklch(0.985 0 0);
+	--popover: oklch(0.185 0 0);
+	--popover-foreground: oklch(0.985 0 0);
+	--primary: oklch(0.985 0 0);
+	--primary-foreground: oklch(0.16 0 0);
+	--secondary: oklch(0.25 0 0);
+	--secondary-foreground: oklch(0.985 0 0);
+	--muted: oklch(0.25 0 0);
+	--muted-foreground: oklch(0.72 0 0);
+	--accent: oklch(0.27 0 0);
+	--accent-foreground: oklch(0.985 0 0);
+	--destructive: oklch(0.6 0 0);
+	--border: oklch(1 0 0 / 12%);
+	--input: oklch(1 0 0 / 15%);
+	--ring: oklch(0.7 0 0);
+
+	--chart-1: oklch(0.985 0 0);
+	--chart-2: oklch(0.82 0 0);
+	--chart-3: oklch(0.68 0 0);
+	--chart-4: oklch(0.52 0 0);
+	--chart-5: oklch(0.36 0 0);
+
+	--sidebar: oklch(0.165 0 0);
+	--sidebar-foreground: oklch(0.985 0 0);
+	--sidebar-primary: oklch(0.985 0 0);
+	--sidebar-primary-foreground: oklch(0.16 0 0);
+	--sidebar-accent: oklch(0.25 0 0);
+	--sidebar-accent-foreground: oklch(0.985 0 0);
+	--sidebar-border: oklch(1 0 0 / 12%);
+	--sidebar-ring: oklch(0.7 0 0);
 }
 
 @theme inline {
-	--spacing: 4px;
 	--font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
-	--font-display: var(--font-geist), var(--font-geist), ui-sans-serif, sans-serif;
+	--font-display: var(--font-space-grotesk), var(--font-geist), ui-sans-serif, sans-serif;
 	--font-mono: var(--font-geist-mono), ui-monospace, monospace;
 
 	--color-background: var(--background);
@@ -199,8 +201,8 @@
 @utility container-page {
 	margin-inline: auto;
 	width: 100%;
-	max-width: 86rem;
-	padding-inline: clamp(16px, 3vw, 24px);
+	max-width: 80rem;
+	padding-inline: 1.5rem;
 }
 
 @layer base {
@@ -225,7 +227,8 @@
 	}
 
 	html {
-		scroll-behavior: auto;
+		scroll-behavior: smooth;
+		color-scheme: dark;
 	}
 
 	h1,
@@ -251,18 +254,6 @@
 	}
 }
 
-@layer base {
-	form,
-	fieldset {
-		min-width: 0;
-	}
-	p,
-	h1,
-	h2,
-	h3 {
-		overflow-wrap: anywhere;
-	}
-}
 /*
  * Reduced motion. Motion-driven components are covered by `MotionConfig
  * reducedMotion="user"` in the root layout; this is for the CSS-driven ones —
@@ -296,7 +287,7 @@
 
 .legal-copy :where(h2, h3) {
 	color: var(--foreground);
-	font-family: var(--font-geist), var(--font-geist), ui-sans-serif, sans-serif;
+	font-family: var(--font-space-grotesk), var(--font-geist), ui-sans-serif, sans-serif;
 	font-weight: 600;
 	letter-spacing: -0.025em;
 	line-height: 1.35;
@@ -356,69 +347,4 @@
 	font-size: 0.875em;
 	font-weight: 400;
 	overflow-wrap: anywhere;
-}
-
-@utility surface {
-	border: 1px solid var(--border);
-	border-radius: 14px;
-	background: var(--card);
-	box-shadow: var(--surface-shadow);
-}
-@media (pointer: coarse) {
-	button,
-	[role="button"],
-	[role="menuitemradio"],
-	nav a,
-	footer a {
-		min-height: 44px;
-	}
-	button[aria-label] {
-		min-width: 44px;
-	}
-}
-@media (width < 40rem) {
-	.site-topbar {
-		--spacing: 4px;
-	}
-	.site-topbar .container-page {
-		padding-inline: 16px;
-		min-height: 72px;
-	}
-	.site-topbar button {
-		flex-shrink: 0;
-		width: 44px;
-		height: 44px;
-		min-width: 44px;
-		min-height: 44px;
-	}
-}
-[data-slot="button"] {
-	height: auto;
-	min-height: 40px;
-	max-width: 100%;
-	white-space: normal;
-	text-align: center;
-}
-@media (pointer: coarse) {
-	[data-slot="button"] {
-		min-height: 44px;
-	}
-}
-
-[data-slot="card"] {
-	min-width: 0;
-	border-radius: 14px;
-	background: var(--card);
-	box-shadow: var(--surface-shadow);
-}
-[data-slot="card-header"] {
-	min-width: 0;
-	grid-template-columns: minmax(0, 1fr);
-}
-[data-slot="card-content"] {
-	min-width: 0;
-}
-[data-slot="badge"] {
-	max-width: 100%;
-	white-space: normal;
 }

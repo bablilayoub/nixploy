@@ -23,7 +23,9 @@ function NavList({ activeHref }: { activeHref: string }) {
 		<div className="flex flex-col gap-7">
 			{docsNav.map((group) => (
 				<div key={group.title}>
-					<p className="px-3 text-xs font-medium text-foreground normal-case">{group.title}</p>
+					<p className="px-3 text-xs font-semibold tracking-wide text-foreground uppercase">
+						{group.title}
+					</p>
 					<ul className="mt-2 flex flex-col">
 						{group.items.map((item) => {
 							const active = activeHref === item.href || (item.index && activeHref === "/docs");
@@ -33,9 +35,9 @@ function NavList({ activeHref }: { activeHref: string }) {
 										href={item.href}
 										aria-current={active ? "page" : undefined}
 										className={cn(
-											"flex min-h-11 items-center rounded-md px-3 text-sm transition-colors",
+											"flex min-h-9 items-center rounded-md px-3 text-sm transition-colors",
 											active
-												? "border border-transparent bg-accent/70 font-medium text-foreground"
+												? "bg-accent text-foreground"
 												: "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
 										)}
 									>
@@ -59,7 +61,7 @@ function Pager({ activeHref }: { activeHref: string }) {
 			{prev ? (
 				<Link
 					href={prev.href}
-					className="group flex flex-col gap-1 rounded-lg border bg-card p-5 transition-colors hover:border-foreground/25"
+					className="group flex flex-col gap-1 rounded-xl border p-4 transition-colors hover:border-foreground/25"
 				>
 					<span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
 						<ArrowLeft className="size-3.5 transition-transform group-hover:-translate-x-0.5" />
@@ -73,7 +75,7 @@ function Pager({ activeHref }: { activeHref: string }) {
 			{next ? (
 				<Link
 					href={next.href}
-					className="group flex flex-col items-end gap-1 rounded-lg border bg-card p-5 text-right transition-colors hover:border-foreground/25 sm:col-start-2"
+					className="group flex flex-col items-end gap-1 rounded-xl border p-4 text-right transition-colors hover:border-foreground/25 sm:col-start-2"
 				>
 					<span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
 						Next
@@ -101,7 +103,7 @@ export function DocsFrame({
 			<SiteNavbar />
 			<main
 				id="main-content"
-				className="container-page pt-28 pb-20 lg:grid lg:grid-cols-[208px_minmax(0,1fr)] lg:gap-10 lg:pt-32 xl:grid-cols-[208px_minmax(0,1fr)_200px] xl:gap-12"
+				className="container-page pt-20 pb-20 lg:grid lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-14 lg:pt-24 xl:grid-cols-[240px_minmax(0,1fr)_200px] xl:gap-12"
 			>
 				<aside className="hidden lg:block">
 					<nav
@@ -121,27 +123,6 @@ export function DocsFrame({
 				</details>
 
 				<div className="min-w-0">
-					{headings.length > 1 && (
-						<details className="mb-6 rounded-xl border xl:hidden">
-							<summary className="cursor-pointer px-4 py-3 text-sm font-medium">
-								On this page
-							</summary>
-							<nav aria-label="Article sections" className="px-4 pb-4">
-								<ul>
-									{headings.map((heading) => (
-										<li key={heading.id}>
-											<a
-												href={`#${heading.id}`}
-												className="flex min-h-11 items-center py-2 text-sm text-muted-foreground hover:text-foreground"
-											>
-												{heading.text}
-											</a>
-										</li>
-									))}
-								</ul>
-							</nav>
-						</details>
-					)}
 					{children}
 					<Pager activeHref={activeHref} />
 				</div>
@@ -149,13 +130,15 @@ export function DocsFrame({
 				{headings.length > 1 ? (
 					<aside className="hidden xl:block">
 						<nav aria-label="On this page" className="sticky top-24">
-							<p className="text-xs font-medium text-foreground normal-case">On this page</p>
+							<p className="text-xs font-semibold tracking-wide text-foreground uppercase">
+								On this page
+							</p>
 							<ul className="mt-3 flex flex-col border-l">
 								{headings.map((heading) => (
 									<li key={heading.id}>
 										<a
 											href={`#${heading.id}`}
-											className="-ml-px flex min-h-11 items-center border-l border-transparent py-1 pl-3 text-sm text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground"
+											className="-ml-px flex min-h-9 items-center border-l border-transparent py-1 pl-3 text-sm text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground"
 										>
 											{heading.text}
 										</a>

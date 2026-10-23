@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
 import { CalendarClock, Loader2, Pencil, Play, Plus, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { SettingsSection } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
@@ -51,13 +51,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
-import {
-	TableFacet,
-	TableFilterReset,
-	TableNoMatch,
-	TablePagination,
-	TableSearch,
-} from "@/components/ui/table-toolbar";
+import { TableNoMatch, TablePagination, TableSearch } from "@/components/ui/table-toolbar";
 import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useSaveMutation } from "@/hooks/use-save-mutation";
@@ -205,19 +199,6 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 			: "server"
 		: source.serviceType;
 
-	const [states, setStates] = useState<string[]>([]);
-	const matchesState = useCallback(
-		(row: ScheduleRow) =>
-			states.length === 0 ||
-			states.some((state) =>
-				state === "failed"
-					? row.lastStatus === "error"
-					: state === "enabled"
-						? row.enabled
-						: !row.enabled,
-			),
-		[states],
-	);
 	const [dialogOpen, setDialogOpen] = useState(false);
 	const [editing, setEditing] = useState<ScheduleRow | null>(null);
 	// Typed explicitly: `defaultScheduleType` is narrowed to two members by the
@@ -228,7 +209,6 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 	});
 	const [deleteTarget, setDeleteTarget] = useState<ScheduleRow | null>(null);
 	// "Run once from an image" — a job with no cron behind it.
-	const [jobOutput, setJobOutput] = useState<string | null>(null);
 	const [onceOpen, setOnceOpen] = useState(false);
 	const [onceImage, setOnceImage] = useState("");
 	const [onceCommand, setOnceCommand] = useState("");
@@ -254,17 +234,7 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 	});
 	const { isPending, isError, error, refetch } = isGlobal ? globalQuery : serviceQuery;
 	const schedules: ScheduleRow[] = (isGlobal ? globalQuery.data : serviceQuery.data) ?? [];
-	const view = useTableView({
-		rows: schedules,
-		search: searchSchedule,
-		searchFrom: 1,
-		filter: matchesState,
-		filterKey: states.join(","),
-	});
-	const clearFilters = () => {
-		setStates([]);
-		view.clear();
-	};
+	const view = useTableView({ rows: schedules, search: searchSchedule });
 	const listKey = isGlobal
 		? trpc.schedule.all.queryKey()
 		: trpc.schedule.byService.queryKey(serviceInput);
@@ -389,8 +359,11 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 		errorMessage: "Run failed",
 		onSuccess: (result) => {
 			setOnceOpen(false);
-			setJobOutput(result.output);
-			toast.success("Job finished");
+			toast.success(
+				result.output.trim()
+					? `Job finished: ${result.output.trim().split("\n").slice(-1)[0]}`
+					: "Job finished",
+			);
 		},
 	});
 
@@ -453,41 +426,7 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 		>
 			<TableCard
 				framed={isGlobal}
-				toolbar={
-					<>
-						<TableFacet
-							label="State"
-							options={[
-								{
-									value: "enabled",
-									label: "Enabled",
-									count: schedules.filter((row) => row.enabled).length,
-								},
-								{
-									value: "paused",
-									label: "Paused",
-									count: schedules.filter((row) => !row.enabled).length,
-								},
-								{
-									value: "failed",
-									label: "Last run failed",
-									count: schedules.filter((row) => row.lastStatus === "error").length,
-								},
-							]}
-							selected={states}
-							onChange={setStates}
-						/>
-						<TableFilterReset
-							show={states.length > 0 || Boolean(view.query)}
-							onClear={clearFilters}
-						/>
-						<span className="text-xs text-muted-foreground tabular-nums">
-							{schedules.filter((row) => row.enabled).length} enabled ·{" "}
-							{schedules.filter((row) => !row.enabled).length} paused
-						</span>
-						<TableSearch view={view} placeholder="Search schedules…" className="ms-auto" />
-					</>
-				}
+				toolbar={<TableSearch view={view} placeholder="Search schedules…" className="ms-auto" />}
 				footer={<TablePagination view={view} noun="schedules" />}
 			>
 				<Table>
@@ -503,9 +442,7 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 						</TableRow>
 					</TableHeader>
 					<TableBody>
-						{view.visible.length === 0 ? (
-							<TableNoMatch view={{ ...view, clear: clearFilters }} colSpan={6} />
-						) : null}
+						{view.visible.length === 0 ? <TableNoMatch view={view} colSpan={6} /> : null}
 						{view.visible.map((schedule) => (
 							<TableRow key={schedule.scheduleId}>
 								<TableCell className={isGlobal ? "font-medium" : "max-w-40 truncate font-medium"}>
@@ -544,25 +481,11 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 											title={schedule.lastError ?? undefined}
 										>
 											<StatusDot status={scheduleRunStatusDot[schedule.lastStatus] ?? "neutral"} />
-											<span className="grid gap-1">
-												<span>
-													{schedule.lastStatus === "error"
-														? "Failed"
-														: schedule.lastStatus === "success"
-															? "Succeeded"
-															: "Running"}
-												</span>
-												{schedule.lastRunAt && (
-													<span className="text-xs text-muted-foreground">
-														<DateTime value={schedule.lastRunAt} />
-													</span>
-												)}
-												{schedule.lastStatus === "error" && schedule.lastError && (
-													<span className="max-w-64 whitespace-normal break-words text-xs text-destructive">
-														{schedule.lastError}
-													</span>
-												)}
-											</span>
+											{schedule.lastRunAt ? (
+												<DateTime value={schedule.lastRunAt} />
+											) : (
+												schedule.lastStatus
+											)}
 										</span>
 									) : (
 										<span className="text-sm text-muted-foreground">Never</span>
@@ -570,7 +493,6 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 								</TableCell>
 								<TableCell>
 									<Switch
-										aria-label={`Enable schedule ${schedule.name}`}
 										checked={schedule.enabled}
 										// Double-clicks would otherwise queue enable + disable back to back.
 										disabled={
@@ -641,7 +563,7 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 							setForm({ ...form, scheduleType: value as ScheduleType, targetId: "" })
 						}
 					>
-						<SelectTrigger aria-label="Target">
+						<SelectTrigger>
 							<SelectValue />
 						</SelectTrigger>
 						<SelectContent>
@@ -665,7 +587,7 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 						value={form.targetId || undefined}
 						onValueChange={(value) => setForm({ ...form, targetId: value })}
 					>
-						<SelectTrigger aria-label="Server">
+						<SelectTrigger>
 							<SelectValue placeholder="Select server" />
 						</SelectTrigger>
 						<SelectContent>
@@ -696,7 +618,7 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 						setForm({ ...form, cronExpression: value });
 					}}
 				>
-					<SelectTrigger aria-label="Schedule preset">
+					<SelectTrigger>
 						<SelectValue />
 					</SelectTrigger>
 					<SelectContent>
@@ -713,7 +635,6 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 				{isGlobal ? <Label htmlFor="schedule-cron">Cron (UTC)</Label> : null}
 				<Input
 					id="schedule-cron"
-					aria-label="Cron expression (UTC)"
 					className="font-mono text-sm"
 					placeholder="0 0 * * *"
 					value={form.cronExpression}
@@ -790,7 +711,7 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 			</div>
 			{!editing &&
 				(isGlobal ? (
-					<div className="flex flex-wrap items-center justify-between gap-4">
+					<div className="flex items-center justify-between gap-4">
 						<Label htmlFor="schedule-enabled">Enabled</Label>
 						<Switch
 							id="schedule-enabled"
@@ -892,19 +813,6 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 	const dialogs = (
 		<>
 			{runOnceDialog}
-			<Dialog open={jobOutput !== null} onOpenChange={(open) => !open && setJobOutput(null)}>
-				<DialogContent className="sm:max-w-3xl">
-					<DialogHeader>
-						<DialogTitle>Job output</DialogTitle>
-						<DialogDescription>
-							The completed job’s output. It is also retained in the service run history.
-						</DialogDescription>
-					</DialogHeader>
-					<pre className="max-h-[60vh] overflow-auto rounded-lg border bg-control p-4 font-mono text-xs whitespace-pre-wrap break-words">
-						{jobOutput || "The job completed without output."}
-					</pre>
-				</DialogContent>
-			</Dialog>
 			<Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
 				<DialogContent>
 					<DialogHeader>

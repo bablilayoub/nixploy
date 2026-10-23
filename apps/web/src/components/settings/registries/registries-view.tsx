@@ -5,6 +5,7 @@ import type { inferRouterOutputs } from "@trpc/server";
 import { format } from "date-fns";
 import { Database, Loader2, Pencil, Plug, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
+import { SettingsSection } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
 import { EmptyState } from "@/components/services/empty-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
@@ -125,10 +126,20 @@ export function RegistriesView() {
 	});
 
 	return (
-		<div className="flex min-w-0 flex-col gap-7">
+		<div className="flex flex-col gap-6">
 			<PageHeader
 				title="Registries"
 				description="Credentials for private registries (Hub, GHCR, or your own)."
+			/>
+			<SettingsSection
+				wide
+				title={
+					<span className="flex items-center gap-2">
+						<Database className="size-4 text-muted-foreground" />
+						Registries
+					</span>
+				}
+				description="Encrypted usernames and passwords. Attach on an app’s source for private images."
 				actions={
 					<Dialog open={open} onOpenChange={setOpen}>
 						<DialogTrigger asChild>
@@ -142,7 +153,7 @@ export function RegistriesView() {
 								<DialogTitle>Add registry</DialogTitle>
 								<DialogDescription>Store credentials for a Docker registry.</DialogDescription>
 							</DialogHeader>
-							<div className="grid gap-5">
+							<div className="grid gap-4">
 								<div className="grid gap-2">
 									<Label htmlFor="registry-name">Name</Label>
 									<Input
@@ -152,7 +163,7 @@ export function RegistriesView() {
 										onChange={(e) => setRegistryName(e.target.value)}
 									/>
 								</div>
-								<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+								<div className="grid grid-cols-2 gap-4">
 									<div className="grid gap-2">
 										<Label htmlFor="registry-username">Username</Label>
 										<Input
@@ -180,14 +191,14 @@ export function RegistriesView() {
 										onChange={(e) => setRegistryUrl(e.target.value)}
 									/>
 								</div>
-								<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+								<div className="grid grid-cols-2 gap-4">
 									<div className="grid gap-2">
 										<Label>Type</Label>
 										<Select
 											value={registryType}
 											onValueChange={(value) => setRegistryType(value as "cloud" | "selfHosted")}
 										>
-											<SelectTrigger aria-label="Type">
+											<SelectTrigger>
 												<SelectValue />
 											</SelectTrigger>
 											<SelectContent>
@@ -227,8 +238,7 @@ export function RegistriesView() {
 						</DialogContent>
 					</Dialog>
 				}
-			/>
-			<div className="min-w-0">
+			>
 				<QueryState
 					isPending={isPending}
 					isError={isError}
@@ -332,7 +342,7 @@ export function RegistriesView() {
 					</Table>
 					<TablePagination view={view} noun="registries" className="mt-3" />
 				</QueryState>
-			</div>
+			</SettingsSection>
 			<Dialog open={editing !== null} onOpenChange={(isOpen) => !isOpen && setEditing(null)}>
 				<DialogContent>
 					<DialogHeader>
@@ -356,7 +366,7 @@ export function RegistriesView() {
 								});
 							}
 						}}
-						className="grid gap-5"
+						className="grid gap-4"
 					>
 						<div className="grid gap-2">
 							<Label htmlFor="edit-registry-name">Name</Label>
@@ -366,7 +376,7 @@ export function RegistriesView() {
 								onChange={(e) => setEditName(e.target.value)}
 							/>
 						</div>
-						<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+						<div className="grid grid-cols-2 gap-4">
 							<div className="grid gap-2">
 								<Label htmlFor="edit-registry-username">Username</Label>
 								<Input
@@ -395,14 +405,14 @@ export function RegistriesView() {
 								onChange={(e) => setEditUrl(e.target.value)}
 							/>
 						</div>
-						<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+						<div className="grid grid-cols-2 gap-4">
 							<div className="grid gap-2">
 								<Label>Type</Label>
 								<Select
 									value={editType}
 									onValueChange={(value) => setEditType(value as "cloud" | "selfHosted")}
 								>
-									<SelectTrigger aria-label="Type">
+									<SelectTrigger>
 										<SelectValue />
 									</SelectTrigger>
 									<SelectContent>

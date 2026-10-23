@@ -48,20 +48,19 @@ export function SubNav({
 				<Link
 					key={item.href}
 					href={item.href}
-					aria-current={isActive ? "page" : undefined}
 					className={cn(
 						"text-sm transition-colors",
 						vertical
 							? cn(
-									"flex min-h-10 items-center gap-2.5 rounded-md border border-transparent px-3 py-2 text-[13px]",
+									"flex items-center gap-2.5 rounded-md px-2.5 py-2",
 									isActive
-										? "border-transparent bg-accent/70 font-medium text-foreground"
+										? "bg-secondary font-medium text-foreground"
 										: "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
 								)
 							: cn(
-									"inline-flex min-h-10 items-center gap-2 whitespace-nowrap rounded-md border px-3 py-2",
+									"inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border px-3 py-1.5",
 									isActive
-										? "border-border border-transparent bg-accent/70 font-medium text-foreground"
+										? "border-border bg-secondary font-medium text-foreground"
 										: "border-transparent text-muted-foreground hover:bg-secondary/70 hover:text-foreground",
 								),
 					)}
@@ -83,7 +82,7 @@ export function SubNav({
 	if (groups && groups.length > 0) {
 		return (
 			<nav
-				className={cn(vertical ? "flex flex-col gap-6" : "flex flex-col gap-3", className)}
+				className={cn(vertical ? "flex flex-col gap-5" : "flex flex-col gap-3", className)}
 				aria-label="Secondary"
 			>
 				{groups.map((group) => (
@@ -93,7 +92,7 @@ export function SubNav({
 					>
 						<span
 							className={cn(
-								"shrink-0 text-xs font-medium text-muted-foreground",
+								"shrink-0 text-[10px] font-medium uppercase tracking-wide text-muted-foreground",
 								vertical ? "px-3 pb-0.5" : "",
 							)}
 						>

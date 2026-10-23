@@ -10,7 +10,21 @@ Upgrade mechanics (rollback, pre-update dump, downgrade guard) are in
 
 ---
 
-## Next operator workspace upgrade
+## v0.8.0
+
+**Action required before upgrading from v0.7.x:** use the version-pinned host
+updater from this release. It creates the required recovery assets and drains
+both roles before migration `0048`. This minor release includes new reviewed
+configuration releases and retained PostgreSQL recovery copies, as well as the
+restored frontend; it is not a routine styling-only patch.
+
+Migrations `0047`–`0051` are included. Preserve the matching config directory,
+encryption-key chain and authentication secret alongside the database backup.
+The detailed boundary and rollback instructions follow.
+
+<a id="next-operator-workspace-upgrade"></a>
+
+### Operator workspace upgrade
 
 Migration `0048` changes the organization-variable storage contract. This is
 an upgrade boundary, including installations with a separate worker:
@@ -108,10 +122,15 @@ check does not establish application
 compatibility, data sanitization or production readiness. Other database
 engines are outside this initial workflow.
 
-**The panel has a new default design system.** IBM Plex typography, mineral
-surfaces, plum actions and a persistent desktop sidebar apply to shared
-operator screens. Saved instance/organization logos and accent colors remain
-authoritative; routes, service-tab deep links and capability gates are retained.
+**The original design is restored.** The panel and public website use the
+familiar layouts and component language from before the redesign series.
+Projects appear before analytics; mobile setup text and navigation targets are
+clearer. Resource controls have accessible names and stable keyboard focus.
+Saved instance/organization logos and accent colors remain authoritative;
+routes, service-tab deep links and capability gates are retained.
+
+**Security:** both Next.js apps use the patched 16.4.3 release. The public release
+continues to require passing dependency and container vulnerability gates.
 
 ## v0.6.0
 

@@ -64,7 +64,7 @@ export function HelpLink({
 			target="_blank"
 			rel="noreferrer noopener"
 			className={cn(
-				"inline-flex items-center gap-1 font-medium text-foreground underline underline-offset-4 hover:decoration-2",
+				"inline-flex items-center gap-1 font-medium text-foreground underline-offset-4 hover:underline",
 				className,
 			)}
 		>

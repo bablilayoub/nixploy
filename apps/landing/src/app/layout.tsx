@@ -1,17 +1,32 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Space_Grotesk } from "next/font/google";
 import { MotionProvider } from "@/components/motion-provider";
-import { ThemeProvider } from "@/components/theme-provider";
 import { site } from "@/lib/site";
 import "./globals.css";
 
-const inter = Geist({ subsets: ["latin"], variable: "--font-geist", display: "swap" });
-const mono = Geist_Mono({
+/*
+ * Three faces: Space Grotesk for headings (the display token — angular like
+ * the mark, and not the house font of a hosting company), Geist for body,
+ * Geist Mono for terminals and code. `h1`–`h3` take the display face through
+ * a base rule in globals.css, so no heading needs a class for it.
+ */
+const geist = Geist({
+	subsets: ["latin"],
+	variable: "--font-geist",
+	display: "swap",
+});
+
+const spaceGrotesk = Space_Grotesk({
+	subsets: ["latin"],
+	variable: "--font-space-grotesk",
+	display: "swap",
+});
+
+const geistMono = Geist_Mono({
 	subsets: ["latin"],
 	variable: "--font-geist-mono",
 	display: "swap",
 });
-const THEME_INIT = `(function(){try{var t=localStorage.getItem('theme');document.documentElement.classList.toggle('dark',t==='dark'||(t!=='light'&&matchMedia('(prefers-color-scheme: dark)').matches))}catch(e){document.documentElement.classList.toggle('dark',matchMedia('(prefers-color-scheme: dark)').matches)}})()`;
 
 /*
  * Motion writes its `initial` state as an inline style, so every reveal on the
@@ -52,18 +67,16 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
 	// Matches `--background` in globals.css (oklch(0.145 0 0)); a theme colour
 	// that is not the page colour shows as a seam in the browser chrome.
-	themeColor: [
-		{ media: "(prefers-color-scheme: light)", color: "#f6f7f8" },
-		{ media: "(prefers-color-scheme: dark)", color: "#17191c" },
-	],
+	themeColor: "#0a0a0a",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
 	return (
-		<html lang="en" className={`${inter.variable} ${mono.variable}`} suppressHydrationWarning>
+		<html
+			lang="en"
+			className={`dark ${geist.variable} ${spaceGrotesk.variable} ${geistMono.variable}`}
+		>
 			<head>
-				{/* biome-ignore lint/security/noDangerouslySetInnerHtml: fixed theme bootstrap contains no external input. */}
-				<script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
 				{/*
 				 * Motion writes its `initial` state as an inline style, so every
 				 * reveal on the site renders at `opacity: 0` in the server HTML
@@ -75,9 +88,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
 				</noscript>
 			</head>
 			<body className="bg-background font-sans text-foreground antialiased">
-				<ThemeProvider>
-					<MotionProvider>{children}</MotionProvider>
-				</ThemeProvider>
+				<MotionProvider>{children}</MotionProvider>
 			</body>
 		</html>
 	);

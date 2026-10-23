@@ -145,7 +145,7 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 
 	if (isLoading) {
 		return (
-			<div className="flex min-w-0 flex-col gap-7">
+			<div className="flex flex-col gap-6">
 				<div className="flex items-center gap-3">
 					<Skeleton className="size-10 rounded-lg" />
 					<div className="space-y-2">
@@ -226,7 +226,7 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 	}
 
 	return (
-		<div className="flex min-w-0 flex-col gap-7">
+		<div className="flex flex-col gap-6">
 			<ServicePageHeader
 				projectId={projectId}
 				projectName={compose.environment.project.name}
@@ -311,11 +311,11 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 						className="w-full gap-4"
 					>
 						<SubTabsList>
-							<SubTabsTrigger value="logs">Live logs</SubTabsTrigger>
+							<SubTabsTrigger value="logs">Logs</SubTabsTrigger>
 							<SubTabsTrigger value="monitoring">Monitoring</SubTabsTrigger>
 							<SubTabsTrigger value="events">Events</SubTabsTrigger>
 							<SubTabsTrigger value="terminal">Terminal</SubTabsTrigger>
-							<SubTabsTrigger value="history">Log history</SubTabsTrigger>
+							<SubTabsTrigger value="history">History</SubTabsTrigger>
 						</SubTabsList>
 						<TabsContent value="logs" className="mt-0">
 							<LogsTab compose={compose} />

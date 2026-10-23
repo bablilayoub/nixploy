@@ -21,8 +21,10 @@ export function Platform() {
 		<section id="open" className="py-20 lg:py-28">
 			<div className="container-page grid gap-12 lg:grid-cols-12 lg:gap-16">
 				<div className="lg:col-span-5">
-					<p className="text-xs text-muted-foreground normal-case">All of it</p>
-					<h2 className="mt-4 text-3xl leading-[1.15] font-medium tracking-[-0.035em] text-balance lg:text-4xl">
+					<p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
+						All of it
+					</p>
+					<h2 className="mt-4 text-4xl font-semibold tracking-tight text-balance lg:text-5xl">
 						There is no enterprise tier
 					</h2>
 					<p className="mt-5 text-lg text-muted-foreground">

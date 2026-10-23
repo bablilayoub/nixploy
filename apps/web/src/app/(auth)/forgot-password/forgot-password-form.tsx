@@ -75,8 +75,8 @@ export function ForgotPasswordForm() {
 	if (sent) {
 		return (
 			<Card>
-				<CardHeader className="text-start">
-					<CardTitle as="h1" className="flex items-center justify-center gap-2 text-xl">
+				<CardHeader className="text-center">
+					<CardTitle className="flex items-center justify-center gap-2 text-xl">
 						<MailCheck className="size-5" />
 						Check your inbox
 					</CardTitle>
@@ -96,10 +96,8 @@ export function ForgotPasswordForm() {
 
 	return (
 		<Card>
-			<CardHeader className="text-start">
-				<CardTitle as="h1" className="text-[1.75rem] leading-tight tracking-tight">
-					Forgot your password?
-				</CardTitle>
+			<CardHeader className="text-center">
+				<CardTitle className="text-xl">Forgot your password?</CardTitle>
 				<CardDescription>
 					We will email you a link to choose a new one. Your instance must have an email
 					notification channel configured.
@@ -107,10 +105,7 @@ export function ForgotPasswordForm() {
 			</CardHeader>
 			<CardContent>
 				<Form {...form}>
-					<form
-						onSubmit={form.handleSubmit(onSubmit)}
-						className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4"
-					>
+					<form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4">
 						{formError && (
 							<div className="flex items-start gap-2 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
 								<AlertCircle className="mt-0.5 size-4 shrink-0" />

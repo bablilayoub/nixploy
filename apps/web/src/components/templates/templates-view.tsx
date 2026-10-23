@@ -229,7 +229,7 @@ export function TemplatesWorkbench({
 	const rail = <TemplateFilterRail view={view} filters={filters} sourceNames={sourceNames} />;
 
 	return (
-		<div className="flex min-w-0 flex-col gap-7">
+		<div className="flex flex-col gap-6">
 			<PageHeader
 				title="Templates"
 				description="One-click deploys for popular self-hosted apps."
@@ -420,7 +420,7 @@ export function TemplatesWorkbench({
 
 						{view.pageCount > 1 ? (
 							<Pagination
-								className="pt-3"
+								className="pt-4"
 								page={view.page}
 								pageCount={view.pageCount}
 								from={view.from}
@@ -495,7 +495,7 @@ function CardGrid({
 					{/* The rule carries the eye from the label across to the row it
 					    labels, which is what separates the sections — not the gap. */}
 					<div className="flex items-center gap-3">
-						<h2 className="text-[11px] font-medium normal-case tracking-wide text-muted-foreground">
+						<h2 className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
 							{section.category}
 						</h2>
 						<span className="text-[11px] tabular-nums text-muted-foreground/60">

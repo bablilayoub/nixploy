@@ -169,7 +169,7 @@ export function ApiKeysCard() {
 		const { error } = await authClient.apiKey.delete({ keyId });
 		if (error) {
 			toastError(error, "Failed to delete API key");
-			throw error;
+			return;
 		}
 		toast.success("API key deleted");
 		await loadKeys();
@@ -253,7 +253,7 @@ export function ApiKeysCard() {
 											Pick the narrowest scope the client needs.
 										</DialogDescription>
 									</DialogHeader>
-									<div className="grid gap-5">
+									<div className="grid gap-4">
 										<div className="grid gap-2">
 											<Label htmlFor="api-key-name">Name</Label>
 											<Input
@@ -269,7 +269,7 @@ export function ApiKeysCard() {
 												value={scope}
 												onValueChange={(value) => setScope(value as ApiKeyScope)}
 											>
-												<SelectTrigger aria-label="Scope">
+												<SelectTrigger>
 													<SelectValue />
 												</SelectTrigger>
 												<SelectContent>
@@ -287,7 +287,7 @@ export function ApiKeysCard() {
 										<div className="grid gap-2">
 											<Label>Organization</Label>
 											<Select value={organizationId} onValueChange={setOrganizationId}>
-												<SelectTrigger aria-label="Organization">
+												<SelectTrigger>
 													<SelectValue placeholder="Select an organization" />
 												</SelectTrigger>
 												<SelectContent>
@@ -305,7 +305,7 @@ export function ApiKeysCard() {
 										<div className="grid gap-2">
 											<Label>Expires</Label>
 											<Select value={expiration} onValueChange={setExpiration}>
-												<SelectTrigger aria-label="Expires">
+												<SelectTrigger>
 													<SelectValue />
 												</SelectTrigger>
 												<SelectContent>

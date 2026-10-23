@@ -1,36 +1,34 @@
-import Image from "next/image";
-import { productCaptures } from "@/lib/product-captures";
+import { BorderBeam } from "@/components/ui/border-beam";
+import { Safari } from "@/components/ui/safari";
 
-/** Real, current application captures rather than another mock browser frame. */
+/*
+ * The panel itself, in @magicui/safari, lit by @magicui/border-beam. The
+ * capture is a real instance taken by tools/screenshots.
+ */
 export function ProductShot() {
 	return (
-		<section aria-label="Inside the Nixploy workspace" className="container-page pb-16 lg:pb-24">
-			<figure>
-				<div className="relative overflow-hidden rounded-xl border bg-card shadow-[0_12px_48px_-24px_rgb(20_24_32/20%)]">
-					<Image
-						src={productCaptures.workspace.light}
-						alt="Nixploy project overview with environments, service health and deployment activity"
-						width={1440}
-						height={1000}
+		<section className="relative pb-24">
+			<div className="container-page">
+				{/* The frame's image area has a fixed aspect and the capture is taller,
+				    so `object-cover` slices the last row of the panel off with a hard
+				    edge. The fade ends the shot instead of cutting it — and it takes
+				    the beam with it, so the border does not stop in mid-air either. */}
+				<div className="relative overflow-hidden rounded-[22px] [mask-image:linear-gradient(to_bottom,#000_72%,transparent_99%)]">
+					<Safari
+						url="panel.acme.dev"
+						imageSrc="/screenshots/02-dashboard.png"
+						imageAlt="The Nixploy panel: projects, services with their state, deployments in the last 24 hours and Docker containers"
+						imageSizes="(min-width: 1360px) 1280px, 100vw"
 						priority
-						sizes="(min-width:1360px) 1280px,100vw"
-						className="h-auto w-full dark:hidden"
+						className="w-full"
 					/>
-					<Image
-						src={productCaptures.workspace.dark}
-						alt="Nixploy project overview in dark mode"
-						width={1440}
-						height={1000}
-						priority
-						sizes="(min-width:1360px) 1280px,100vw"
-						className="hidden h-auto w-full dark:block"
+					<BorderBeam
+						duration={9}
+						size={340}
+						className="from-transparent via-foreground/60 to-transparent"
 					/>
 				</div>
-				<figcaption className="flex flex-wrap items-center justify-between gap-2 pt-4 text-xs text-muted-foreground">
-					<span>One workspace for projects, environments and services.</span>
-					<span>Example workspace</span>
-				</figcaption>
-			</figure>
+			</div>
 		</section>
 	);
 }

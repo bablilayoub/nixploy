@@ -149,11 +149,11 @@ export function AcceptInvitationForm({ invitationId }: { invitationId: string })
 	if (preview.isPending || isSessionPending) {
 		return (
 			<Card>
-				<CardHeader className="text-start">
+				<CardHeader className="text-center">
 					<Skeleton className="mx-auto h-7 w-48" />
 					<Skeleton className="mx-auto mt-2 h-4 w-64" />
 				</CardHeader>
-				<CardContent className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
+				<CardContent className="grid gap-4">
 					<Skeleton className="h-10 w-full" />
 					<Skeleton className="h-10 w-full" />
 				</CardContent>
@@ -164,10 +164,8 @@ export function AcceptInvitationForm({ invitationId }: { invitationId: string })
 	if (!invitation) {
 		return (
 			<Card>
-				<CardHeader className="text-start">
-					<CardTitle as="h1" className="text-[1.75rem] leading-tight tracking-tight">
-						Invitation unavailable
-					</CardTitle>
+				<CardHeader className="text-center">
+					<CardTitle className="text-xl">Invitation unavailable</CardTitle>
 					<CardDescription>
 						This link is invalid, expired, or already used. Ask an admin for a new invite.
 					</CardDescription>
@@ -186,16 +184,14 @@ export function AcceptInvitationForm({ invitationId }: { invitationId: string })
 			maskEmail(session.user.email.toLowerCase()) === invitation.emailMasked.toLowerCase();
 		return (
 			<Card>
-				<CardHeader className="text-start">
-					<CardTitle as="h1" className="text-[1.75rem] leading-tight tracking-tight">
-						Join {invitation.organizationName}
-					</CardTitle>
+				<CardHeader className="text-center">
+					<CardTitle className="text-xl">Join {invitation.organizationName}</CardTitle>
 					<CardDescription>
 						You&apos;re signed in as {session.user.email}. Role:{" "}
 						<span className="capitalize">{invitation.role ?? "member"}</span>.
 					</CardDescription>
 				</CardHeader>
-				<CardContent className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
+				<CardContent className="grid gap-4">
 					{formError && (
 						<div className="flex items-center gap-2 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
 							<AlertCircle className="size-4 shrink-0" />
@@ -225,10 +221,8 @@ export function AcceptInvitationForm({ invitationId }: { invitationId: string })
 
 	return (
 		<Card>
-			<CardHeader className="text-start">
-				<CardTitle as="h1" className="text-[1.75rem] leading-tight tracking-tight">
-					Join {invitation.organizationName}
-				</CardTitle>
+			<CardHeader className="text-center">
+				<CardTitle className="text-xl">Join {invitation.organizationName}</CardTitle>
 				<CardDescription>
 					Create your account to accept this invitation as{" "}
 					<span className="capitalize">{invitation.role ?? "member"}</span>.
@@ -236,10 +230,7 @@ export function AcceptInvitationForm({ invitationId }: { invitationId: string })
 			</CardHeader>
 			<CardContent>
 				<Form {...form}>
-					<form
-						onSubmit={form.handleSubmit(onSubmit)}
-						className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4"
-					>
+					<form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4">
 						{formError && (
 							<div className="flex items-center gap-2 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
 								<AlertCircle className="size-4 shrink-0" />
@@ -260,7 +251,7 @@ export function AcceptInvitationForm({ invitationId }: { invitationId: string })
 											{...field}
 										/>
 									</FormControl>
-									<p className="text-xs leading-relaxed break-words text-muted-foreground">
+									<p className="text-xs text-muted-foreground">
 										Type the address this invitation was sent to ({invitation.emailMasked}).
 									</p>
 									<FormMessage />

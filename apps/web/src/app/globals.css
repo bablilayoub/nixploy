@@ -1,23 +1,21 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "./component-states.css";
-@import "./fieldwork.css";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-	--spacing: 4px;
 	--radius-sm: calc(var(--radius) - 2px);
 	--radius-md: var(--radius);
-	--radius-lg: calc(var(--radius) + 4px);
-	--radius-xl: calc(var(--radius) + 8px);
+	--radius-lg: calc(var(--radius) + 2px);
+	--radius-xl: calc(var(--radius) + 6px);
 	--radius-2xl: calc(var(--radius) + 10px);
 	--radius-3xl: calc(var(--radius) + 14px);
 	--radius-4xl: calc(var(--radius) + 18px);
 	--font-sans:
-		var(--font-geist), ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+		var(--font-inter), ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
 	--font-mono:
-		var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+		var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 	--color-background: var(--background);
 	--color-foreground: var(--foreground);
 	--color-card: var(--card);
@@ -60,83 +58,78 @@
 }
 
 :root {
-	--radius: 0.5rem;
-	--background: #f6f7f8;
-	--foreground: #202327;
+	--radius: 0.625rem;
+	/* Compatibility aliases keep new workflows on the familiar neutral palette. */
+	--control: var(--input);
+	--panel-inset: var(--muted);
+	--selection: var(--accent);
+	--chart-axis: var(--muted-foreground);
+	--background: #fafafa;
+	--foreground: #1c1917;
 	--card: #ffffff;
-	--card-foreground: var(--foreground);
+	--card-foreground: #1c1917;
 	--popover: #ffffff;
-	--popover-foreground: var(--foreground);
-	--primary: #24272b;
-	--primary-foreground: #ffffff;
+	--popover-foreground: #1c1917;
+	--primary: #1c1917;
+	--primary-foreground: #fafaf9;
+	/* Organization accent (UX audit F34). Defaults to --primary, so the panel
+	   stays monochrome until a white-label accent is saved; OrgBrandingProvider
+	   overrides it on the root element. */
 	--brand: var(--primary);
-	--secondary: #edf0f2;
-	--secondary-foreground: var(--foreground);
-	--muted: #edf0f2;
-	--muted-foreground: #616973;
-	--accent: #edf0f2;
-	--accent-foreground: var(--foreground);
-	--destructive: #b42332;
-	--border: #e0e4e8;
-	--input: #8a939f;
-	--ring: #6b7480;
-	--control: #ffffff;
-	--panel-inset: #ffffff;
-	--selection: #edf0f2;
-	--chart-axis: #616973;
-	--success: #187040;
-	--warning: #965b08;
-	--info: #285eb0;
+	--secondary: #f5f5f4;
+	--secondary-foreground: #1c1917;
+	--muted: #f5f5f4;
+	--muted-foreground: #78716c;
+	--accent: #f5f5f4;
+	--accent-foreground: #1c1917;
+	--destructive: #dc2626;
+	--border: #e7e5e4;
+	--input: #e7e5e4;
+	--ring: #a8a29e;
+	--success: #16a34a;
+	--warning: #d97706;
+	--info: #2563eb;
+	/* Monochrome series: steps of the foreground, readable on both themes. */
 	--chart-1: var(--foreground);
-	--chart-2: color-mix(in oklab, var(--foreground) 75%, transparent);
-	--chart-3: color-mix(in oklab, var(--foreground) 60%, transparent);
-	--chart-4: color-mix(in oklab, var(--foreground) 45%, transparent);
-	--chart-5: color-mix(in oklab, var(--foreground) 30%, transparent);
-	--sidebar: #f6f7f8;
+	--chart-2: color-mix(in oklab, var(--foreground) 70%, transparent);
+	--chart-3: color-mix(in oklab, var(--foreground) 55%, transparent);
+	--chart-4: color-mix(in oklab, var(--foreground) 40%, transparent);
+	--chart-5: color-mix(in oklab, var(--foreground) 25%, transparent);
+	/* Match shadcn-admin: sidebar tracks page bg so inset gutters read as one canvas */
+	--sidebar: var(--background);
 	--sidebar-foreground: var(--foreground);
 	--sidebar-primary: var(--primary);
 	--sidebar-primary-foreground: var(--primary-foreground);
-	--sidebar-accent: #e9ecef;
-	--sidebar-accent-foreground: var(--foreground);
+	--sidebar-accent: var(--accent);
+	--sidebar-accent-foreground: var(--accent-foreground);
 	--sidebar-border: var(--border);
 	--sidebar-ring: var(--ring);
-	--surface-shadow: 0 1px 2px rgb(17 19 23 / 2%);
-	--overlay-shadow: 0 24px 80px -20px rgb(17 19 23 / 24%), 0 4px 12px rgb(17 19 23 / 8%);
-	color-scheme: light;
 }
 
 .dark {
-	--background: #17191c;
-	--foreground: #f0f2f4;
-	--card: #202327;
-	--card-foreground: var(--foreground);
-	--popover: #2a2e33;
-	--popover-foreground: var(--foreground);
-	--primary: #eceff2;
-	--primary-foreground: #202327;
+	/* Deeper canvas so cards actually lift (Vercel zinc-ish). */
+	--background: #09090b;
+	--foreground: #fafafa;
+	--card: #121214;
+	--card-foreground: #fafafa;
+	--popover: #18181b;
+	--popover-foreground: #fafafa;
+	--primary: #fafafa;
+	--primary-foreground: #09090b;
 	--brand: var(--primary);
-	--secondary: #30353c;
-	--secondary-foreground: var(--foreground);
-	--muted: #30353c;
-	--muted-foreground: #abb1ba;
-	--accent: #30353c;
-	--accent-foreground: var(--foreground);
-	--destructive: #ff8b94;
-	--border: #383e46;
-	--input: #737f8f;
-	--ring: #a3afbc;
-	--control: #1a1c20;
-	--panel-inset: #1a1c20;
-	--selection: #30353c;
-	--chart-axis: #abb1ba;
-	--success: #7adea0;
-	--warning: #eac379;
-	--info: #91b7ee;
-	--sidebar: #1a1c20;
-	--sidebar-accent: #30353c;
-	--surface-shadow: 0 1px 2px rgb(0 0 0 / 10%);
-	--overlay-shadow: 0 24px 80px -20px rgb(0 0 0 / 65%), 0 0 0 1px rgb(255 255 255 / 3%) inset;
-	color-scheme: dark;
+	--secondary: #1c1c1f;
+	--secondary-foreground: #fafafa;
+	--muted: #1c1c1f;
+	--muted-foreground: #a1a1aa;
+	--accent: #1c1c1f;
+	--accent-foreground: #fafafa;
+	--destructive: #f87171;
+	--border: rgb(255 255 255 / 10%);
+	--input: rgb(255 255 255 / 12%);
+	--ring: #71717a;
+	--success: #4ade80;
+	--warning: #fbbf24;
+	--info: #60a5fa;
 }
 
 @layer base {
@@ -156,12 +149,6 @@
 	}
 	body {
 		@apply min-h-svh w-full bg-background text-foreground antialiased;
-		font-feature-settings: "cv11", "ss01";
-		line-height: 1.5;
-	}
-	:focus-visible {
-		outline: 2px solid var(--ring);
-		outline-offset: 3px;
 	}
 	button:not(:disabled),
 	[role="button"]:not(:disabled) {
@@ -250,18 +237,6 @@ body[data-activity-tray="1"] [data-sonner-toaster][data-y-position="bottom"] {
 }
 
 @media (prefers-reduced-motion: reduce) {
-	*,
-	*::before,
-	*::after {
-		/* biome-ignore lint/complexity/noImportantStyles: honor the user preference over component motion */
-		animation-duration: 0.01ms !important;
-		/* biome-ignore lint/complexity/noImportantStyles: honor the user preference over component motion */
-		animation-iteration-count: 1 !important;
-		/* biome-ignore lint/complexity/noImportantStyles: honor the user preference over component motion */
-		transition-duration: 0.01ms !important;
-		/* biome-ignore lint/complexity/noImportantStyles: honor the user preference over component motion */
-		scroll-behavior: auto !important;
-	}
 	.animate-pulse,
 	.animate-ping {
 		animation: none;
@@ -285,62 +260,15 @@ body[data-activity-tray="1"] [data-sonner-toaster][data-y-position="bottom"] {
 	[data-slot="dialog-close"],
 	[data-slot="dropdown-menu-item"],
 	[data-slot="select-item"] {
-		min-height: 44px;
+		min-height: 2.75rem;
 	}
 	[data-slot="button"][data-size^="icon"],
 	[data-slot="dialog-close"],
 	[data-slot="command-palette-trigger-mobile"] {
-		min-width: 44px;
-		min-height: 44px;
+		min-width: 2.75rem;
+		min-height: 2.75rem;
 	}
 	[data-slot="input"] {
-		min-height: 44px;
-	}
-}
-
-@utility surface {
-	border: 1px solid var(--border);
-	border-radius: var(--radius-lg);
-	background: var(--card);
-	box-shadow: var(--surface-shadow);
-}
-@utility workspace-grid {
-	display: grid;
-	gap: 1.5rem;
-	grid-template-columns: minmax(0, 1fr);
-}
-@media (pointer: coarse) {
-	[data-ui="button"],
-	[role="checkbox"],
-	[role="switch"],
-	[data-slot="sheet-close"],
-	[data-slot="dialog-close"] {
-		min-height: 44px;
-		min-width: 44px;
-	}
-}
-
-@media (pointer: coarse) {
-	[data-slot="tabs-list"] {
-		min-height: 3.25rem;
-	}
-}
-
-[data-slot="chart"] .recharts-surface:focus-visible {
-	outline: 2px solid var(--ring);
-	outline-offset: 3px;
-	border-radius: var(--radius);
-}
-
-@layer base {
-	form,
-	fieldset {
-		min-width: 0;
-	}
-	p,
-	h1,
-	h2,
-	h3 {
-		overflow-wrap: anywhere;
+		min-height: 2.75rem;
 	}
 }

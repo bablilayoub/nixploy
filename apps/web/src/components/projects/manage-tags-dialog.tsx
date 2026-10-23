@@ -21,7 +21,7 @@ import { useCapabilities } from "@/hooks/use-capabilities";
 import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { useTRPC } from "@/lib/trpc";
 
-const DEFAULT_COLOR = "#737984";
+const DEFAULT_COLOR = "#6366f1";
 
 /** Create / delete org tags from the project services toolbar. */
 export function ManageTagsDialog() {

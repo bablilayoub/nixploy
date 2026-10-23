@@ -37,7 +37,6 @@ export function CreateComposeDialog({
 	environmentId,
 	environmentName,
 	onClose,
-	onCloseAutoFocus,
 	disabled,
 	disabledReason,
 }: {
@@ -45,7 +44,6 @@ export function CreateComposeDialog({
 	environmentId: string;
 	environmentName: string;
 	onClose: () => void;
-	onCloseAutoFocus?: (event: Event) => void;
 	disabled?: boolean;
 	disabledReason?: string;
 }) {
@@ -166,7 +164,6 @@ export function CreateComposeDialog({
 			}}
 		>
 			<DialogContent
-				onCloseAutoFocus={onCloseAutoFocus}
 				className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-xl"
 				showCloseButton={!pending}
 			>

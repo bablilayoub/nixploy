@@ -58,7 +58,7 @@ function Block({ block, occurrence }: { block: DocBlock; occurrence: number }) {
 			return (
 				<h2
 					id={headingId(block.text, occurrence)}
-					className="mt-12 scroll-mt-28 border-t pt-7 text-2xl font-semibold tracking-tight"
+					className="mt-12 scroll-mt-28 text-2xl font-semibold"
 				>
 					{block.text}
 				</h2>
@@ -89,7 +89,7 @@ function Block({ block, occurrence }: { block: DocBlock; occurrence: number }) {
 			);
 		case "note":
 			return (
-				<Card className="mt-6 flex-row gap-3 rounded-lg border bg-card p-5 text-sm leading-relaxed text-muted-foreground">
+				<Card className="mt-5 flex-row gap-3 p-4 text-sm text-muted-foreground">
 					<Info className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
 					<p>{block.text}</p>
 				</Card>
@@ -101,12 +101,10 @@ function Block({ block, occurrence }: { block: DocBlock; occurrence: number }) {
 
 export function DocArticle({ page }: { page: DocPage }) {
 	return (
-		<article className="max-w-3xl text-base leading-[1.8]">
-			<p className="text-xs text-muted-foreground normal-case">Docs</p>
-			<h1 className="mt-4 text-4xl leading-[1.1] font-semibold tracking-[-0.045em] text-balance">
-				{page.title}
-			</h1>
-			<p className="mt-5 text-lg leading-relaxed text-muted-foreground">{page.description}</p>
+		<article>
+			<p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">Docs</p>
+			<h1 className="mt-4 text-4xl font-semibold tracking-tight text-balance">{page.title}</h1>
+			<p className="mt-4 text-lg text-muted-foreground">{page.description}</p>
 			<div className="mt-10">
 				{withKeys(page.blocks).map(({ key, block, occurrence }) => (
 					<Block key={key} block={block} occurrence={occurrence} />

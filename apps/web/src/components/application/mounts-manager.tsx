@@ -273,7 +273,7 @@ export function MountsManager({ target }: { target: MountTarget }) {
 							e.preventDefault();
 							onSubmit();
 						}}
-						className="flex min-w-0 flex-col gap-5"
+						className="flex flex-col gap-4"
 					>
 						{isCompose && (
 							<div className="flex flex-col gap-2">
@@ -282,7 +282,7 @@ export function MountsManager({ target }: { target: MountTarget }) {
 									value={form.serviceName}
 									onValueChange={(v) => setForm((f) => ({ ...f, serviceName: v }))}
 								>
-									<SelectTrigger aria-label="Service" className="w-full">
+									<SelectTrigger className="w-full">
 										<SelectValue placeholder="Pick a service of the stack" />
 									</SelectTrigger>
 									<SelectContent>
@@ -304,7 +304,7 @@ export function MountsManager({ target }: { target: MountTarget }) {
 								value={form.type}
 								onValueChange={(v) => setForm((f) => ({ ...f, type: v as MountType }))}
 							>
-								<SelectTrigger aria-label="Type" className="w-full">
+								<SelectTrigger className="w-full">
 									<SelectValue />
 								</SelectTrigger>
 								<SelectContent>

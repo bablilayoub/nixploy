@@ -159,12 +159,12 @@ export function AcmeDnsCard() {
 			}
 		>
 			{settingsQuery.isPending || providersQuery.isPending ? (
-				<div className="grid gap-5">
+				<div className="grid gap-4">
 					<Skeleton className="h-9 w-full" />
 					<Skeleton className="h-9 w-full" />
 				</div>
 			) : (
-				<div className="grid gap-5">
+				<div className="grid gap-4">
 					<div className="grid gap-2">
 						<Label htmlFor="acme-dns-provider">Provider</Label>
 						{/*

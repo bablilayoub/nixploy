@@ -121,7 +121,7 @@ export function BitbucketPanel() {
 							<DialogTitle>Add Bitbucket provider</DialogTitle>
 							<DialogDescription>Use an API token, or a username + app password.</DialogDescription>
 						</DialogHeader>
-						<div className="grid gap-5">
+						<div className="grid gap-4">
 							<div className="grid gap-2">
 								<Label htmlFor="bb-name">Name</Label>
 								<Input id="bb-name" value={name} onChange={(e) => setName(e.target.value)} />

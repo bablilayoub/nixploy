@@ -21,10 +21,10 @@ export const heroBadge = {
 } as const;
 
 /** The fold's two lines; the second one is the quiet half of the promise. */
-export const heroTitle = ["Ship your work.", "Own the whole stack."] as const;
+export const heroTitle = ["Ship anything.", "Own everything."] as const;
 
 export const heroLead =
-	"Deploy Git repositories and Compose stacks. Manage databases, domains, backups and monitoring on your own servers.";
+	"A platform as a service that runs on your own box: git deploys, Compose stacks, databases, domains with TLS, backups and monitoring. One command, Apache-2.0.";
 
 /**
  * What `docker stats` reports for the three Swarm services on the production

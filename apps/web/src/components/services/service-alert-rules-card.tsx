@@ -69,7 +69,7 @@ export function ServiceAlertRulesCard({
 						{(rules.data ?? []).map((rule) => (
 							<div
 								key={rule.alertRuleId}
-								className="flex flex-wrap items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm"
+								className="flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm"
 							>
 								<div>
 									<span className="font-medium">{rule.metric}</span>
@@ -80,7 +80,6 @@ export function ServiceAlertRulesCard({
 								</div>
 								<div className="flex items-center gap-2">
 									<Switch
-										aria-label={`Enable ${rule.metric} alert rule`}
 										checked={rule.enabled}
 										onCheckedChange={(enabled) =>
 											upsert.mutate({
@@ -111,7 +110,7 @@ export function ServiceAlertRulesCard({
 					<div className="grid gap-1.5">
 						<Label>Metric</Label>
 						<Select value={metric} onValueChange={(value) => setMetric(value as Metric)}>
-							<SelectTrigger aria-label="Metric">
+							<SelectTrigger>
 								<SelectValue />
 							</SelectTrigger>
 							<SelectContent>

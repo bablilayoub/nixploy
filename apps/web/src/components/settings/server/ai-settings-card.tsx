@@ -108,7 +108,6 @@ export function AiSettingsCard() {
 					<span className="text-sm text-muted-foreground">{enabled ? "On" : "Off"}</span>
 					<Switch
 						id="ai-enabled"
-						aria-label="Enable copilot"
 						checked={enabled}
 						disabled={save.isPending}
 						onCheckedChange={(checked) => {
@@ -130,12 +129,12 @@ export function AiSettingsCard() {
 				<>
 					<div className="grid gap-3 sm:grid-cols-2">
 						<div className="grid gap-2">
-							<Label htmlFor="ai-provider">Provider</Label>
+							<Label>Provider</Label>
 							<Select
 								value={provider}
 								onValueChange={(v) => draft.patch({ provider: v as Provider })}
 							>
-								<SelectTrigger id="ai-provider">
+								<SelectTrigger>
 									<SelectValue />
 								</SelectTrigger>
 								<SelectContent>
@@ -188,7 +187,7 @@ export function AiSettingsCard() {
 						/>
 					</div>
 
-					<div className="flex flex-wrap items-center justify-between gap-4">
+					<div className="flex items-center justify-between gap-4">
 						<div className="grid gap-0.5">
 							<Label htmlFor="ai-auto">Auto-explain failures</Label>
 							<p className="text-xs text-muted-foreground">

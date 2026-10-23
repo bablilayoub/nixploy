@@ -2,20 +2,24 @@ import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Marquee } from "@/components/ui/marquee";
 import { brandIconSrc } from "@/lib/brand";
 import { featuredTemplateIds } from "@/lib/landing-data";
 import { findTemplate, type TemplateEntry, templateCount } from "@/lib/templates";
 
 /*
- * A static catalog preview. Names and categories come from the generated catalog, so it cannot
+ * The catalog strip: @magicui/marquee carrying the same card the catalog
+ * page uses. Names and categories come from the generated catalog, so it cannot
  * advertise a template we do not ship.
  */
 const featured = featuredTemplateIds.map(findTemplate).filter((entry) => entry !== undefined);
+const half = Math.ceil(featured.length / 2);
+const rows = [featured.slice(0, half), featured.slice(half)];
 
 function TemplateCard({ template }: { template: TemplateEntry }) {
 	return (
-		<Link href={`/templates/${template.id}`} className="group min-w-0">
-			<Card className="h-full gap-0 rounded-lg border bg-card p-5 shadow-[var(--surface-shadow)] transition-colors group-hover:border-ring">
+		<Link href={`/templates/${template.id}`} className="w-[320px] shrink-0">
+			<Card className="h-full gap-0 p-5 transition-colors hover:border-foreground/25">
 				<div className="flex items-center gap-3">
 					<span className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg bg-accent">
 						{/* biome-ignore lint/performance/noImgElement: remote brand marks from a CDN, no loader configured */}
@@ -46,8 +50,10 @@ export function Templates() {
 		<section id="templates" className="py-20 lg:py-28">
 			<div className="container-page flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
 				<div className="max-w-2xl">
-					<p className="text-xs text-muted-foreground normal-case">One click</p>
-					<h2 className="mt-4 text-3xl leading-[1.15] font-medium tracking-[-0.035em] text-balance lg:text-4xl">
+					<p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
+						One click
+					</p>
+					<h2 className="mt-4 text-4xl font-semibold tracking-tight text-balance lg:text-5xl">
 						{templateCount} stacks you do not have to write
 					</h2>
 					<p className="mt-4 text-lg text-muted-foreground">
@@ -59,9 +65,18 @@ export function Templates() {
 				</Button>
 			</div>
 
-			<div className="container-page mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-				{featured.slice(0, 9).map((template) => (
-					<TemplateCard key={template.id} template={template} />
+			<div className="mt-12 flex flex-col gap-4 [mask-image:linear-gradient(to_right,transparent,#000_8%,#000_92%,transparent)]">
+				{rows.map((row, index) => (
+					<Marquee
+						key={index === 0 ? "forward" : "reverse"}
+						pauseOnHover
+						reverse={index === 1}
+						className="[--duration:70s] [--gap:1rem]"
+					>
+						{row.map((template) => (
+							<TemplateCard key={template.id} template={template} />
+						))}
+					</Marquee>
 				))}
 			</div>
 		</section>

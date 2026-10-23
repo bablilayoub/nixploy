@@ -117,7 +117,7 @@ export function GitlabPanel() {
 							<DialogTitle>Add GitLab provider</DialogTitle>
 							<DialogDescription>Connect with a personal access token.</DialogDescription>
 						</DialogHeader>
-						<div className="grid gap-5">
+						<div className="grid gap-4">
 							<div className="grid gap-2">
 								<Label htmlFor="gitlab-name">Name</Label>
 								<Input id="gitlab-name" value={name} onChange={(e) => setName(e.target.value)} />

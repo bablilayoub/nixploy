@@ -46,9 +46,9 @@ const columns = [
  */
 export function SiteFooter() {
 	return (
-		<footer className="border-t bg-card pt-12 pb-6">
+		<footer className="px-6 pb-6">
 			<div className="container-page px-0">
-				<div className="relative overflow-hidden px-0 pt-4">
+				<div className="relative overflow-hidden rounded-2xl border bg-card/40 px-6 pt-12 sm:px-10">
 					<div className="grid grid-cols-2 gap-x-6 gap-y-10 sm:grid-cols-12">
 						<div className="col-span-2 sm:col-span-12 lg:col-span-5">
 							<Logo />
@@ -82,7 +82,7 @@ export function SiteFooter() {
 										<li key={link.href}>
 											<Link
 												href={link.href}
-												className="inline-flex min-h-11 items-center text-sm text-muted-foreground transition-colors hover:text-foreground"
+												className="inline-flex min-h-9 items-center text-sm text-muted-foreground transition-colors hover:text-foreground"
 											>
 												{link.label}
 											</Link>
@@ -93,7 +93,35 @@ export function SiteFooter() {
 						))}
 					</div>
 
-					<div className="mt-12 flex flex-col gap-2 border-t py-5 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+					{/* The wordmark closes the panel: full width, nothing cropped, and
+					    space of its own above and below. `textLength` is what makes it
+					    exactly as wide as the panel at every viewport — a size in `vw`
+					    depends on the font's metrics and overshoots or leaves a gap. */}
+					<svg
+						aria-hidden
+						viewBox="0 0 1000 198"
+						preserveAspectRatio="xMidYMid meet"
+						className="mt-12 mb-8 block w-full select-none"
+						role="presentation"
+					>
+						<title>Nixploy</title>
+						<text
+							x="0"
+							y="158"
+							textLength="1000"
+							lengthAdjust="spacingAndGlyphs"
+							fontSize="210"
+							fontWeight="600"
+							// The site's display face, the one the logo and every heading use.
+							// SVG text inherits the body font otherwise, which set the
+							// wordmark in Geist while the logo above it was Space Grotesk.
+							className="fill-foreground/[0.16] font-display"
+						>
+							nixploy
+						</text>
+					</svg>
+
+					<div className="flex flex-col gap-2 border-t py-5 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
 						<p>© 2026 Nixploy · Apache-2.0</p>
 						<p>
 							Built by{" "}
@@ -101,7 +129,7 @@ export function SiteFooter() {
 								href="https://abablil.me"
 								target="_blank"
 								rel="noreferrer"
-								className="text-foreground underline underline-offset-4 hover:decoration-2"
+								className="text-foreground underline-offset-4 hover:underline"
 							>
 								Ayoub Bablil
 							</a>

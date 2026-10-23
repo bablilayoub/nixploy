@@ -3,7 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { capabilityHint } from "@/components/services/capability-hint";
 import { CopyButton } from "@/components/services/copy-button";
@@ -142,13 +142,6 @@ export function AddServiceMenu({
 	const canManageDomains = can("domains.manage");
 
 	const [dialog, setDialog] = useState<ServiceDialog | null>(null);
-	const serviceTrigger = useRef<HTMLButtonElement>(null);
-	const restoreServiceTrigger = (event: Event) => {
-		if (serviceTrigger.current?.isConnected) {
-			event.preventDefault();
-			serviceTrigger.current.focus({ preventScroll: true });
-		}
-	};
 
 	useEffect(() => {
 		if (!openDialog) return;
@@ -377,11 +370,7 @@ export function AddServiceMenu({
 		<>
 			<DropdownMenu>
 				<DropdownMenuTrigger asChild>
-					<Button
-						ref={serviceTrigger}
-						disabled={disabled}
-						title={disabled ? disabledReason : undefined}
-					>
+					<Button disabled={disabled} title={disabled ? disabledReason : undefined}>
 						<Plus className="size-4" />
 						Add service
 						<ChevronDown className="size-4" />
@@ -415,7 +404,6 @@ export function AddServiceMenu({
 					environmentId={environmentId}
 					environmentName={environmentName}
 					onClose={closeDialog}
-					onCloseAutoFocus={restoreServiceTrigger}
 					disabled={disabled}
 					disabledReason={disabledReason}
 				/>
@@ -430,7 +418,7 @@ export function AddServiceMenu({
 					}
 				}}
 			>
-				<DialogContent className="sm:max-w-md" onCloseAutoFocus={restoreServiceTrigger}>
+				<DialogContent className="sm:max-w-md">
 					<DialogHeader>
 						<DialogTitle>{dialogTitle}</DialogTitle>
 						<DialogDescription>
@@ -600,7 +588,7 @@ export function AddServiceMenu({
 					if (!open) setCreatedDatabase(null);
 				}}
 			>
-				<DialogContent className="sm:max-w-md" onCloseAutoFocus={restoreServiceTrigger}>
+				<DialogContent className="sm:max-w-md">
 					<DialogHeader>
 						<DialogTitle>
 							{createdDatabase

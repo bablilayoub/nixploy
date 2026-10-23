@@ -4,12 +4,13 @@ import type { ReactNode } from "react";
 import { Cta } from "@/components/sections/cta";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteNavbar } from "@/components/site-navbar";
+import { DotPattern } from "@/components/ui/dot-pattern";
 import { cn } from "@/lib/utils";
 
 /** An inline link in running text. */
 export function ProseLink({ href, children }: { href: string; children: ReactNode }) {
 	const external = href.startsWith("http");
-	const className = "text-primary underline underline-offset-4 hover:decoration-2";
+	const className = "text-primary underline-offset-4 hover:underline";
 	if (external) {
 		return (
 			<a href={href} target="_blank" rel="noreferrer" className={className}>
@@ -25,8 +26,8 @@ export function ProseLink({ href, children }: { href: string; children: ReactNod
 }
 
 /*
- * Every page that is not the home page: the same navigation, a clear neutral
- * header, the page's own blocks, the shared close and
+ * Every page that is not the home page: the same bar, a header on a dotted
+ * field (@magicui/dot-pattern), the page's own blocks, the shared close and
  * the footer. Structure only — the parts are registry components.
  */
 export function PageFrame({
@@ -54,7 +55,12 @@ export function PageFrame({
 			<SiteNavbar />
 			<main id="main-content" className="relative">
 				{title ? (
-					<header className="relative border-b pt-32 pb-12 lg:pt-40 lg:pb-16">
+					<header className="relative overflow-hidden pt-24 pb-10 lg:pt-28">
+						<DotPattern
+							width={28}
+							height={28}
+							className="[mask-image:radial-gradient(520px_circle_at_50%_0%,white,transparent)] opacity-50"
+						/>
 						<div className={cn("container-page relative", width === "prose" && "max-w-3xl")}>
 							{mark ? (
 								<span className="mb-5 inline-flex size-14 items-center justify-center rounded-xl border bg-card">
@@ -62,15 +68,15 @@ export function PageFrame({
 								</span>
 							) : null}
 							{eyebrow ? (
-								<p className="text-xs text-muted-foreground normal-case">{eyebrow}</p>
+								<p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
+									{eyebrow}
+								</p>
 							) : null}
-							<h1 className="mt-4 max-w-3xl text-4xl leading-[1.08] font-medium tracking-[-0.045em] text-balance sm:text-5xl lg:text-6xl">
+							<h1 className="mt-4 max-w-3xl text-4xl font-semibold tracking-tight text-balance lg:text-6xl">
 								{title}
 							</h1>
 							{description ? (
-								<p className="mt-6 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-									{description}
-								</p>
+								<p className="mt-5 max-w-2xl text-lg text-muted-foreground">{description}</p>
 							) : null}
 							{actions ? <div className="mt-8 flex flex-wrap gap-3">{actions}</div> : null}
 						</div>
@@ -80,7 +86,7 @@ export function PageFrame({
 					className={cn(
 						"container-page pb-16",
 						width === "prose" && "max-w-3xl",
-						title ? "pt-12" : "pt-24 lg:pt-28",
+						title ? "pt-8" : "pt-24 lg:pt-28",
 					)}
 				>
 					{children}

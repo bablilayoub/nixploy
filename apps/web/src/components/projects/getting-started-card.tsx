@@ -125,7 +125,7 @@ export function GettingStartedCard({ firstProjectId }: { firstProjectId?: string
 			</CardHeader>
 			<CardContent className="space-y-4 pt-0">
 				{can("gitops.manage") && !data.service && (
-					<div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-panel-inset p-3">
+					<div className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-muted/30 p-3">
 						<p className="text-sm text-muted-foreground">
 							Already running services on Dokploy or Coolify?
 						</p>
@@ -138,28 +138,35 @@ export function GettingStartedCard({ firstProjectId }: { firstProjectId?: string
 					{steps.map((step) => (
 						<li
 							key={step.key}
-							className="flex flex-wrap items-start gap-3 py-3.5 first:pt-0 last:pb-0"
+							className="grid grid-cols-[1rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2 py-2.5 first:pt-0 last:pb-0 sm:flex sm:gap-3"
 						>
 							{step.done ? (
 								<Check className="size-4 shrink-0 text-success" aria-label="Done" />
 							) : (
 								<Circle className="size-4 shrink-0 text-muted-foreground/50" aria-hidden />
 							)}
-							<div className="flex min-w-40 flex-1 flex-col gap-1">
+							<div className="flex min-w-0 flex-1 flex-col">
 								<span
 									className={cn(
-										"text-sm leading-relaxed",
+										"text-sm break-words sm:truncate",
 										step.done ? "text-muted-foreground line-through" : "font-medium",
 									)}
 								>
 									{step.label}
 								</span>
 								{!step.done && (
-									<span className="text-xs leading-relaxed text-muted-foreground">{step.hint}</span>
+									<span className="text-xs break-words text-muted-foreground sm:truncate">
+										{step.hint}
+									</span>
 								)}
 							</div>
 							{!step.done && (
-								<Button asChild variant="outline" size="sm" className="shrink-0">
+								<Button
+									asChild
+									variant="outline"
+									size="sm"
+									className="col-start-2 justify-self-start sm:shrink-0"
+								>
 									<Link href={step.href}>{step.cta}</Link>
 								</Button>
 							)}

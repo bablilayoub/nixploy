@@ -6,7 +6,6 @@ import {
 	Globe,
 	Loader2,
 	Lock,
-	MoreHorizontal,
 	Pencil,
 	Plus,
 	RefreshCw,
@@ -42,13 +41,6 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuSeparator,
-	DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -347,7 +339,7 @@ function NixployAuthFields({
 						value={text("minRole") || "any"}
 						onValueChange={(value) => set("minRole", value === "any" ? "" : value)}
 					>
-						<SelectTrigger aria-label="Minimum role" className="h-8">
+						<SelectTrigger className="h-8">
 							<SelectValue />
 						</SelectTrigger>
 						<SelectContent>
@@ -536,7 +528,7 @@ function MiddlewareFieldsEditor({
 						onChange={(event) => set("requestHeaders", event.target.value)}
 					/>
 				</div>
-				<div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+				<div className="grid grid-cols-2 gap-2">
 					<div className="space-y-1">
 						<Label className="text-xs">HSTS max-age (seconds)</Label>
 						<Input
@@ -1222,7 +1214,11 @@ export function DomainManager({
 						<Table>
 							<TableHeader>
 								<TableRow>
-									<TableHead>Domain and route</TableHead>
+									<TableHead>Host</TableHead>
+									<TableHead>Protocol</TableHead>
+									<TableHead>Path</TableHead>
+									<TableHead>Port</TableHead>
+									{serviceType === "compose" && <TableHead>Service</TableHead>}
 									<TableHead>Certificate</TableHead>
 									<TableHead>Middlewares</TableHead>
 									<TableHead>Uptime</TableHead>
@@ -1232,13 +1228,13 @@ export function DomainManager({
 							<TableBody>
 								{domains.map((domain) => (
 									<TableRow key={domain.domainId}>
-										<TableCell className="min-w-56 max-w-md whitespace-normal">
+										<TableCell>
 											{(domain.protocol ?? "http") === "http" ? (
 												<a
 													href={`${domain.https ? "https" : "http"}://${domain.host}`}
 													target="_blank"
 													rel="noreferrer"
-													className="inline-flex max-w-full items-center gap-1.5 break-all text-sm font-medium hover:underline"
+													className="inline-flex items-center gap-1.5 font-mono text-xs hover:underline"
 												>
 													{domain.https && <Lock className="size-3 text-success" />}
 													{domain.host}
@@ -1246,31 +1242,41 @@ export function DomainManager({
 											) : (
 												// A layer-4 route is not a URL a browser can open; a plain
 												// TCP router does not even match on the host.
-												<span className="inline-flex max-w-full items-center gap-1.5 break-all text-sm font-medium">
+												<span className="inline-flex items-center gap-1.5 font-mono text-xs">
 													{domain.tlsMode !== "none" && <Lock className="size-3 text-success" />}
 													{domain.tlsMode === "none" ? "any host" : domain.host}
 												</span>
 											)}
-
-											<p className="mt-2 break-all font-mono text-xs text-muted-foreground">
-												{(domain.protocol ?? "http") === "http" ? (
-													<>
-														{domain.https ? "HTTPS" : "HTTP"} · {domain.path ?? "/"}
-														{domain.internalPath && domain.internalPath !== "/"
-															? ` → ${domain.internalPath}`
-															: ""}{" "}
-														· {domain.serviceName ? `${domain.serviceName}:` : "port "}
-														{domain.port ?? "—"}
-													</>
-												) : (
-													<>
-														{domain.protocol.toUpperCase()} · {domain.entrypoint} →{" "}
-														{domain.serviceName ? `${domain.serviceName}:` : ""}
-														{domain.port ?? "—"}
-													</>
-												)}
-											</p>
 										</TableCell>
+										<TableCell>
+											{(domain.protocol ?? "http") === "http" ? (
+												<Badge variant="outline" className="text-xs">
+													{domain.https ? "HTTPS" : "HTTP"}
+												</Badge>
+											) : (
+												<Badge variant="outline" className="text-xs">
+													{domain.protocol.toUpperCase()} · {domain.entrypoint}
+												</Badge>
+											)}
+										</TableCell>
+										<TableCell className="font-mono text-xs">
+											{(domain.protocol ?? "http") !== "http" ? "—" : (domain.path ?? "/")}
+											{domain.internalPath && domain.internalPath !== "/" ? (
+												<span
+													className="text-muted-foreground"
+													title={`Rewritten to ${domain.internalPath} before reaching the container`}
+												>
+													{" "}
+													→ {domain.internalPath}
+												</span>
+											) : null}
+										</TableCell>
+										<TableCell className="font-mono text-xs">{domain.port ?? "—"}</TableCell>
+										{serviceType === "compose" && (
+											<TableCell className="font-mono text-xs">
+												{domain.serviceName ?? "—"}
+											</TableCell>
+										)}
 										<TableCell>
 											<Badge variant="outline" className="text-xs capitalize">
 												{(domain.protocol ?? "http") !== "http" && domain.tlsMode === "passthrough"
@@ -1302,7 +1308,6 @@ export function DomainManager({
 												return (
 													<div className="flex items-center gap-2">
 														<Switch
-															aria-label={`Monitor uptime for ${domain.host}`}
 															checked={Boolean(probe?.enabled)}
 															disabled={setProbe.isPending || !canProbe}
 															title={canProbe ? undefined : capabilityHint("project.write")}
@@ -1318,55 +1323,48 @@ export function DomainManager({
 											})()}
 										</TableCell>
 										<TableCell className="text-right">
-											<div className="flex items-center justify-end gap-1">
+											<div className="flex justify-end gap-1">
 												<Button
 													variant="ghost"
-													size="sm"
+													size="icon-sm"
 													aria-label={`Diagnose domain ${domain.host}`}
+													title="Why does this host answer 502 or 404?"
 													onClick={() => setDiagnosing(domain)}
 												>
-													<Stethoscope className="size-4" />
-													Diagnose
+													<Stethoscope className="size-3.5" />
 												</Button>
-												<DropdownMenu>
-													<DropdownMenuTrigger asChild>
-														<Button
-															variant="ghost"
-															size="icon-sm"
-															aria-label={`Actions for domain ${domain.host}`}
-														>
-															<MoreHorizontal className="size-4" />
-														</Button>
-													</DropdownMenuTrigger>
-													<DropdownMenuContent align="end">
-														<DropdownMenuItem
-															disabled={!canManage}
-															title={manageHint}
-															onSelect={() => openEdit(domain)}
-														>
-															<Pencil className="size-4" />
-															Edit domain
-														</DropdownMenuItem>
-														<DropdownMenuItem
-															disabled={!canManage || ensureDns.isPending}
-															title={manageHint}
-															onSelect={() => ensureDns.mutate({ domainId: domain.domainId })}
-														>
-															<Globe className="size-4" />
-															Create DNS record
-														</DropdownMenuItem>
-														<DropdownMenuSeparator />
-														<DropdownMenuItem
-															variant="destructive"
-															disabled={!canManage}
-															title={manageHint}
-															onSelect={() => setDeleting(domain)}
-														>
-															<Trash2 className="size-4" />
-															Delete domain
-														</DropdownMenuItem>
-													</DropdownMenuContent>
-												</DropdownMenu>
+												<Button
+													variant="ghost"
+													size="icon-sm"
+													aria-label={`Create DNS record for ${domain.host}`}
+													disabled={!canManage || ensureDns.isPending}
+													title={
+														manageHint ?? "Point this host at the server at the linked DNS provider"
+													}
+													onClick={() => ensureDns.mutate({ domainId: domain.domainId })}
+												>
+													<Globe className="size-3.5" />
+												</Button>
+												<Button
+													variant="ghost"
+													size="icon-sm"
+													aria-label={`Edit domain ${domain.host}`}
+													disabled={!canManage}
+													title={manageHint}
+													onClick={() => openEdit(domain)}
+												>
+													<Pencil className="size-3.5" />
+												</Button>
+												<Button
+													variant="ghost"
+													size="icon-sm"
+													aria-label={`Delete domain ${domain.host}`}
+													disabled={!canManage}
+													title={manageHint}
+													onClick={() => setDeleting(domain)}
+												>
+													<Trash2 className="size-3.5 text-destructive" />
+												</Button>
 											</div>
 										</TableCell>
 									</TableRow>
@@ -1394,7 +1392,7 @@ export function DomainManager({
 					>
 						<div className="space-y-1.5">
 							<Label htmlFor="domain-host">Host</Label>
-							<div className="flex flex-col gap-2 sm:flex-row">
+							<div className="flex gap-2">
 								<Input
 									id="domain-host"
 									placeholder="app.example.com"
@@ -1434,7 +1432,7 @@ export function DomainManager({
 										{dnsCheck.serverIp})
 									</p>
 								) : dnsCheck.resolved.length > 0 ? (
-									<p className="text-xs text-warning">
+									<p className="text-xs text-amber-600 dark:text-amber-400">
 										{dnsCheck.host} resolves to {dnsCheck.resolved.join(", ")}
 										{dnsCheck.serverIp
 											? ` — this server is ${dnsCheck.serverIp}. Point an A record here, or ignore this if a CDN or load balancer sits in front.`
@@ -1457,7 +1455,7 @@ export function DomainManager({
 									value={protocol}
 									onValueChange={(value) => setProtocol(value as RouteProtocol)}
 								>
-									<SelectTrigger aria-label="Protocol">
+									<SelectTrigger>
 										<SelectValue />
 									</SelectTrigger>
 									<SelectContent>
@@ -1482,7 +1480,7 @@ export function DomainManager({
 									value={entrypoint ?? ""}
 									onValueChange={(value) => setEntrypoint(value || null)}
 								>
-									<SelectTrigger aria-label="Entrypoint">
+									<SelectTrigger>
 										<SelectValue placeholder="Select an entrypoint" />
 									</SelectTrigger>
 									<SelectContent>
@@ -1507,7 +1505,7 @@ export function DomainManager({
 							<div className="space-y-1.5">
 								<Label>TLS</Label>
 								<Select value={tlsMode} onValueChange={(value) => setTlsMode(value as TlsMode)}>
-									<SelectTrigger aria-label="TLS">
+									<SelectTrigger>
 										<SelectValue />
 									</SelectTrigger>
 									<SelectContent>
@@ -1525,11 +1523,7 @@ export function DomainManager({
 						)}
 
 						<div
-							className={
-								protocol === "http"
-									? "grid grid-cols-1 sm:grid-cols-2 gap-3"
-									: "grid grid-cols-1 gap-3"
-							}
+							className={protocol === "http" ? "grid grid-cols-2 gap-3" : "grid grid-cols-1 gap-3"}
 						>
 							{protocol === "http" && (
 								<div className="space-y-1.5">
@@ -1590,7 +1584,7 @@ export function DomainManager({
 									value={serviceName ?? ""}
 									onValueChange={(value) => setServiceName(value || null)}
 								>
-									<SelectTrigger aria-label="Compose service">
+									<SelectTrigger>
 										<SelectValue placeholder="Select a service" />
 									</SelectTrigger>
 									<SelectContent>
@@ -1635,7 +1629,7 @@ export function DomainManager({
 									value={certificateType}
 									onValueChange={(value) => setCertificateType(value as CertificateType)}
 								>
-									<SelectTrigger aria-label="Certificate">
+									<SelectTrigger>
 										<SelectValue />
 									</SelectTrigger>
 									<SelectContent>
@@ -1645,7 +1639,7 @@ export function DomainManager({
 									</SelectContent>
 								</Select>
 								{host.trim().toLowerCase().endsWith(".traefik.me") && (
-									<p className="text-xs text-warning">
+									<p className="text-xs text-amber-600 dark:text-amber-400">
 										*.traefik.me is for localhost only — keep certificate on “None”. Open the HTTPS
 										URL and accept the browser warning for Traefik’s default cert.
 									</p>
@@ -1668,7 +1662,7 @@ export function DomainManager({
 										value={certificateId ?? ""}
 										onValueChange={(value) => setCertificateId(value || null)}
 									>
-										<SelectTrigger aria-label="Custom certificate">
+										<SelectTrigger>
 											<SelectValue placeholder="Select a certificate" />
 										</SelectTrigger>
 										<SelectContent>

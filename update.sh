@@ -57,7 +57,7 @@ set -euo pipefail
 # Service snapshots contain literal credentials; never trace their decoding.
 set +x
 
-NIXPLOY_VERSION="${NIXPLOY_VERSION:-v0.7.3}"
+NIXPLOY_VERSION="${NIXPLOY_VERSION:-v0.8.0}"
 NIXPLOY_CONFIG_DIR="${NIXPLOY_CONFIG_DIR:-/etc/nixploy}"
 # Host-side directory; re-asserted after sourcing .env (older installs stored
 # the container path there).

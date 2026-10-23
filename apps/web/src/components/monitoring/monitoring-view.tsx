@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Cpu, HardDrive, MemoryStick, Search, ShieldCheck } from "lucide-react";
+import { AlertTriangle, Cpu, HardDrive, MemoryStick, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
@@ -13,7 +13,6 @@ import { RuntimeLogHistory } from "@/components/services/runtime-log-history";
 import { ServiceStatusBadge } from "@/components/services/status-badge";
 import { PageHeader } from "@/components/shell";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useMounted } from "@/hooks/use-mounted";
@@ -38,14 +37,14 @@ function HostStat({
 		<div className="flex min-w-0 flex-1 flex-col gap-1.5 px-4 py-3 sm:border-r sm:border-border sm:last:border-r-0">
 			<div className="flex items-center gap-1.5 text-muted-foreground">
 				<Icon className="size-3.5 shrink-0" />
-				<span className="text-[11px] font-medium normal-case tracking-wide">{label}</span>
+				<span className="text-[11px] font-medium uppercase tracking-wide">{label}</span>
 			</div>
 			<p className="truncate text-sm font-semibold tabular-nums">{value}</p>
 			{percent != null ? (
 				<div className="h-1 overflow-hidden rounded-full bg-muted">
 					<div
 						className={cn(
-							"h-full rounded-full",
+							"h-full rounded-full transition-[width] duration-500",
 							percent >= 90 ? "bg-destructive" : "bg-foreground/80",
 						)}
 						style={{ width: `${Math.min(100, Math.max(0, percent))}%` }}
@@ -129,7 +128,7 @@ function PlatformAlertsCard() {
 						<span
 							className={cn(
 								"mt-1 size-2 shrink-0 rounded-full",
-								alert.severity === "critical" ? "bg-destructive" : "bg-warning",
+								alert.severity === "critical" ? "bg-destructive" : "bg-amber-500",
 							)}
 						/>
 						<div className="min-w-0">
@@ -159,7 +158,6 @@ function serviceHref(row: { kind: string; serviceId: string; projectId: string }
  */
 export function MonitoringView({ embedded = false }: { embedded?: boolean } = {}) {
 	const trpc = useTRPC();
-	const [search, setSearch] = useState("");
 	const [selectedKey, setSelectedKey] = useState<string | null>(null);
 	const { isInstanceAdmin } = useCapabilities();
 	// The session role is only known client-side; wait for mount so SSR and
@@ -179,12 +177,6 @@ export function MonitoringView({ embedded = false }: { embedded?: boolean } = {}
 	});
 
 	const fleet = fleetQuery.data ?? [];
-	const needle = search.trim().toLowerCase();
-	const matchingFleet = fleet.filter((row) =>
-		[row.name, row.kind, row.projectName, row.environmentName].some((value) =>
-			value.toLowerCase().includes(needle),
-		),
-	);
 
 	useEffect(() => {
 		if (fleet.length === 0) return;
@@ -277,10 +269,7 @@ export function MonitoringView({ embedded = false }: { embedded?: boolean } = {}
 			{showHost ? <PlatformAlertsCard /> : null}
 
 			<div className="grid items-start gap-5 lg:grid-cols-[minmax(16rem,18rem)_minmax(0,1fr)]">
-				<aside
-					aria-label="Service inventory"
-					className="min-w-0 overflow-hidden rounded-xl border bg-card"
-				>
+				<aside className="rounded-lg border">
 					<div className="border-b border-border px-3 py-2.5">
 						<p className="text-sm font-medium">Services</p>
 						<p className="text-xs text-muted-foreground">
@@ -288,20 +277,6 @@ export function MonitoringView({ embedded = false }: { embedded?: boolean } = {}
 								? "Loading…"
 								: `${fleet.length} service${fleet.length === 1 ? "" : "s"}`}
 						</p>
-					</div>
-					<div className="relative m-3">
-						<Search
-							aria-hidden="true"
-							className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-						/>
-						<Input
-							type="search"
-							aria-label="Search monitored services"
-							placeholder="Service, project or environment…"
-							className="pl-9"
-							value={search}
-							onChange={(event) => setSearch(event.target.value)}
-						/>
 					</div>
 					<QueryState
 						isPending={fleetQuery.isPending}
@@ -322,7 +297,7 @@ export function MonitoringView({ embedded = false }: { embedded?: boolean } = {}
 						}
 					>
 						<ul className="max-h-[min(28rem,60vh)] divide-y overflow-y-auto">
-							{matchingFleet.map((row) => {
+							{fleet.map((row) => {
 								const key = `${row.kind}:${row.serviceId}`;
 								const active = key === selectedKey;
 								return (
@@ -330,7 +305,6 @@ export function MonitoringView({ embedded = false }: { embedded?: boolean } = {}
 										<button
 											type="button"
 											onClick={() => setSelectedKey(key)}
-											aria-pressed={active}
 											className={cn(
 												"flex w-full flex-col gap-1 px-3 py-2.5 text-left transition-colors",
 												active ? "bg-secondary" : "hover:bg-secondary/50",
@@ -340,14 +314,14 @@ export function MonitoringView({ embedded = false }: { embedded?: boolean } = {}
 												<span className="truncate text-sm font-medium">{row.name}</span>
 												<ServiceStatusBadge status={row.status} />
 											</div>
-											<div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+											<div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
 												<span className="truncate">
 													{row.kind} · {row.projectName}/{row.environmentName}
 												</span>
 												<span className="shrink-0 tabular-nums">
 													{row.metrics
-														? `CPU ${row.metrics.cpu.toFixed(0)}% · RAM ${row.metrics.memoryPercent.toFixed(0)}%`
-														: "Metrics unavailable"}
+														? `${row.metrics.cpu.toFixed(0)}% · ${row.metrics.memoryPercent.toFixed(0)}%`
+														: "—"}
 												</span>
 											</div>
 										</button>
@@ -355,24 +329,13 @@ export function MonitoringView({ embedded = false }: { embedded?: boolean } = {}
 								);
 							})}
 						</ul>
-						{matchingFleet.length === 0 && fleet.length > 0 && (
-							<div className="px-4 py-8 text-center text-sm">
-								<p className="text-muted-foreground">No services match “{search}”.</p>
-								<Button variant="ghost" size="sm" onClick={() => setSearch("")}>
-									Clear search
-								</Button>
-							</div>
-						)}
 					</QueryState>
 				</aside>
 
-				<section
-					aria-label="Selected service metrics"
-					className="min-w-0 overflow-hidden rounded-xl border bg-card"
-				>
+				<section className="min-w-0 rounded-lg border">
 					{selected ? (
 						<>
-							<div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-2.5">
+							<div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5">
 								<div className="min-w-0">
 									<p className="truncate text-sm font-medium">{selected.name}</p>
 									<p className="truncate font-mono text-xs text-muted-foreground">
@@ -380,7 +343,7 @@ export function MonitoringView({ embedded = false }: { embedded?: boolean } = {}
 									</p>
 								</div>
 								<Button asChild size="sm" variant="outline">
-									<Link href={`${serviceHref(selected)}?tab=monitoring`}>Open service</Link>
+									<Link href={`${serviceHref(selected)}?tab=monitoring`}>Open</Link>
 								</Button>
 							</div>
 							<div className="p-4">

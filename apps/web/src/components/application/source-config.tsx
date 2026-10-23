@@ -198,17 +198,6 @@ export function SourceConfig({ application }: { application: Application }) {
 	const bitbucketProviders = useQuery(trpc.bitbucket.all.queryOptions());
 	const giteaProviders = useQuery(trpc.gitea.all.queryOptions());
 
-	const providerQuery =
-		sourceType === "github"
-			? githubProviders
-			: sourceType === "gitlab"
-				? gitlabProviders
-				: sourceType === "bitbucket"
-					? bitbucketProviders
-					: sourceType === "gitea"
-						? giteaProviders
-						: null;
-
 	// Each provider router returns rows joined with the shared gitProvider
 	// record; normalize to { id, name } for the select.
 	const providerOptions: { id: string; name: string }[] =
@@ -321,11 +310,11 @@ export function SourceConfig({ application }: { application: Application }) {
 			title="Source"
 			description="Where the code or image for this application comes from."
 		>
-			<div className="flex min-w-0 flex-col gap-5">
+			<div className="flex flex-col gap-4">
 				<div className="flex flex-col gap-2">
 					<Label>Source type</Label>
 					<Select value={sourceType} onValueChange={(v) => changeSourceType(v as SourceType)}>
-						<SelectTrigger aria-label="Source type" className="w-full sm:max-w-xs">
+						<SelectTrigger className="w-full sm:max-w-xs">
 							<SelectValue />
 						</SelectTrigger>
 						<SelectContent>
@@ -365,7 +354,7 @@ export function SourceConfig({ application }: { application: Application }) {
 									value={sshKeyId}
 									onValueChange={(value) => draft.patch({ sshKeyId: value })}
 								>
-									<SelectTrigger aria-label="SSH key (optional)" className="w-full">
+									<SelectTrigger className="w-full">
 										<SelectValue placeholder="None" />
 									</SelectTrigger>
 									<SelectContent>
@@ -385,18 +374,12 @@ export function SourceConfig({ application }: { application: Application }) {
 				{isGitProviderSource(sourceType) && (
 					<>
 						<div className="flex flex-col gap-2">
-							<Label htmlFor="application-source-provider">
-								{GIT_PROVIDER_LABELS[sourceType]} provider
-							</Label>
+							<Label>{GIT_PROVIDER_LABELS[sourceType]} Provider</Label>
 							<Select
 								value={providerId}
 								onValueChange={(value) => draft.patch({ providerId: value })}
 							>
-								<SelectTrigger
-									id="application-source-provider"
-									disabled={!providerQuery?.isSuccess}
-									className="w-full sm:max-w-xs"
-								>
+								<SelectTrigger className="w-full sm:max-w-xs">
 									<SelectValue placeholder="Select a provider" />
 								</SelectTrigger>
 								<SelectContent>
@@ -407,26 +390,7 @@ export function SourceConfig({ application }: { application: Application }) {
 									))}
 								</SelectContent>
 							</Select>
-							{providerQuery?.isError && (
-								<div
-									role="alert"
-									className="flex flex-wrap items-center gap-3 rounded-md border border-destructive/25 p-3 text-sm"
-								>
-									<p className="text-muted-foreground">
-										Couldn’t load Git providers. Your source settings are unchanged.
-									</p>
-									<Button
-										variant="outline"
-										size="sm"
-										disabled={providerQuery.isFetching}
-										onClick={() => void providerQuery.refetch()}
-									>
-										Retry providers
-									</Button>
-								</div>
-							)}
-
-							{providerQuery?.isSuccess && providerOptions.length === 0 && (
+							{providerOptions.length === 0 && (
 								<p className="text-xs text-muted-foreground">
 									No {GIT_PROVIDER_LABELS[sourceType]} providers configured. Add one under Settings
 									→ Git providers.
@@ -461,7 +425,7 @@ export function SourceConfig({ application }: { application: Application }) {
 								value={registryId}
 								onValueChange={(value) => draft.patch({ registryId: value })}
 							>
-								<SelectTrigger aria-label="Registry (optional)" className="w-full sm:max-w-xs">
+								<SelectTrigger className="w-full sm:max-w-xs">
 									<SelectValue placeholder="None" />
 								</SelectTrigger>
 								<SelectContent>

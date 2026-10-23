@@ -5,6 +5,382 @@ and move items between the backlog sections. Durable knowledge belongs in
 [`../CLAUDE.md`](../CLAUDE.md) / [`codebase-map.md`](./codebase-map.md); this
 file is for **state** and **tasks**.
 
+## v0.8.0 release preparation — 2026-10-23
+
+Preparing the reviewed original-design restoration and refinements for publication.
+The prior PR CI failures are Next.js advisories; both apps now select the patched
+16.4.3 release. Version 0.8.0 includes the new configuration/recovery workflows and
+migrations 0047–0051 since v0.7.3. Changelog and upgrade notes describe the mandatory
+host-updater boundary, backups, queued-deployment handling and rollback limits.
+Release validation runs in a separate checkout so existing local/tunnel processes
+and their dependencies remain intact. Remote CI, image signing and publication
+remain pending until their actual workflows succeed.
+
+## Phone access — 2026-10-23
+
+OpenHole forwards to a separate loopback panel process on3374 using the current
+`.next-original-polish` build and existing primary database/configuration. Its
+runtime auth URL trusts the temporary HTTPS tunnel; localhost:3000 keeps its
+existing process and environment. No persisted auth/domain settings changed. HTTPS login and same-origin auth checks
+pass; a normal login-page-to-dashboard browser sequence shows the existing
+projects without a reload. Cold direct-dashboard stress checks can hit OpenHole
+limits; this is a temporary phone-access tunnel, not a production deployment.
+Private launcher and reachability receipts: `.nixploy-data/verification/phone-access/`.
+
+## Reviewed original-design refinements — 2026-10-23
+
+Applied the four approved findings while retaining the restored visual direction:
+resource sliders have associated accessible labels; the project directory precedes
+analytics in DOM and visual order at every breakpoint; mobile setup instructions
+wrap with actions below; mobile header controls have separate 44px targets.
+Fixed slider thumb identity so repeated keyboard changes retain focus. Data-fetch,
+mutation, permission, draft and save behavior are unchanged.
+
+Production build/typecheck, strict Biome, 119 web tests and 3,353 server tests pass
+(137 optional server tests skipped). The focused browser pass has 32 light/dark
+captures and 57 passing checks at 320, 375, 768 and 1280px, including menu/search
+interactions and slider keyboard edits in an isolated database. The new
+`.next-original-polish` build runs on localhost:3000; the original website stays
+on3373. Backups precede restart and exact comparisons preserve 72 tables / 241
+rows, saved environment settings and 62 persistent configuration files. Previous
+build retained. Sixteen read-only live checks pass. Post-check snapshots preserve
+all 241 rows, environment settings and persistent files; only the automatic update
+check timestamp advances. Private receipts: `.nixploy-data/verification/original-polish/`.
+
+## Restored design critique — 2026-10-23
+
+Read-only UI Craft/Critique review: 48 captures across eight app/site surfaces,
+three viewports and both app themes. The original direction is coherent; confirmed
+priorities are unnamed resource sliders, desktop/tablet project-list hierarchy,
+truncated mobile setup instructions and small mobile header hit areas. No app
+code or saved configuration changed. [Findings and scope](design-review-2026-10-23.md).
+
+## Original frontend restoration — 2026-10-23
+
+The user explicitly requested the original design from before all redesigns.
+App/site source, assets, component configuration and README are restored from
+`ec35e36`, identical to pre-Studio `60c80bf` for those surfaces. A source comparison
+checks 463 files without mismatches or extras. The sole route correction retains
+`%5F%5Fmaintenance` so the original maintenance page remains routable. Current
+backend, dependency versions and stored data/settings are retained.
+
+Both production builds, app/site typechecks, strict Biome, knip, 119 web and 3,353
+server tests pass (137 optional server tests skipped). Original desktop/mobile
+surfaces and authentication/search/dialog/navigation behavior are checked in both
+app modes; the original website retains its fixed dark presentation. Private
+receipts/backups: `.nixploy-data/verification/original-restore/`.
+
+The original production app is running on localhost:3000 and the original public
+website on localhost:3373, using isolated `.next-original-release` builds. Database
+and configuration backups precede the switch. Immediate comparisons match all
+72 tables / 240 rows and 62 persistent configuration files; the original runtime,
+config directory and encryption keys remain in use. No primary reset, seed,
+restore or migration. The previous build is retained for rollback. Sixteen live checks pass using an
+existing session, including an existing project/application, settings and mobile
+navigation. Post-check comparisons preserve all original rows and settings; one
+new organization audit entry is appended, while only automatic update-check and
+platform-alert check timestamps change. No saved configuration values change.
+
+All design checkpoints below are historical and superseded by this restoration.
+The current [brief](../.ui-craft/brief.md) requires the original design; no redesign
+work should resume from those earlier notes.
+
+## Monochrome native app rebuild — 2026-10-23
+
+Latest user correction supersedes the design checkpoints below: monochrome,
+native shadcn components, Vercel-style restraint, and replacement page compositions.
+The current [brief](../.ui-craft/brief.md) contains one authoritative direction.
+
+Rebuilt with the official sidebar-07/login-03 compositions and New York/Neutral
+components. Projects use compact Item rows alongside deployment activity; services
+have a new identity/action Card, line Tabs and horizontal configuration Tabs.
+Settings navigation lives in the workspace sidebar, with a single content column.
+Native Fields replace bespoke form wrappers across service/settings/dialog flows;
+shared table controls and pagination sit outside the row frame. Builder choices
+use native FieldLabel/RadioGroup, host usage uses Progress, and failure/not-found/
+maintenance pages use Empty. The obsolete component-state stylesheet is removed.
+Monochrome applies to engine chrome/ANSI colors too; stored user branding and tags
+remain supported. No dependency, server API, schema or encryption changes.
+
+All 624 normalized query/mutation/key call expressions are identical. Draft
+retention, capabilities, lifecycle actions, confirmations, file pickers and URL/hash
+aliases remain. Organization dialogs stay mounted through sidebar changes; table
+containers stay mounted during loading. Sidebar preference is read from its existing
+cookie. Navigation uses the native Sheet when text enlargement needs more room.
+
+Validation: production build/typecheck, strict Biome (1,198 files), knip,
+119 web and 3,353 server tests pass (137 optional server tests skipped). Browser
+coverage includes 392 initial route/theme captures, 408 responsive cases with
+focused fixes/rechecks, 100 focused enlarged-layout cases, 68 final tablet cases,
+216 dialogs plus six corrected dialog rechecks, 104 page/control captures,
+28 focused controls, four migration sequences, 18 template steps, 16 final role/
+deep-link checks, 12 error-boundary cases and 16 final navigation cases. All five
+setup steps complete in a fresh isolated database. Independent design/a11y findings
+are resolved. Final live checks pass for the existing session, project, service,
+settings and mobile navigation. Counts describe verification iterations, not a
+screen-reader or deploy-engine certification.
+
+The `.next-native-release` production build runs on localhost:3000 with the
+original all-role custom server, database, config directory and encryption keys.
+Database/config backups precede the switch; all restart hashes match 72 tables /
+240 rows and 62 persistent config files. After read-only checks the only changed
+setting is the automatic `webServer.updateLastCheckedAt` timestamp. No primary
+reset, seed, restore or migration. Previous build retained for rollback. Public
+website remains on 3373; PR 34 remains a draft. README previews show example data.
+Private receipts: `.nixploy-data/verification/native-rebuild/`.
+[Scope and limits](../.ui-craft/app-workspace.md). Earlier design checkpoints below
+are historical; their layouts do not describe the current app.
+
+## Native shadcn app layout rebuild — 2026-10-23
+
+The latest request requires a structural app rebuild with Vercel-style layouts,
+using native shadcn components and no custom theme. The permanent desktop rail is
+replaced with a workspace header and native Navigation Menu links; mobile uses a
+Sheet. Projects use Cards with environment links and service health. Application,
+Compose and database configuration use a desktop task rail and mobile Select.
+Settings, shared table toolbars/pagination, templates, query states and every auth
+flow use consistent native compositions. The stock New York/Zinc palette remains;
+there are no new theme tokens, stylesheets, dependencies, server APIs or schemas.
+
+All 606 query/mutation/key source occurrences are unchanged. Routes, aliases,
+capabilities, lifecycle actions, confirmations, drafts and background-operation
+feedback remain. The shared table container keeps its root/header mounted while
+loading changes the frame, preventing open dialogs and unsaved toolbar edits from
+being discarded. Main-content landmarks and active route styling are verified.
+
+Rebuild verification: production build/typecheck, strict Biome (1,196 files), knip,
+119 web and 3,353 server tests pass (137 optional server tests skipped). Browser
+coverage includes 392 route/theme, 408 responsive, 68 additional tablet, 216 dialog,
+104 route/control, 28 focused controls, four migration, 18 template, 16 deep-link/
+role, 12 boundary, six login and 12 navigation cases. Four held-query regression
+cases prove tag drafts survive service loading. Enlarged loading/error/retry and
+all five fresh setup steps pass in isolated databases. Final fixes receive focused
+rechecks; counts describe the rebuild's verification, not a screen-reader or live
+service-deployment certification. Independent review findings are closed.
+
+The final build is `.next-vercel-live`, on localhost:3000 with the original all-role
+custom server, database, config path and encryption keys. Database/config backups
+and prior builds are retained. Restart hashes match 72 tables/240 rows, 62 config
+files and original environment/settings. Existing-session checks pass; later reads
+advance only the automatic `webServer.updateLastCheckedAt` field. No primary reset,
+seed, restore or schema
+migration is performed. README previews now show the actual native app composition.
+The public website remains on 3373. PR 34 stays a draft; the separate existing
+security CI baseline below is unchanged. [Coverage and limits](../.ui-craft/app-workspace.md).
+Private evidence/backups: `.nixploy-data/verification/vercel-native/`.
+
+## Stock shadcn app, no custom theme — 2026-10-23
+
+Latest user correction supersedes earlier app themes: use **pure shadcn/ui**.
+Restored 31 existing components from the official New York v4 registry and the
+unaltered Zinc light/dark palette/radius scale. Deleted the 789-line Fieldwork
+stylesheet and removed custom auth/Card/Sidebar/navigation skins. Settings and
+focused sections now use standard Card/Tabs composition. No new dependency,
+server API, schema or data-model change; all 606 query/mutation/key source
+occurrences match the pre-correction commit.
+Editors/charts/terminals, roles, confirmations, service aliases and retained drafts
+remain available. Existing branding settings are preserved.
+
+Retained accessibility/behavior guards around the stock source: controlled-modal
+focus return, bounded long dialogs, inert collapsed navigation, announced form
+errors, labelled controls, reachable tab scrolling, touch targets, enlarged-text
+wrapping and reduced motion. Responsive fixes cover populated migration forms,
+notification events, SSO, templates and header tools at 200% text.
+
+Validation: production build/typecheck, strict workspace Biome (1,195 files), knip,
+119 web and 3,353 server tests pass (137 optional server tests skipped). Browser
+proof includes 392 route/theme and 408 responsive cases, 216 dialog cases, 104
+route/control captures, 28 focused controls, four migration sequences, 18 template
+steps, 16 deep-link/role cases, 12 error-boundary cases, 14 theme/accessibility and
+16 header cases. Fresh setup completes all five steps in a separate test DB.
+Independent design/accessibility findings are closed. Evidence and practical limits:
+[app workspace](../.ui-craft/app-workspace.md). Private receipts/backups:
+`.nixploy-data/verification/shadcn-defaults/`.
+
+The final `.next-stock-ship` build runs on localhost:3000 with the original all-role
+custom server, database, config directory and encryption keys. Private database
+and 62-file config backups precede the graceful switch; the previous build is
+retained for rollback. Restart hashes match all tables/settings and 62 files; after
+read-only checks only the periodic platform report’s `checkedAt` advances. No
+primary seed/reset/restore/migration runs. The public
+website remains on localhost:3373. PR 34 remains a draft. Known separate dependency
+security CI baseline is documented below; this correction suppresses no checks.
+
+## Confirmed shadcn/ui standardization — 2026-10-23
+
+User clarification: the actual app must use **exclusively shadcn/ui components**.
+Remaining native/custom controls, labels, tables and disclosures now use the shared
+primitives. Added the shadcn Radio Group and Collapsible on existing Radix; no new
+dependency. Quiet monochrome light/dark layouts remain. Editors/charts/terminal
+engines and all 582 tracked API bindings are preserved. Disclosure drafts survive
+closing; migration auto-match, cascading selection and stale-plan guards remain.
+
+Validation: production build/typecheck, strict Biome (1,196 files), knip, 119 web
+and 3,353 server tests pass (137 optional server tests skipped). Browser proof:
+104 production route/control captures; four migration sequences; 28 focused
+control cases; 18 template wizard steps; 12 boundary cases. Both themes, mobile,
+keyboard navigation and enlarged text are covered. Independent design/a11y review
+findings are closed. Scope and practical limits: [app workspace](../.ui-craft/app-workspace.md).
+
+The all-role custom server runs on 3000 from `.next-shadcn-release`; health/readiness
+pass. Backup and restart comparison preserve 72 tables/240 rows, 62 persistent files
+and original environment/settings files. Existing-session checks pass (14 cases).
+Later reads change only the automatic update-check timestamp. Original keys/config
+paths remain; previous `.next-app-ship` is available for rollback. Public website
+stays on 3373. No primary reset/seed/restore/migration or Desktop checkout edit.
+Private evidence/backups: `.nixploy-data/verification/shadcn-components/`.
+PR 34 remains a draft.
+
+## Focused actual app rebuild — 2026-10-23
+
+The actual app now uses quiet monochrome working layouts with existing shadcn/
+Radix controls: compact project summary, open form sections, focused account/org/
+platform/application/Compose/database configuration, consistent lifecycle Actions,
+and a searchable mobile monitoring picker. Local section changes preserve drafts;
+canonical service tabs/aliases, role gates, destructive confirmations, contextual
+links, live feedback and all 582 tracked API bindings remain. No new dependency
+or backend/data-model change. The public Mobbin website remains unchanged.
+
+Validation: production build and web typecheck, strict Biome 1, 194 files, knip,
+119 web tests and 3, 353 server tests pass (137 optional server tests skipped).
+Browser proof: 392 production route/theme checks, 408 responsive cases, 216 verified
+dialog cases, 56 source/build variants, 18 template wizard steps, 12 real boundary
+checks and 16 final controls cases; fresh isolated setup completes all five steps.
+Independent design/a 11y findings are closed. Coverage and practical limits:
+[app workspace](../.ui-craft/app-workspace.md). Private receipts:
+`.nixploy-data/verification/app-rebuild/`.
+
+The latest production app is running on 3000 from the isolated `.next-app-ship`
+build; the public website stays on 3373. Health/readiness pass. Before/after restart
+hashes match all 72 tables/240 rows, 62 persistent files and original settings files.
+Existing-session checks pass in both themes. Later browser reads advance only
+`metrics_config.webServer.updateLastCheckedAt`; all record counts, saved settings
+and config hashes remain. A periodic health-report refresh happened before the
+backup. Private DB/config backups and the older `.next-mobbin` build remain.
+No primary reset/seed/migration/restore ran; the Desktop checkout was not edited.
+PR 34 remains a draft.
+
+## Mobbin-reference design system — 2026-10-23
+
+`codex/fieldwork-landing` applies the user's supplied Mobbin reference to both the
+public website and actual platform: centered display type with authentic service
+marks, pill actions/navigation, white/graphite canvases and soft panels. Home uses
+a large product preview, screenshot gallery, six capability tiles, split MCP
+section, gray open-platform band and centered install close. Shared public page
+headers and controls follow it; app resources, auth, settings and service layouts
+retain real workflows with the same type/surface/control geometry. Twelve fresh
+production fixture captures and README/documentation images show the new app.
+
+Local gates pass: four typechecks, strict Biome 1,194 files, knip, both production
+builds,119 web tests and3,353 server tests (137 optional skipped). Browser proof:
+504 responsive cases,12 final dashboard reflow cases,710 production route/theme
+checks,16 settled public captures and12 final control checks. Independent design/
+accessibility findings are closed, including slider/skeleton visibility, supporting
+text contrast, keyboard gallery pause and enlarged metric labels. Scope/limits:
+[reference verification](../.ui-craft/mobbin-reference.md),
+[measured research](../.ui-craft/research/mobbin-reference.md).
+
+The latest production panel runs on3000 and public preview on3373. Restart hashes
+match all72 tables/240 rows and62 config files, with the original environment/keys
+and settings preserved. Later verification advances only the update-check timestamp.
+No primary reset/seed/migration/restore ran. Private DB/config backups and older
+panel builds remain; the Desktop checkout was not edited. PR34 stays a draft.
+
+Known separate CI baseline:60eefb9 already fails pnpm audit and both Docker/Trivy
+architecture jobs on Next.js16.3.8 advisories fixed in16.4.1+. This visual pass adds
+no dependency/version change and suppresses no security checks; remote security
+CI is not claimed green. Private receipts: `.nixploy-data/verification/mobbin-system/`.
+
+## Monochrome library rebuild — 2026-10-23
+
+`codex/fieldwork-landing` now updates both the actual Next.js platform and every
+public website family to a monochrome shadcn composition. Official Sidebar/Sheet,
+Breadcrumb, Card/Table/Empty and authentication forms replace the custom shell;
+settings inherit the shared Card anatomy. Website navigation/search/tabs use
+shadcn components, with existing Magic UI Safari/BlurFade/Bento and twelve fresh
+production fixture screenshots. README and documentation images match the app.
+Official frontend-design, Vercel guidelines and shadcn skills were researched and
+read; registry source reuses installed dependencies, with no manifest/lock change.
+
+Local gates pass: four workspace typechecks, strict Biome1,192 files, knip, both
+production builds,119 web tests and3,353 server tests (137 optional skipped). The
+710-route/theme sweep records no runtime/hydration error, document overflow or
+unnamed visible control. Responsive discovery504 cases led to252 passing closure
+cases. Functional state checks,12 final control checks,16 settled image captures
+and independent design/accessibility closure complement the route evidence.
+See [current design and receipts](../.ui-craft/monochrome-library.md) and
+[research/provenance](../.ui-craft/research/monochrome-libraries.md). Earlier entries
+below retain their original checkpoints and superseded design descriptions.
+
+Production platform runs on3000 and website preview on3373. At restart all72
+tables/240 rows and62 persistent config files matched exact hashes, with original
+environment/keys and settings retained. Subsequent authenticated verification
+changes only normal rolling session expiry and update-check timestamps. No primary
+reset/migration/seed/restore ran; private DB/config backups and old build remain.
+PR34 is updated as a draft; no merge or remote deployment is performed.
+Private receipts: `.nixploy-data/verification/mono-library/`.
+
+## Signal public website — 2026-10-23
+
+`codex/fieldwork-landing` replaces the rejected marketing treatment across home,
+features, templates/detail, pricing, agents, docs/articles, API, comparisons/detail,
+about, privacy and recovery pages. Graphite/porcelain with orange, larger type,
+an interactive architecture band, real product evidence and restrained Motion
+replace the previous visual direction. Global docs search, endpoint filters,
+category browsing, copy feedback and keyboard tabs are functional. Animation
+pause persists; reduced-motion preferences and no-JS reading are preserved.
+Existing route/data/source/metadata contracts remain, and README copy aligns.
+
+Local gates pass: workspace types, strict Biome (1,187 files), knip, landing
+production build,119 web tests and3,353 server tests (137 optional skipped against
+fixtures). Browser evidence covers416 public URL/theme checks,192 reflow cases,
+22 interaction groups,20 settled/focus captures and8 isolated error-boundary
+cases. Independent design/accessibility findings are closed. The static detector
+retains20 reviewed contextual heuristics; no claim of a perfect numerical score.
+See [Signal verification](../.ui-craft/signal-website.md) for scope and limits.
+
+The production website preview runs on3373. Panel3000 remains the merged PR33
+frontend, with healthy/readiness responses and no source or runtime restart.
+No primary database, environment, keys or persistent configuration was changed.
+PR34 is updated as a draft; no merge or remote website deployment is performed.
+Private receipts: `.nixploy-data/verification/signal-website/`.
+
+## Fieldwork landing and README — 2026-10-21
+
+`codex/fieldwork-landing` aligns marketing with the merged panel. The home fold
+now stacks concise copy above an accessible Projects/Deployments/Monitoring
+preview using real, theme-matched example captures. The screenshots retain a
+keyboard-scrollable viewport and full-size links. Workflow copy explains project,
+release and operations structure; the closing docs action is visually secondary.
+README replaces all old screenshots with six light/dark picture pairs and uses
+the same product message, neutral badges and current MCP count. Existing install,
+architecture and development documentation remain.
+
+Landing types, strict repository Biome, knip,119 web tests and the landing
+production build pass. Browser proof covers16 combinations of light/dark,
+1440/768/390/320px and100/200% text, plus navigation focus/theme persistence.
+No runtime/hydration errors or document overflow were recorded. Fourteen local
+README images resolve. Preview runs on3373; localhost3000 and primary data/settings
+were not restarted or modified. The fold detector labels the three preview tabs
+as a band; visual review confirms the intended text-then-product stacked fold.
+Private receipts: `.nixploy-data/verification/landing-fieldwork/`.
+
+## Fieldwork merged — 2026-10-21
+
+PR33 merged into main as `2061fe7` after all17 automated checks passed;
+the explicitly manual API check was skipped normally. The merged tree matches
+the verified `fd08c49` production build exactly. Localhost3000 continues serving
+that frontend without a restart, with health/readiness200 and four authenticated
+light/dark dashboard/profile browser checks passing. The managed runtime checkout
+now points at the merged main revision. No product-code fix was necessary.
+
+Read-only before/after snapshots confirm all72 table hashes/240 rows,62 persistent
+configuration files and original environment/settings hashes unchanged through
+the merge. The original Desktop checkout/local changes and private backups remain
+preserved. Local merge receipts are in the ignored
+`.nixploy-data/verification/fieldwork-refinement/merge33-preservation.json` and
+`browser-merged.json`. Earlier entries describe their historical checkpoints.
+
 ## Fieldwork detailed page refinement — 2026-10-21 (running locally)
 
 The follow-up on `codex/fieldwork-rebuild` directly restructures detailed workflows
@@ -55,7 +431,7 @@ No dependency, schema, API, CLI or deploy-engine change was introduced.
 The inventory reconciles344 visual sources (326 owned/18 vendor;72 directly
 changed) and55 page files. Consumers inherit rebuilt shared primitives and theme;
 unused vendor widgets stay explicitly classified. The local verification receipt
-records710 route captures,348 reflow cases,216 dialog cases,20 populated control
+records710 route captures,348 reflow cases, 216 dialog cases,20 populated control
 cases, saved source variants, actual setup/access/error states,32 normal/long
 branding cases and final keyboard/search/contrast follow-ups. Four workspace
 TypeScript checks, strict Biome (1,176 files), pinned knip,119 web tests,3,353 backend

@@ -115,9 +115,10 @@ Workflow: [`.github/workflows/release.yml`](../.github/workflows/release.yml)
    `docker/metadata-action`. The attestations appear as extra `unknown/unknown` platform
    entries in the GHCR UI — that is expected. Inspect with
    `docker buildx imagetools inspect ghcr.io/bablilayoub/nixploy:vX.Y.Z`.
-5. **Trivy scan of the pushed digest**, `severity: CRITICAL`, `ignore-unfixed: true`,
-   `exit-code: 1`. A fixable critical CVE fails the release. (PRs run a wider but advisory
-   `CRITICAL,HIGH` scan — see [development.md](./development.md).)
+5. **Trivy scans each architecture’s digest**, `severity: HIGH,CRITICAL`,
+   `ignore-unfixed: false`, `exit-code: 1`. Any high or critical finding fails
+   publication, including findings without an upstream fix. PRs use the same
+   severity gate. Full all-severity reports are retained as workflow artifacts.
 6. **cosign keyless signature** of the digest (`cosign sign --yes`). The workflow's OIDC
    identity is bound into a short-lived Fulcio certificate and the signature is recorded in
    the Rekor transparency log — no private key exists to leak or rotate. See *Verify what
@@ -157,14 +158,12 @@ check cannot rot into a no-op. Bumping the cosign release the scripts fall back 
 updating `COSIGN_VERSION` and the two SHA-256 values in both scripts from that release's
 `cosign_checksums.txt`.
 
-### Image scan (`.trivyignore`)
+### Image scan policy
 
-The release job fails on any CRITICAL finding in the image. Findings that are
-unreachable in Nixploy's use of the affected binary are listed in
-[`.trivyignore`](../.trivyignore) with the reason and the condition under which
-the entry can go; review that file on every release. Do not ignore anything in
-a dependency the panel actually exercises — fix or pin it instead
-(`pnpm.overrides` in the root `package.json`).
+The release, continuous-image and PR jobs fail on HIGH and CRITICAL findings,
+including unfixed vulnerabilities. No ignore file is currently shipped. Update
+or pin affected dependencies instead of weakening the gate. The complete
+all-severity reports are uploaded before the blocking check for diagnosis.
 
 ### Actions are SHA-pinned
 

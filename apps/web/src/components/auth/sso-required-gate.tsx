@@ -58,8 +58,8 @@ export function SsoRequiredGate({
 	}
 
 	return (
-		<div className="flex min-h-svh flex-col items-center justify-center gap-8 bg-background p-5">
-			<div className="surface flex w-full max-w-md flex-col items-start gap-4 p-7 text-start">
+		<div className="flex min-h-svh flex-col items-center justify-center gap-6 bg-background p-6">
+			<div className="flex max-w-md flex-col items-center gap-2 text-center">
 				<KeyRound className="size-10 text-muted-foreground" />
 				<h1 className="text-xl font-semibold">Single sign-on required</h1>
 				<p className="text-sm text-muted-foreground">

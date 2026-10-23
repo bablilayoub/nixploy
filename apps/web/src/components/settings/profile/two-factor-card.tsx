@@ -121,7 +121,7 @@ export function TwoFactorCard() {
 				title="Two-factor authentication"
 				description="Secure your account with a TOTP authenticator app."
 				actions={
-					<div className="flex flex-wrap items-center gap-3">
+					<div className="flex items-center gap-3">
 						<span className="flex items-center gap-2 text-sm text-muted-foreground">
 							<StatusDot status={enabled ? "success" : "neutral"} />
 							{enabled ? "Enabled" : "Disabled"}
@@ -215,13 +215,8 @@ export function TwoFactorCard() {
 								</div>
 							)}
 							<div className="grid min-w-0 gap-2">
-								<Label htmlFor="twofa-code">Verification code</Label>
-								<InputOTP
-									id="twofa-code"
-									maxLength={6}
-									value={code}
-									onChange={(value) => setCode(value)}
-								>
+								<Label>Verification code</Label>
+								<InputOTP maxLength={6} value={code} onChange={(value) => setCode(value)}>
 									<InputOTPGroup>
 										<InputOTPSlot index={0} />
 										<InputOTPSlot index={1} />
