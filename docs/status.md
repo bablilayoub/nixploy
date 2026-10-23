@@ -5,16 +5,36 @@ and move items between the backlog sections. Durable knowledge belongs in
 [`../CLAUDE.md`](../CLAUDE.md) / [`codebase-map.md`](./codebase-map.md); this
 file is for **state** and **tasks**.
 
-## v0.8.0 release preparation — 2026-10-23
+## v0.8.0 published — 2026-10-23
 
-Preparing the reviewed original-design restoration and refinements for publication.
-The prior PR CI failures are Next.js advisories; both apps now select the patched
-16.4.3 release. Version 0.8.0 includes the new configuration/recovery workflows and
-migrations 0047–0051 since v0.7.3. Changelog and upgrade notes describe the mandatory
-host-updater boundary, backups, queued-deployment handling and rollback limits.
-Release validation runs in a separate checkout so existing local/tunnel processes
-and their dependencies remain intact. Remote CI, image signing and publication
-remain pending until their actual workflows succeed.
+[PR #34](https://github.com/bablilayoub/nixploy/pull/34) is merged and
+[v0.8.0](https://github.com/bablilayoub/nixploy/releases/tag/v0.8.0) is the latest
+published release, tagged at `e6e6dc2`. The reviewed original-design restoration
+and refinements ship alongside the configuration/recovery workflows and migrations
+0047–0051 since v0.7.3. Both Next.js apps resolve to patched 16.4.3. Changelog and
+upgrade notes document the mandatory host-updater boundary, backups,
+queued-deployment handling and rollback limits.
+
+[PR CI](https://github.com/bablilayoub/nixploy/actions/runs/39996841304) passed,
+including both native image scans, fresh-install browser/API checks and both
+upgrade/data-preservation suites. Local production builds, workspace typechecks,
+strict Biome and knip pass; 3,489 server, 119 web and 95 CLI tests pass, alongside
+the upgrade/recovery/signature contracts. The focused browser pass retains 32
+light/dark captures and 57 checks across four viewport widths.
+
+[Release workflow](https://github.com/bablilayoub/nixploy/actions/runs/39998824765)
+passed on the exact tag: native amd64/arm64 builds and security scans, keyless
+signing, and both shipped installers' signature checks. The public version and
+`latest` image tags both resolve to
+`sha256:1ce3d5772dae955d5b273c76953338a8ee7cc8d3e1a7405dd22dc3c238c3bc81`.
+Downloaded release scripts match `SHA256SUMS`; install/update defaults pin v0.8.0.
+Manual GitHub release notes include the required upgrade steps.
+
+Release work ran in a separate checkout and a disposable test database. Existing
+localhost:3000, phone-tunnel and website processes, saved settings, encryption keys
+and primary data remain intact; app and website return HTTP 200. No production
+server update was executed. Private evidence lives in the release checkout under
+`.nixploy-data/verification/release/`.
 
 ## Phone access — 2026-10-23
 
