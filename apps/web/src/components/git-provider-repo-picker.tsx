@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -194,13 +195,15 @@ export function GitProviderRepoPicker({
 					</div>
 				</div>
 				{providerId && (
-					<button
+					<Button
+						variant="link"
+						size="sm"
 						type="button"
-						className="self-start text-xs text-muted-foreground underline-offset-4 hover:underline"
+						className="h-auto min-h-0 px-0 py-0 has-[>svg]:px-0 self-start text-xs text-muted-foreground underline-offset-4 hover:underline"
 						onClick={() => setManualOverride(false)}
 					>
 						Browse repositories instead
-					</button>
+					</Button>
 				)}
 			</div>
 		);
@@ -263,13 +266,15 @@ export function GitProviderRepoPicker({
 					</p>
 				)
 			)}
-			<button
+			<Button
+				variant="link"
+				size="sm"
 				type="button"
-				className="self-start text-xs text-muted-foreground underline-offset-4 hover:underline"
+				className="h-auto min-h-0 px-0 py-0 has-[>svg]:px-0 self-start text-xs text-muted-foreground underline-offset-4 hover:underline"
 				onClick={() => setManualOverride(true)}
 			>
 				Enter repository manually
-			</button>
+			</Button>
 		</div>
 	);
 }

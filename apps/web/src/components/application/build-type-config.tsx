@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { DisabledHint } from "@/components/ui/disabled-hint";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
@@ -175,34 +176,46 @@ export function BuildTypeConfig({ application }: { application: Application }) {
 		<SettingsSection title="Build" description="How the source is built into a deployable image.">
 			<div className="flex flex-col gap-5">
 				<fieldset>
-					<legend className="mb-3 text-sm font-medium">Image builder</legend>
-					<div className="grid gap-2 sm:grid-cols-2">
+					<legend id="application-builder-label" className="mb-3 text-sm font-medium">
+						Image builder
+					</legend>
+					<RadioGroup
+						aria-labelledby="application-builder-label"
+						name="application-builder"
+						value={buildType}
+						onValueChange={(value) => draft.patch({ buildType: value as BuildType })}
+						className="grid gap-2 sm:grid-cols-2"
+					>
 						{BUILD_TYPES.map((option) => (
-							<label
+							<Label
+								htmlFor={`builder-${option.value}`}
 								key={option.value}
 								className={cn(
-									"relative flex cursor-pointer flex-col gap-1 rounded-lg border p-4 pl-10 text-left transition-colors focus-within:ring-2 focus-within:ring-ring",
+									"relative flex cursor-pointer flex-col items-stretch gap-1 rounded-lg border p-4 pl-10 text-left transition-colors focus-within:ring-2 focus-within:ring-ring",
 									buildType === option.value
 										? "border-foreground bg-secondary/60 ring-1 ring-foreground"
 										: "border-border hover:border-foreground/40 hover:bg-secondary/40",
 								)}
 							>
-								<input
-									type="radio"
-									name="application-builder"
+								<RadioGroupItem
+									id={`builder-${option.value}`}
 									value={option.value}
-									checked={buildType === option.value}
-									onChange={() => draft.patch({ buildType: option.value })}
-									className="absolute left-4 top-5 accent-primary"
+									className="absolute left-4 top-5"
+									aria-describedby={`builder-${option.value}-description`}
 								/>
 								<span className="flex items-center gap-2 text-sm font-medium">
 									<option.icon className="size-4 text-muted-foreground" />
 									{option.label}
 								</span>
-								<span className="text-xs text-muted-foreground">{option.description}</span>
-							</label>
+								<span
+									id={`builder-${option.value}-description`}
+									className="text-xs font-normal text-muted-foreground"
+								>
+									{option.description}
+								</span>
+							</Label>
 						))}
-					</div>
+					</RadioGroup>
 				</fieldset>
 
 				{buildType === "dockerfile" && (

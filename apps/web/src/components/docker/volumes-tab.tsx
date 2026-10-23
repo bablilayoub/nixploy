@@ -385,25 +385,29 @@ function VolumeBrowserSheet({
 
 				<div className="flex min-h-0 flex-1 flex-col gap-3 px-4 pb-4">
 					<nav className="flex flex-wrap items-center gap-0.5 text-xs" aria-label="Breadcrumb">
-						<button
+						<Button
+							variant="ghost"
+							size="sm"
 							type="button"
-							className="rounded px-1.5 py-0.5 font-mono hover:bg-secondary"
+							className="h-auto rounded px-1.5 py-0.5 font-mono hover:bg-secondary"
 							onClick={() => setPath("/data")}
 						>
 							/
-						</button>
+						</Button>
 						{crumbs.map((crumb, index) => {
 							const target = `/data/${crumbs.slice(0, index + 1).join("/")}`;
 							return (
 								<span key={target} className="flex items-center gap-0.5">
 									<ChevronRight className="size-3 text-muted-foreground" />
-									<button
+									<Button
+										variant="ghost"
+										size="sm"
 										type="button"
-										className="rounded px-1.5 py-0.5 font-mono hover:bg-secondary"
+										className="h-auto rounded px-1.5 py-0.5 font-mono hover:bg-secondary"
 										onClick={() => setPath(target)}
 									>
 										{crumb}
-									</button>
+									</Button>
 								</span>
 							);
 						})}
@@ -507,14 +511,16 @@ function VolumeBrowserSheet({
 								<ul className="min-h-0 flex-1 divide-y overflow-y-auto rounded-lg border">
 									{path !== "/data" && (
 										<li>
-											<button
+											<Button
+												variant="ghost"
+												size="sm"
 												type="button"
-												className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-secondary/50"
+												className="justify-start rounded-none flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-secondary/50"
 												onClick={() => setPath(parentPath(path))}
 											>
 												<Folder className="size-4 text-muted-foreground" />
 												<span className="font-mono">..</span>
-											</button>
+											</Button>
 										</li>
 									)}
 									{entries.map((entry) => {
@@ -522,9 +528,11 @@ function VolumeBrowserSheet({
 										const full = joinPath(path, entry.name);
 										return (
 											<li key={entry.name} className="flex items-center gap-2 pr-2">
-												<button
+												<Button
+													variant="ghost"
+													size="sm"
 													type="button"
-													className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left text-sm hover:bg-secondary/50 disabled:cursor-default disabled:opacity-60"
+													className="justify-start rounded-none flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left text-sm hover:bg-secondary/50 disabled:cursor-default disabled:opacity-60"
 													disabled={entry.type === "other"}
 													onClick={() => {
 														if (entry.type === "directory") {
@@ -542,7 +550,7 @@ function VolumeBrowserSheet({
 															{formatSize(entry.size)}
 														</span>
 													)}
-												</button>
+												</Button>
 												<Button
 													variant="ghost"
 													size="icon-sm"

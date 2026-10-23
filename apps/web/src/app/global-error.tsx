@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { Button } from "@/components/ui/button";
 import { useStandaloneTheme } from "@/lib/use-standalone-theme";
 import "./globals.css";
 
@@ -35,13 +36,15 @@ export default function GlobalError({
 					{error.digest && (
 						<p className="font-mono text-xs text-muted-foreground">{error.digest}</p>
 					)}
-					<button
+					<Button
+						variant="default"
+						size="sm"
 						type="button"
 						onClick={reset}
 						className="min-h-11 rounded-md bg-primary px-4 py-3 text-sm font-medium text-primary-foreground"
 					>
 						Try again
-					</button>
+					</Button>
 				</main>
 			</body>
 		</html>

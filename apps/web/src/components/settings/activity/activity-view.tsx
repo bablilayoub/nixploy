@@ -222,9 +222,15 @@ export function ActivityView({ embedded = false }: { embedded?: boolean } = {}) 
 							{action !== ALL || targetType !== ALL || search ? (
 								<>
 									Nothing matches these filters.{" "}
-									<button type="button" className="underline" onClick={resetFilters}>
+									<Button
+										variant="ghost"
+										size="sm"
+										type="button"
+										className="h-auto min-h-0 px-0 py-0 has-[>svg]:px-0 underline"
+										onClick={resetFilters}
+									>
 										Reset filters
-									</button>
+									</Button>
 								</>
 							) : (
 								"Actions like deploys, deletions and member changes appear here."

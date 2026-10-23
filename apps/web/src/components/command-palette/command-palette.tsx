@@ -34,6 +34,7 @@ import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { isSettingsNavItemAllowed, settingsNavItems } from "@/components/nav-settings";
 import { SERVICE_TYPE_META, type ServiceType } from "@/components/projects/service-types";
+import { Button } from "@/components/ui/button";
 import {
 	CommandDialog,
 	CommandEmpty,
@@ -717,13 +718,15 @@ export function CommandPalette({ className }: { className?: string }) {
 
 	return (
 		<>
-			<button
+			<Button
+				variant="ghost"
+				size="sm"
 				type="button"
 				data-slot="command-palette-trigger"
 				onClick={() => setOpen(true)}
 				aria-keyshortcuts="Meta+K Control+K"
 				className={cn(
-					"group relative hidden h-8 items-center gap-2 rounded-md bg-muted/40 pe-12 ps-2.5 text-sm font-normal text-muted-foreground shadow-none hover:bg-accent sm:inline-flex sm:w-40 lg:w-52 xl:w-64",
+					"group relative hidden h-8 justify-start items-center gap-2 rounded-md bg-muted/40 pe-12 ps-2.5 text-sm font-normal text-muted-foreground shadow-none hover:bg-accent sm:inline-flex sm:w-40 lg:w-52 xl:w-64",
 					className,
 				)}
 			>
@@ -732,19 +735,21 @@ export function CommandPalette({ className }: { className?: string }) {
 				<kbd className="pointer-events-none absolute end-1.5 top-1/2 hidden h-5 -translate-y-1/2 items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[11px] font-medium select-none sm:inline-flex">
 					<span className="text-xs">⌘</span>K
 				</kbd>
-			</button>
-			<button
+			</Button>
+			<Button
+				variant="ghost"
+				size="sm"
 				type="button"
 				data-slot="command-palette-trigger-mobile"
 				onClick={() => setOpen(true)}
 				aria-label="Search"
 				className={cn(
-					"inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground sm:hidden",
+					"inline-flex size-8 min-h-8 px-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground sm:hidden",
 					className,
 				)}
 			>
 				<Search className="size-4" />
-			</button>
+			</Button>
 
 			<CommandDialog
 				open={open}

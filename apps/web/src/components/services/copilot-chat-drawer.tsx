@@ -288,16 +288,18 @@ export function CopilotChatDrawer({ target }: { target: CopilotTarget }) {
 							<p className="text-sm text-muted-foreground">Try one of these:</p>
 							<div className="flex flex-col gap-1.5">
 								{SUGGESTIONS[target.type].map((suggestion) => (
-									<button
+									<Button
+										variant="ghost"
+										size="sm"
 										key={suggestion}
 										type="button"
-										className="rounded-lg border bg-panel-inset px-3 py-2 text-left text-sm transition-colors hover:bg-muted/60 disabled:opacity-50"
+										className="h-auto justify-start whitespace-normal rounded-lg border bg-panel-inset px-3 py-2 text-left text-sm transition-colors hover:bg-muted/60 disabled:opacity-50"
 										onClick={() => send(suggestion)}
 										disabled={chat.isPending || !canChat}
 										title={canChat ? undefined : capabilityHint("ai.use")}
 									>
 										{suggestion}
-									</button>
+									</Button>
 								))}
 							</div>
 						</div>

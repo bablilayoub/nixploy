@@ -4,11 +4,18 @@ import type * as React from "react";
 
 import { cn } from "@/lib/utils";
 
-function Table({ className, ...props }: React.ComponentProps<"table">) {
+function Table({
+	className,
+	containerClassName,
+	...props
+}: React.ComponentProps<"table"> & { containerClassName?: string }) {
 	return (
 		<div
 			data-slot="table-container"
-			className="scroll-shadow-x relative w-full overflow-x-auto rounded-lg"
+			className={cn(
+				"scroll-shadow-x relative w-full overflow-x-auto rounded-lg",
+				containerClassName,
+			)}
 		>
 			<table
 				data-slot="table"

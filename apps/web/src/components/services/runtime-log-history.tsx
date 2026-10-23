@@ -2,12 +2,13 @@
 
 import type { LogLineLevel } from "@nixploy/server/modules/observability/log-levels";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { History, Loader2, Search } from "lucide-react";
+import { ChevronDown, History, Loader2, Search } from "lucide-react";
 import { useState } from "react";
 import { QueryState } from "@/components/query-state";
 import { EmptyState } from "@/components/services/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
 import {
@@ -174,14 +175,24 @@ export function RuntimeLogHistory({
 						Clear filters
 					</Button>
 				)}
-				<details className="ml-auto text-xs text-muted-foreground">
-					<summary className="cursor-pointer py-3">Search syntax</summary>
-					<p className="max-w-xl py-2 leading-relaxed">
-						Terms must all match. Use <code>-term</code> to exclude, <code>container:web</code> for
-						a container, <code>level:error,warn</code> for multiple levels or <code>/regex/</code>.{" "}
-						<HelpLink slug="observability" />
-					</p>
-				</details>
+				<Collapsible className="ml-auto text-xs text-muted-foreground">
+					<CollapsibleTrigger asChild>
+						<Button type="button" variant="ghost" size="sm" className="group cursor-pointer py-3">
+							Search syntax
+							<ChevronDown
+								aria-hidden="true"
+								className="size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-180"
+							/>
+						</Button>
+					</CollapsibleTrigger>
+					<CollapsibleContent forceMount className="data-[state=closed]:hidden">
+						<p className="max-w-xl py-2 leading-relaxed">
+							Terms must all match. Use <code>-term</code> to exclude, <code>container:web</code>{" "}
+							for a container, <code>level:error,warn</code> for multiple levels or{" "}
+							<code>/regex/</code>. <HelpLink slug="observability" />
+						</p>
+					</CollapsibleContent>
+				</Collapsible>
 			</div>
 			<p className="text-xs text-muted-foreground">
 				Collected every 30 seconds and retained after the container stops.

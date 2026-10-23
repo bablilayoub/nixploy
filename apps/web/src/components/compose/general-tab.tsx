@@ -272,13 +272,15 @@ export function GeneralTab({
 								<p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
 									The compose file is stored directly on this service.{" "}
 									{onOpenComposeFile ? (
-										<button
+										<Button
+											variant="ghost"
+											size="sm"
 											type="button"
 											onClick={onOpenComposeFile}
-											className="inline-flex min-h-11 items-center font-medium text-foreground underline-offset-4 hover:underline"
+											className="h-auto min-h-0 px-0 py-0 has-[>svg]:px-0 inline-flex min-h-11 items-center font-medium text-foreground underline-offset-4 hover:underline"
 										>
 											Edit it in the Compose file tab →
-										</button>
+										</Button>
 									) : (
 										<>
 											Edit it in the <span className="font-medium">Compose file</span> tab.

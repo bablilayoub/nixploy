@@ -2,10 +2,10 @@
 
 import { useQuery } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
-import { Box, ExternalLink, Loader2 } from "lucide-react";
-
+import { Box, ChevronDown, ExternalLink, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
 	Dialog,
 	DialogContent,
@@ -16,6 +16,15 @@ import {
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+	Table,
+	TableBody,
+	TableCaption,
+	TableCell,
+	TableHead,
+	TableHeader,
+	TableRow,
+} from "@/components/ui/table";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
@@ -217,51 +226,66 @@ function DetailsBody({
 							Environment variables{" "}
 							<span className="font-normal text-muted-foreground">({template.env.length})</span>
 						</h3>
-						<div className="scroll-shadow-x overflow-x-auto rounded-lg border bg-card">
-							<table className="w-full min-w-[30rem] text-left text-sm">
-								<caption className="sr-only">Template environment variables</caption>
-								<thead className="border-b bg-panel-inset text-xs text-muted-foreground">
-									<tr>
-										<th scope="col" className="px-3 py-3 font-medium">
+						<div className="rounded-lg border bg-card">
+							<Table className="w-full min-w-[30rem] text-left text-sm">
+								<TableCaption className="sr-only">Template environment variables</TableCaption>
+								<TableHeader className="border-b bg-panel-inset text-xs text-muted-foreground">
+									<TableRow>
+										<TableHead scope="col" className="px-3 py-3 font-medium">
 											Key
-										</th>
-										<th scope="col" className="px-3 py-3 font-medium">
+										</TableHead>
+										<TableHead scope="col" className="px-3 py-3 font-medium">
 											Default
-										</th>
-										<th scope="col" className="px-3 py-3 font-medium">
+										</TableHead>
+										<TableHead scope="col" className="px-3 py-3 font-medium">
 											Description
-										</th>
-									</tr>
-								</thead>
-								<tbody>
+										</TableHead>
+									</TableRow>
+								</TableHeader>
+								<TableBody>
 									{template.env.map((entry) => (
-										<tr key={entry.key} className="border-b last:border-0">
-											<td className="px-3 py-2 align-top font-mono text-xs">{entry.key}</td>
-											<td className="px-3 py-2 align-top font-mono text-xs text-muted-foreground">
+										<TableRow key={entry.key} className="border-b last:border-0">
+											<TableCell className="whitespace-normal px-3 py-2 align-top font-mono text-xs">
+												{entry.key}
+											</TableCell>
+											<TableCell className="whitespace-normal px-3 py-2 align-top font-mono text-xs text-muted-foreground">
 												{entry.default.includes("{{generateSecret}}")
 													? "auto-generated"
 													: entry.default || "—"}
-											</td>
-											<td className="px-3 py-2 align-top text-xs text-muted-foreground">
+											</TableCell>
+											<TableCell className="whitespace-normal px-3 py-2 align-top text-xs text-muted-foreground">
 												{entry.description}
-											</td>
-										</tr>
+											</TableCell>
+										</TableRow>
 									))}
-								</tbody>
-							</table>
+								</TableBody>
+							</Table>
 						</div>
 					</div>
 				</>
 			)}
 
-			<details className="rounded-md border">
-				<summary className="cursor-pointer px-3 py-2 text-xs leading-relaxed font-medium text-muted-foreground hover:text-foreground">
-					View compose file
-				</summary>
-				<pre className="max-h-64 overflow-auto border-t bg-secondary/30 p-3 font-mono text-xs leading-relaxed">
-					{template.compose}
-				</pre>
-			</details>
+			<Collapsible className="rounded-md border">
+				<CollapsibleTrigger asChild>
+					<Button
+						type="button"
+						variant="ghost"
+						size="sm"
+						className="group cursor-pointer px-3 py-2 text-xs leading-relaxed font-medium text-muted-foreground hover:text-foreground"
+					>
+						View compose file
+						<ChevronDown
+							aria-hidden="true"
+							className="size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-180"
+						/>
+					</Button>
+				</CollapsibleTrigger>
+				<CollapsibleContent forceMount className="data-[state=closed]:hidden">
+					<pre className="max-h-64 overflow-auto border-t bg-secondary/30 p-3 font-mono text-xs leading-relaxed">
+						{template.compose}
+					</pre>
+				</CollapsibleContent>
+			</Collapsible>
 
 			<DialogFooter className="items-center gap-3">
 				{deployBlocker ? (

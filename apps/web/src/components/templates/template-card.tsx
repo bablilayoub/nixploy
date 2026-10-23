@@ -36,14 +36,16 @@ export function TemplateCard({
 				</span>
 				<div className="min-w-0 flex-1">
 					<h3 className="truncate text-base leading-snug font-medium tracking-tight">
-						<button
+						<Button
+							variant="ghost"
+							size="sm"
 							type="button"
 							onClick={onInspect}
 							aria-label={`${template.name} details`}
-							className="fieldwork-template-title inline-flex max-w-full items-center text-start underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+							className="fieldwork-template-title h-auto min-h-0 px-0 py-0 text-base font-medium inline-flex max-w-full items-center text-start underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
 						>
 							<span className="truncate">{template.name}</span>
-						</button>
+						</Button>
 					</h3>
 					<p className="mt-1 text-xs text-muted-foreground">{template.category}</p>
 				</div>
@@ -60,17 +62,19 @@ export function TemplateCard({
 			<div className="mt-4 flex min-h-7 flex-wrap items-center gap-1.5 px-5">
 				{template.tags.slice(0, 3).map((tag) =>
 					onTag ? (
-						<button
+						<Button
+							variant="ghost"
+							size="sm"
 							type="button"
 							key={tag}
 							onClick={(event) => {
 								event.stopPropagation();
 								onTag(tag);
 							}}
-							className="fieldwork-template-tag relative z-10 rounded-md bg-secondary px-2 py-1 text-xs text-muted-foreground hover:border-input hover:text-foreground"
+							className="fieldwork-template-tag h-auto min-h-7 relative z-10 rounded-md bg-secondary px-2 py-1 text-xs text-muted-foreground hover:border-input hover:text-foreground"
 						>
 							{tag}
-						</button>
+						</Button>
 					) : (
 						<span
 							key={tag}

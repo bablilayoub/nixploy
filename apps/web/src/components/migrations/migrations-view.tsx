@@ -22,6 +22,13 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { describeError, toastError } from "@/lib/describe-error";
@@ -29,8 +36,7 @@ import { useTRPC } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import { MigrationReview } from "./migration-review";
 
-const selectClass =
-	"h-10 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50";
+const MATCH_SOURCE_PROJECT = "__match_source_project__";
 const MAX_DUMP = 512 * 1024 * 1024;
 
 export function MigrationsView() {
@@ -380,23 +386,26 @@ export function MigrationsView() {
 						<CardContent className="space-y-5">
 							<div className="max-w-sm space-y-2">
 								<Label htmlFor="migration-provider">Source panel</Label>
-								<select
-									id="migration-provider"
-									className={selectClass}
+								<Select
 									value={provider}
 									disabled={apply.isPending}
-									onChange={(event) => {
+									onValueChange={(value) => {
 										clearSource();
-										setProvider(event.target.value as ImportSource);
+										setProvider(value as ImportSource);
 										setMode("live");
 									}}
 								>
-									{IMPORT_SOURCES.map((value) => (
-										<option key={value} value={value}>
-											{IMPORT_SOURCE_LABELS[value]}
-										</option>
-									))}
-								</select>
+									<SelectTrigger id="migration-provider" className="w-full">
+										<SelectValue />
+									</SelectTrigger>
+									<SelectContent>
+										{IMPORT_SOURCES.map((value) => (
+											<SelectItem key={value} value={value}>
+												{IMPORT_SOURCE_LABELS[value]}
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
 							</div>
 							<fieldset disabled={busy} className="flex flex-wrap gap-2">
 								<legend className="sr-only">Source connection</legend>
@@ -546,48 +555,46 @@ export function MigrationsView() {
 								<div className="grid gap-4 sm:grid-cols-2">
 									<div className="space-y-2">
 										<Label htmlFor="migration-project">Source project</Label>
-										<select
-											id="migration-project"
-											className={selectClass}
+										<Select
 											value={sourceProjectId}
 											disabled={apply.isPending}
-											onChange={(event) => {
-												const next = inventory.projects.find(
-													(row) => row.projectId === event.target.value,
-												);
+											onValueChange={(value) => {
+												const next = inventory.projects.find((row) => row.projectId === value);
 												if (next) selectEnvironment(next, next.environments[0]?.name ?? "");
 											}}
 										>
-											<option value="" disabled>
-												Choose a project
-											</option>
-											{inventory.projects.map((row) => (
-												<option key={row.projectId} value={row.projectId}>
-													{row.name}
-												</option>
-											))}
-										</select>
+											<SelectTrigger id="migration-project" className="w-full">
+												<SelectValue placeholder="Choose a project" />
+											</SelectTrigger>
+											<SelectContent>
+												{inventory.projects.map((row) => (
+													<SelectItem key={row.projectId} value={row.projectId}>
+														{row.name}
+													</SelectItem>
+												))}
+											</SelectContent>
+										</Select>
 									</div>
 									<div className="space-y-2">
 										<Label htmlFor="migration-environment">Source environment</Label>
-										<select
-											id="migration-environment"
-											className={selectClass}
+										<Select
 											value={sourceEnvironment}
 											disabled={apply.isPending || !currentProject?.environments.length}
-											onChange={(event) => {
-												if (currentProject) selectEnvironment(currentProject, event.target.value);
+											onValueChange={(value) => {
+												if (currentProject) selectEnvironment(currentProject, value);
 											}}
 										>
-											<option value="" disabled>
-												Choose an environment
-											</option>
-											{currentProject?.environments.map((row) => (
-												<option key={row.name} value={row.name}>
-													{row.name}
-												</option>
-											))}
-										</select>
+											<SelectTrigger id="migration-environment" className="w-full">
+												<SelectValue placeholder="Choose an environment" />
+											</SelectTrigger>
+											<SelectContent>
+												{currentProject?.environments.map((row) => (
+													<SelectItem key={row.name} value={row.name}>
+														{row.name}
+													</SelectItem>
+												))}
+											</SelectContent>
+										</Select>
 									</div>
 								</div>
 								{currentEnvironment && (
@@ -624,7 +631,7 @@ export function MigrationsView() {
 										) : (
 											<div className="grid max-h-64 gap-px overflow-auto rounded-md border bg-border sm:grid-cols-2">
 												{currentEnvironment.services.map((row) => (
-													<label
+													<Label
 														htmlFor={`migration-service-${row.id}`}
 														key={row.id}
 														className="flex min-w-0 cursor-pointer items-center gap-3 bg-card px-3 py-3 text-sm"
@@ -646,7 +653,7 @@ export function MigrationsView() {
 															{row.name}
 															<span className="ms-2 text-xs text-muted-foreground">{row.kind}</span>
 														</span>
-													</label>
+													</Label>
 												))}
 											</div>
 										)}
@@ -668,23 +675,28 @@ export function MigrationsView() {
 									<div className="grid gap-4 sm:grid-cols-2">
 										<div className="space-y-2">
 											<Label htmlFor="migration-target">Target project</Label>
-											<select
-												id="migration-target"
-												className={selectClass}
-												value={projectId}
+											<Select
+												value={projectId || MATCH_SOURCE_PROJECT}
 												disabled={apply.isPending || projects.isPending}
-												onChange={(event) => {
+												onValueChange={(value) => {
 													clearReview();
-													setProjectId(event.target.value);
+													setProjectId(value === MATCH_SOURCE_PROJECT ? "" : value);
 												}}
 											>
-												<option value="">Match source project name, or create it</option>
-												{projects.data?.map((row) => (
-													<option key={row.projectId} value={row.projectId}>
-														{row.name}
-													</option>
-												))}
-											</select>
+												<SelectTrigger id="migration-target" className="w-full">
+													<SelectValue />
+												</SelectTrigger>
+												<SelectContent>
+													<SelectItem value={MATCH_SOURCE_PROJECT}>
+														Match source project name, or create it
+													</SelectItem>
+													{projects.data?.map((row) => (
+														<SelectItem key={row.projectId} value={row.projectId}>
+															{row.name}
+														</SelectItem>
+													))}
+												</SelectContent>
+											</Select>
 											<p className="text-xs text-muted-foreground">
 												Only projects visible to your organization and teams are listed.
 											</p>
@@ -708,7 +720,7 @@ export function MigrationsView() {
 									</div>
 								)}
 								{provider === "dokploy" && (
-									<label htmlFor="migration-keep-names" className="flex items-start gap-3 text-sm">
+									<Label htmlFor="migration-keep-names" className="flex items-start gap-3 text-sm">
 										<Checkbox
 											id="migration-keep-names"
 											checked={keepAppNames}
@@ -726,7 +738,7 @@ export function MigrationsView() {
 												does not move containers or volumes.
 											</span>
 										</span>
-									</label>
+									</Label>
 								)}
 								<Button
 									disabled={

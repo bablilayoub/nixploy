@@ -1,9 +1,10 @@
 # Focused actual app — verification and feature map
 
 The public Mobbin-reference website remains as approved. This pass rebuilds the
-actual platform with existing shadcn/Radix behavior and ChatGPT-like restraint.
-Clarification of “fully ChatGPT” was requested while the user was away; this is
-the working interpretation, not a claim that they selected an offered option.
+actual platform with the existing shadcn/ui component system. The user confirmed
+“exclusively shadcn/ui components”; the quiet monochrome workspace remains, with
+all remaining native/custom controls standardized on those primitives. Editors,
+charts and terminals retain their specialized engines inside shadcn surfaces.
 No new dependency, backend API, migration, data model or encryption setting.
 
 | Family | Preserved capabilities | Presentation |
@@ -68,7 +69,7 @@ state across restart rather than rolling that live report back to an older hash.
 
 ## Live verification
 
-The final all-role custom server runs on 3000 from `.next-app-ship`; health and
+The final all-role custom server runs on 3000 from `.next-shadcn-release`; health and
 readiness return 200. Restart hashes match all 72 tables/240 rows and 62 files, plus
 the original Desktop environment/type files. The private custom-format database
 backup was verified with `pg_restore --list`; no primary restore/reset/seed or
@@ -77,3 +78,45 @@ Existing-session checks pass in light and dark. Later browser reads change only
 `web_server_settings.metrics_config.webServer.updateLastCheckedAt`, confirmed
 field-by-field against backup COPY rows. All other user settings/data and config
 hashes remain. The earlier Mobbin build is retained for rollback.
+
+## Confirmed shadcn/ui component contract — 2026-10-23
+
+The user clarified that “fully ChatGPT” meant **exclusively shadcn/ui components**.
+The actual app now has no native button/input/select/textarea/table/disclosure/label
+markup outside `components/ui`. All consumers use the existing primitives. Added
+shadcn Radio Group and Collapsible source on the already-installed Radix dependency;
+no package or lockfile changes. Specialized CodeMirror, Recharts and xterm engines
+remain inside the shared UI surfaces to preserve editing, charts and terminals.
+
+Builder choices now use a labelled radio group; migration selectors retain cascading
+selection, the empty target's auto-match semantics, disabled states and stale-plan
+revision guards. GitOps uses Checkbox. File and color inputs use Input; templates,
+service actions, Docker links and filters use Button; both remaining data tables use
+Table. Disclosures have visible chevrons and retain local drafts while closed content
+stays hidden. The migration table has one bounded scrolling container so its headings
+stay visible during review.
+
+Correction verification (separate from the broader rebuild evidence above):
+
+- 104 production route/control captures across desktop/mobile and both themes;
+  no hydration/page errors, unnamed visible controls or document overflow detected.
+- Four migration sequences at 1440/320px in both themes, including 200% text,
+  source project/environment cascade, target auto-match, sticky headers and late-plan
+  discard. Browser-only inspect/plan responses; no external import or apply request.
+- 28 focused controls checks: tag/branding color fields, GitOps checkbox and local
+  file reading, zip/env/branding file-picker wiring, inherited-variable disclosure,
+  Copilot suggestions. Copilot and inherited values use browser-only responses;
+  no model request, branding upload, import, deploy or settings save is submitted.
+- 18 template wizard steps and 12 real boundary/theme/reset cases pass.
+- The 582 tracked API bindings are unchanged across 382 visual/support sources.
+  Typecheck, production build, strict Biome (1,196 files), knip, 119 web tests and
+  3,353 server tests pass (137 optional server tests skipped). Independent design
+  and accessibility review findings are resolved and rendered checks cover the fixes.
+
+Private receipts/backups: `.nixploy-data/verification/shadcn-components/`.
+The primary restart matches all 72 tables/240 rows, 62 config files and original
+settings/environment files. Existing-session verification passes (12 route/control
+and two saved-service theme checks). Subsequent reads advance only the automatic
+`webServer.updateLastCheckedAt` field. Original encryption keys/config paths and the
+all-role custom server remain. The previous `.next-app-ship` build is retained;
+there was no primary seed/reset/restore/migration. The public website stays on 3373.

@@ -161,10 +161,10 @@ export function BrandingCard() {
 										setForm((current) => ({ ...current, accentColor: event.target.value }))
 									}
 								/>
-								<input
+								<Input
 									type="color"
 									aria-label="Pick an accent colour"
-									className="size-9 shrink-0 cursor-pointer rounded-md border border-border bg-transparent"
+									className="size-11 min-h-11 shrink-0 p-1 cursor-pointer rounded-md border border-border bg-transparent"
 									value={/^#[0-9A-Fa-f]{6}$/.test(form.accentColor) ? form.accentColor : "#000000"}
 									onChange={(event) =>
 										setForm((current) => ({ ...current, accentColor: event.target.value }))
@@ -335,7 +335,7 @@ function AssetSlot({
 					<span className="text-xs text-muted-foreground">Default</span>
 				)}
 			</div>
-			<input
+			<Input
 				ref={input}
 				type="file"
 				accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml,image/x-icon,.ico"

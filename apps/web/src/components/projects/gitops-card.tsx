@@ -4,9 +4,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link2, Loader2, Zap } from "lucide-react";
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 import { toast } from "sonner";
-
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
 	Dialog,
 	DialogContent,
@@ -307,8 +307,8 @@ export const GitopsCard = forwardRef<
 							</p>
 							<ApplyErrorList errors={syncErrors} />
 						</div>
-						<div className="flex items-center gap-2">
-							<input
+						<div className="flex flex-wrap items-center gap-2">
+							<Input
 								ref={fileInputRef}
 								type="file"
 								accept=".yaml,.yml,.json"
@@ -328,14 +328,17 @@ export const GitopsCard = forwardRef<
 							>
 								Upload file
 							</Button>
-							<label className="text-muted-foreground flex items-center gap-2 text-xs">
-								<input
-									type="checkbox"
+							<Label
+								htmlFor="gitops-redeploy"
+								className="text-muted-foreground flex min-h-11 items-center gap-2 text-xs font-normal"
+							>
+								<Checkbox
+									id="gitops-redeploy"
 									checked={redeployAfter}
-									onChange={(event) => setRedeployAfter(event.target.checked)}
+									onCheckedChange={(checked) => setRedeployAfter(checked === true)}
 								/>
 								Redeploy changed services after apply
-							</label>
+							</Label>
 						</div>
 						<div className="grid gap-2">
 							<Label htmlFor="gitops-yaml">Stack YAML</Label>

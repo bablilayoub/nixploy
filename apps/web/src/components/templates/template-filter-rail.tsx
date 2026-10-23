@@ -53,19 +53,21 @@ function FacetRow({
 	onClick: () => void;
 }) {
 	return (
-		<button
+		<Button
+			variant="ghost"
+			size="sm"
 			type="button"
 			onClick={onClick}
 			aria-pressed={active}
 			className={cn(
-				"flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-start text-sm transition-colors",
+				"flex w-full font-normal items-center justify-between gap-2 rounded-md px-2 py-1.5 text-start text-sm transition-colors",
 				active ? "bg-secondary font-medium text-foreground" : "text-muted-foreground",
 				count === 0 && !active ? "opacity-50" : "hover:bg-accent hover:text-foreground",
 			)}
 		>
 			<span className="truncate">{label}</span>
 			<span className="shrink-0 text-xs tabular-nums text-muted-foreground/70">{count}</span>
-		</button>
+		</Button>
 	);
 }
 
@@ -213,13 +215,15 @@ export function TemplateFilterRail({
 						{visibleTags.map(([tag, count]) => {
 							const active = filters.tags.includes(tag);
 							return (
-								<button
+								<Button
+									variant="ghost"
+									size="sm"
 									key={tag}
 									type="button"
 									aria-pressed={active}
 									onClick={() => filters.toggle("tags", tag)}
 									className={cn(
-										"rounded-md border px-1.5 py-0.5 text-xs transition-colors",
+										"h-auto min-h-7 rounded-md border px-1.5 py-0.5 text-xs transition-colors",
 										active
 											? "border-foreground/30 bg-secondary text-foreground"
 											: "text-muted-foreground hover:border-foreground/20 hover:text-foreground",
@@ -227,7 +231,7 @@ export function TemplateFilterRail({
 								>
 									{tag}
 									<span className="ms-1 tabular-nums text-muted-foreground/60">{count}</span>
-								</button>
+								</Button>
 							);
 						})}
 					</div>

@@ -14,6 +14,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { useTRPC } from "@/lib/trpc";
@@ -79,13 +80,13 @@ export function ServiceTagsDialog({
 									checked={selected.has(tag.tagId)}
 									onCheckedChange={(checked) => toggle(tag.tagId, checked === true)}
 								/>
-								<label
+								<Label
 									htmlFor={`svc-tag-${tag.tagId}`}
 									className="flex cursor-pointer items-center gap-2 text-sm"
 								>
 									<span className="size-2.5 rounded-full" style={{ backgroundColor: tag.color }} />
 									{tag.name}
-								</label>
+								</Label>
 							</li>
 						))}
 					</ul>

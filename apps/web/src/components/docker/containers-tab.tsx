@@ -174,15 +174,17 @@ export function ContainersTab({ serverId }: DockerTabProps) {
 						{view.visible.map((container) => (
 							<TableRow key={container.ID}>
 								<TableCell className="max-w-80">
-									<button
+									<Button
+										variant="ghost"
+										size="sm"
 										type="button"
 										onClick={() => setInspecting(container)}
-										className="block max-w-full truncate text-left font-mono text-xs font-medium underline-offset-4 hover:underline"
+										className="h-auto min-h-0 px-0 py-0 block max-w-full truncate text-left font-mono text-xs font-medium underline-offset-4 hover:underline"
 										title={container.Names}
 										aria-label={`Inspect container ${container.Names}`}
 									>
 										{container.Names}
-									</button>
+									</Button>
 									<p
 										className="mt-1.5 max-w-80 truncate font-mono text-xs text-muted-foreground"
 										title={container.Image}

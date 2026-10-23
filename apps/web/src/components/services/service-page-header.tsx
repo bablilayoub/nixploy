@@ -264,14 +264,16 @@ export function ServicePageHeader({
 						<span className="flex flex-wrap items-center gap-1.5 text-destructive">
 							<span className="min-w-0 break-words">Last deployment failed: {lastError}</span>
 							{onViewLogs ? (
-								<button
+								<Button
+									variant="ghost"
+									size="sm"
 									type="button"
-									className="inline-flex shrink-0 items-center gap-1 rounded-sm underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+									className="h-auto min-h-0 px-0 py-0 has-[>svg]:px-0 inline-flex shrink-0 items-center gap-1 rounded-sm underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 									onClick={onViewLogs}
 								>
 									<ScrollText className="size-3.5" />
 									View logs
-								</button>
+								</Button>
 							) : null}
 						</span>
 					) : null}

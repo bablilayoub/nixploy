@@ -263,7 +263,7 @@ export function EnvEditor({
 	return (
 		<div className="space-y-3">
 			<div className="flex flex-wrap items-center justify-end gap-2">
-				<input
+				<Input
 					ref={fileInputRef}
 					type="file"
 					accept=".env,text/plain"

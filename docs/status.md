@@ -5,6 +5,31 @@ and move items between the backlog sections. Durable knowledge belongs in
 [`../CLAUDE.md`](../CLAUDE.md) / [`codebase-map.md`](./codebase-map.md); this
 file is for **state** and **tasks**.
 
+## Confirmed shadcn/ui standardization — 2026-10-23
+
+User clarification: the actual app must use **exclusively shadcn/ui components**.
+Remaining native/custom controls, labels, tables and disclosures now use the shared
+primitives. Added the shadcn Radio Group and Collapsible on existing Radix; no new
+dependency. Quiet monochrome light/dark layouts remain. Editors/charts/terminal
+engines and all 582 tracked API bindings are preserved. Disclosure drafts survive
+closing; migration auto-match, cascading selection and stale-plan guards remain.
+
+Validation: production build/typecheck, strict Biome (1,196 files), knip, 119 web
+and 3,353 server tests pass (137 optional server tests skipped). Browser proof:
+104 production route/control captures; four migration sequences; 28 focused
+control cases; 18 template wizard steps; 12 boundary cases. Both themes, mobile,
+keyboard navigation and enlarged text are covered. Independent design/a11y review
+findings are closed. Scope and practical limits: [app workspace](../.ui-craft/app-workspace.md).
+
+The all-role custom server runs on 3000 from `.next-shadcn-release`; health/readiness
+pass. Backup and restart comparison preserve 72 tables/240 rows, 62 persistent files
+and original environment/settings files. Existing-session checks pass (14 cases).
+Later reads change only the automatic update-check timestamp. Original keys/config
+paths remain; previous `.next-app-ship` is available for rollback. Public website
+stays on 3373. No primary reset/seed/restore/migration or Desktop checkout edit.
+Private evidence/backups: `.nixploy-data/verification/shadcn-components/`.
+PR 34 remains a draft.
+
 ## Focused actual app rebuild — 2026-10-23
 
 The actual app now uses quiet monochrome working layouts with existing shadcn/

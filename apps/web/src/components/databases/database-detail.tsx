@@ -1176,13 +1176,15 @@ function ConnectionTab({
 					) : (
 						<p className="text-sm text-muted-foreground">
 							No external port configured.{" "}
-							<button
+							<Button
+								variant="ghost"
+								size="sm"
 								type="button"
 								onClick={onOpenGeneral}
-								className="font-medium text-foreground underline-offset-4 hover:underline"
+								className="h-auto min-h-0 px-0 py-0 has-[>svg]:px-0 font-medium text-foreground underline-offset-4 hover:underline"
 							>
 								Set one in the General tab →
-							</button>
+							</Button>
 						</p>
 					)}
 				</SettingsSection>

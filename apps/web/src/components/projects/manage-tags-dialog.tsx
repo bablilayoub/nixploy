@@ -110,12 +110,12 @@ export function ManageTagsDialog() {
 							{(tagsQuery.data ?? []).map((tag) =>
 								editingId === tag.tagId ? (
 									<li key={tag.tagId} className="flex items-center gap-2">
-										<input
+										<Input
 											type="color"
 											aria-label={`Colour of ${tag.name}`}
 											value={editColor}
 											onChange={(event) => setEditColor(event.target.value)}
-											className="h-8 w-10 cursor-pointer rounded border bg-transparent p-0.5"
+											className="size-11 min-h-11 shrink-0 cursor-pointer rounded border bg-transparent p-0.5"
 										/>
 										<Input
 											aria-label={`Rename ${tag.name}`}
@@ -216,12 +216,12 @@ export function ManageTagsDialog() {
 								onChange={(event) => setName(event.target.value)}
 								className="h-8"
 							/>
-							<input
+							<Input
 								type="color"
 								aria-label="Tag color"
 								value={color}
 								onChange={(event) => setColor(event.target.value)}
-								className="h-8 w-10 cursor-pointer rounded border bg-transparent p-0.5"
+								className="size-11 min-h-11 shrink-0 cursor-pointer rounded border bg-transparent p-0.5"
 							/>
 							<Button
 								type="button"

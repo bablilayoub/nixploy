@@ -17,6 +17,7 @@ import {
 } from "recharts";
 import { SettingsSection } from "@/components/layout/settings-section";
 import { NotRunningState, type RuntimeEmptyProps } from "@/components/services/not-running-state";
+import { Button } from "@/components/ui/button";
 import { type ChartAnnotation, snapEventsToSamples } from "@/lib/chart-annotations";
 import { formatBytes } from "@/lib/format";
 import { useTRPC } from "@/lib/trpc";
@@ -557,7 +558,9 @@ export function MonitoringCharts({
 				)}
 				<div className="ml-auto flex items-center gap-1">
 					{RANGES.map((option) => (
-						<button
+						<Button
+							variant="ghost"
+							size="sm"
 							key={String(option.value)}
 							type="button"
 							aria-pressed={range === option.value}
@@ -570,7 +573,7 @@ export function MonitoringCharts({
 							)}
 						>
 							{option.label}
-						</button>
+						</Button>
 					))}
 				</div>
 			</div>

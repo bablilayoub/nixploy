@@ -443,12 +443,14 @@ export function MonitoringView({ embedded = false }: { embedded?: boolean } = {}
 										const active = key === selectedKey;
 										return (
 											<li key={key}>
-												<button
+												<Button
+													variant="ghost"
+													size="sm"
 													type="button"
 													onClick={() => setSelectedKey(key)}
 													aria-pressed={active}
 													className={cn(
-														"flex w-full flex-col gap-1 px-3 py-2.5 text-left transition-colors",
+														"flex w-full flex-col items-stretch justify-start rounded-none font-normal gap-1 px-3 py-2.5 text-left transition-colors",
 														active ? "bg-secondary" : "hover:bg-secondary/50",
 													)}
 												>
@@ -466,7 +468,7 @@ export function MonitoringView({ embedded = false }: { embedded?: boolean } = {}
 																: "Metrics unavailable"}
 														</span>
 													</div>
-												</button>
+												</Button>
 											</li>
 										);
 									})}

@@ -300,14 +300,16 @@ export function TemplatesWorkbench({
 								className="h-9 w-full ps-8 pe-8"
 							/>
 							{draftQuery ? (
-								<button
+								<Button
+									variant="ghost"
+									size="sm"
 									type="button"
 									onClick={() => setDraftQuery("")}
 									aria-label="Clear search"
-									className="absolute end-2 top-1/2 -translate-y-1/2 rounded-sm text-muted-foreground transition-colors hover:text-foreground"
+									className="absolute end-0 top-1/2 size-9 min-h-9 -translate-y-1/2 rounded-sm p-0 has-[>svg]:px-0 text-muted-foreground transition-colors hover:text-foreground"
 								>
 									<X className="size-3.5" />
-								</button>
+								</Button>
 							) : null}
 						</div>
 
@@ -341,15 +343,17 @@ export function TemplatesWorkbench({
 					{activeChips.length > 0 ? (
 						<div className="flex flex-wrap items-center gap-1.5">
 							{activeChips.map((chip) => (
-								<button
+								<Button
+									variant="ghost"
+									size="sm"
 									key={chip.key}
 									type="button"
 									onClick={chip.clear}
-									className="flex items-center gap-1 rounded-md border bg-secondary/60 px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+									className="h-auto min-h-7 flex items-center gap-1 rounded-md border bg-secondary/60 px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
 								>
 									{chip.label}
 									<X className="size-3" />
-								</button>
+								</Button>
 							))}
 							<Button variant="ghost" size="xs" onClick={filters.clear}>
 								Clear all

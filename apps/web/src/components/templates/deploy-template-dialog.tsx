@@ -119,12 +119,14 @@ function StepRail({
 				const active = step.id === current;
 				return (
 					<li key={step.id} className="flex min-w-0 flex-1 items-center gap-0.5">
-						<button
+						<Button
+							variant="ghost"
+							size="sm"
 							type="button"
 							disabled={index > currentIndex}
 							onClick={() => onSelect(step.id)}
 							className={cn(
-								"flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-xs transition-colors",
+								"h-auto justify-start flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-xs transition-colors",
 								active && "bg-secondary text-foreground",
 								done && "text-foreground hover:bg-secondary/60",
 								!active && !done && "text-muted-foreground",
@@ -142,7 +144,7 @@ function StepRail({
 								{done ? <Check className="size-3" /> : index + 1}
 							</span>
 							<span className="truncate font-medium">{step.label}</span>
-						</button>
+						</Button>
 						{index < steps.length - 1 && (
 							<span className="mx-0.5 hidden h-px w-3 shrink-0 bg-border sm:block" />
 						)}

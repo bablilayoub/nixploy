@@ -114,7 +114,7 @@ export function StatusPageCard() {
 						) : (
 							<div className="flex flex-col gap-2 rounded-md border p-3">
 								{(probes.data ?? []).map((probe) => (
-									<label
+									<Label
 										key={probe.uptimeProbeId}
 										className="flex items-center gap-2.5 text-sm"
 										htmlFor={`probe-${probe.uptimeProbeId}`}
@@ -127,7 +127,7 @@ export function StatusPageCard() {
 										/>
 										<span className="truncate">{probe.domain?.host ?? probe.uptimeProbeId}</span>
 										<span className="text-xs text-muted-foreground">{probe.status}</span>
-									</label>
+									</Label>
 								))}
 							</div>
 						)}

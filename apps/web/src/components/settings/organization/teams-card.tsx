@@ -84,7 +84,7 @@ function PickList({
 	return (
 		<div className="max-h-56 space-y-1 overflow-y-auto rounded-md border p-2">
 			{items.map((item) => (
-				<label
+				<Label
 					key={item.id}
 					htmlFor={`${name}-${item.id}`}
 					className="flex cursor-pointer items-center gap-3 rounded-sm px-2 py-1.5 hover:bg-accent/50"
@@ -100,7 +100,7 @@ function PickList({
 							<span className="truncate text-xs text-muted-foreground">{item.hint}</span>
 						) : null}
 					</span>
-				</label>
+				</Label>
 			))}
 		</div>
 	);

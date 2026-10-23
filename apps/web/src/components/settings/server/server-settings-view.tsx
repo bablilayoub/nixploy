@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { CodeEditor } from "@/components/ui/code-editor";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -544,49 +545,58 @@ export function ServerSettingsView() {
 								</div>
 							)}
 
-							<details className="group">
-								<summary className="flex cursor-pointer list-none items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden">
-									<ChevronDown className="size-3.5 transition-transform group-open:rotate-180" />
-									Advanced: Traefik config
-								</summary>
-								<div className="mt-3 space-y-4">
-									<p className="text-sm text-muted-foreground">
-										Nixploy owns these files — edits are overwritten on the next deploy.{" "}
-										<HelpLink slug="domains" />
-									</p>
-									{traefikQuery.isPending ? (
-										<Skeleton className="h-64 w-full" />
-									) : (
-										<>
-											{traefikConfig?.staticConfig ? (
-												<CodeEditor
-													label="Traefik static configuration"
-													value={traefikConfig.staticConfig}
-													extensions={[yaml()]}
-													readOnly
-													maxHeight="20rem"
-													basicSetup={{ lineNumbers: true, foldGutter: true }}
-													lockMessage="Traefik static config is read-only. Unlock to view the full file."
-												/>
-											) : (
-												<p className="text-sm text-muted-foreground">
-													No traefik.yml on this host yet.
-												</p>
-											)}
-											{traefikConfig && traefikConfig.dynamicConfigs.length > 0 ? (
-												<ul className="text-sm text-muted-foreground">
-													{traefikConfig.dynamicConfigs.map((file) => (
-														<li key={file} className="flex items-center gap-2 py-1">
-															<FileCode2 className="size-3.5 shrink-0" />
-															<code className="font-mono text-xs">{file}</code>
-														</li>
-													))}
-												</ul>
-											) : null}
-										</>
-									)}
-								</div>
-							</details>
+							<Collapsible className="group">
+								<CollapsibleTrigger asChild>
+									<Button
+										type="button"
+										variant="ghost"
+										size="sm"
+										className="flex cursor-pointer list-none items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden"
+									>
+										<ChevronDown className="size-3.5 transition-transform group-data-[state=open]:rotate-180" />
+										Advanced: Traefik config
+									</Button>
+								</CollapsibleTrigger>
+								<CollapsibleContent forceMount className="data-[state=closed]:hidden">
+									<div className="mt-3 space-y-4">
+										<p className="text-sm text-muted-foreground">
+											Nixploy owns these files — edits are overwritten on the next deploy.{" "}
+											<HelpLink slug="domains" />
+										</p>
+										{traefikQuery.isPending ? (
+											<Skeleton className="h-64 w-full" />
+										) : (
+											<>
+												{traefikConfig?.staticConfig ? (
+													<CodeEditor
+														label="Traefik static configuration"
+														value={traefikConfig.staticConfig}
+														extensions={[yaml()]}
+														readOnly
+														maxHeight="20rem"
+														basicSetup={{ lineNumbers: true, foldGutter: true }}
+														lockMessage="Traefik static config is read-only. Unlock to view the full file."
+													/>
+												) : (
+													<p className="text-sm text-muted-foreground">
+														No traefik.yml on this host yet.
+													</p>
+												)}
+												{traefikConfig && traefikConfig.dynamicConfigs.length > 0 ? (
+													<ul className="text-sm text-muted-foreground">
+														{traefikConfig.dynamicConfigs.map((file) => (
+															<li key={file} className="flex items-center gap-2 py-1">
+																<FileCode2 className="size-3.5 shrink-0" />
+																<code className="font-mono text-xs">{file}</code>
+															</li>
+														))}
+													</ul>
+												) : null}
+											</>
+										)}
+									</div>
+								</CollapsibleContent>
+							</Collapsible>
 						</SettingsSection>
 
 						{/* Outbound requests: the private-egress escape hatch */}

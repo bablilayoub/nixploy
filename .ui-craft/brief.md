@@ -112,9 +112,11 @@ screens shown as a gallery. The six equal tiles are an explicit reference choice
 
 The latest request is a complete rebuild of the actual Nixploy app with a clean,
 straightforward interface, low overwhelm and every existing feature preserved.
-Clarification of “fully ChatGPT” was requested asynchronously. Without a reply, proceed with
-ChatGPT-like restraint and the existing shadcn/Radix controls. No chatbot replaces
-operational controls. The public Mobbin website is outside this composition pass.
+The user confirmed “exclusively shadcn/ui components.” Use the existing shadcn/ui
+primitives consistently for every control and disclosure; do not substitute
+a ChatGPT visual identity. Keep the approved quiet monochrome layouts. Specialized
+code editors, charts and terminals retain their existing engines within shadcn
+surfaces so their capabilities are preserved. No new component-library dependency. The public Mobbin website is outside this composition pass.
 
 App craft9 / motion2 / density5 / variance3. Sidebar is a quiet, tinted utility
 rail; canvas is white / neutral charcoal. Page headings are compact, controls

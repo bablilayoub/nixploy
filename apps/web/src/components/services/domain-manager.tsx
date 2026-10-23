@@ -377,7 +377,7 @@ function NixployAuthFields({
 						{teams.map((team) => {
 							const checked = selectedTeams.has(team.teamId);
 							return (
-								<label
+								<Label
 									key={team.teamId}
 									htmlFor={`mw-nixployauth-team-${team.teamId}`}
 									className="flex cursor-pointer items-center gap-2 rounded-md border px-2 py-1 text-xs"
@@ -393,7 +393,7 @@ function NixployAuthFields({
 										}}
 									/>
 									{team.name}
-								</label>
+								</Label>
 							);
 						})}
 					</div>

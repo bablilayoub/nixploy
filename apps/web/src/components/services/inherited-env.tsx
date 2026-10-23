@@ -4,8 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, Eye, EyeOff, Layers } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
-
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { parseEnvFile } from "@/lib/env-file";
 import { useTRPC } from "@/lib/trpc";
@@ -62,24 +62,30 @@ export function InheritedEnv({
 	const ownKeys = new Set(parseEnvFile(ownEnv ?? "").map((entry) => entry.key));
 
 	return (
-		<div className="overflow-hidden rounded-lg border border-border bg-card">
+		<Collapsible
+			open={open}
+			onOpenChange={setOpen}
+			className="overflow-hidden rounded-lg border border-border bg-card"
+		>
 			<div className="flex items-center justify-between gap-2 bg-panel-inset px-4 py-3">
-				<button
-					type="button"
-					className="flex min-w-0 items-center gap-2 text-sm"
-					onClick={() => setOpen((value) => !value)}
-					aria-expanded={open}
-				>
-					{open ? (
-						<ChevronDown className="size-4 shrink-0 text-muted-foreground" />
-					) : (
-						<ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-					)}
-					<Layers className="size-4 shrink-0 text-muted-foreground" />
-					<span className="truncate font-medium">
-						{entries.length} inherited {entries.length === 1 ? "variable" : "variables"}
-					</span>
-				</button>
+				<CollapsibleTrigger asChild>
+					<Button
+						variant="ghost"
+						size="sm"
+						type="button"
+						className="h-auto min-h-0 justify-start px-0 py-0 has-[>svg]:px-0 flex min-w-0 items-center gap-2 text-sm"
+					>
+						{open ? (
+							<ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+						) : (
+							<ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+						)}
+						<Layers className="size-4 shrink-0 text-muted-foreground" />
+						<span className="truncate font-medium">
+							{entries.length} inherited {entries.length === 1 ? "variable" : "variables"}
+						</span>
+					</Button>
+				</CollapsibleTrigger>
 				{open && (
 					<Button
 						type="button"
@@ -92,44 +98,39 @@ export function InheritedEnv({
 					</Button>
 				)}
 			</div>
-			{open && (
-				<>
-					<p className="border-t border-border px-3 py-2 text-xs text-muted-foreground">
-						From the organization, the project and the{" "}
-						<span className="font-mono">{resolvedName}</span> environment. A variable you set above
-						with the same name wins.{" "}
-						<Link
-							href={`/dashboard/projects/${projectId}?tab=environment`}
-							className="underline underline-offset-2"
-						>
-							Edit the chain
-						</Link>
-					</p>
-					<ul className="max-h-64 divide-y divide-border overflow-auto border-t border-border">
-						{entries.map((entry) => {
-							const overridden = ownKeys.has(entry.key);
-							return (
-								<li
-									key={entry.key}
-									className="flex items-center gap-3 px-3 py-1.5 font-mono text-xs"
-								>
-									<span className="w-2/5 shrink-0 truncate" title={entry.key}>
-										{entry.key}
+			<CollapsibleContent>
+				<p className="border-t border-border px-3 py-2 text-xs text-muted-foreground">
+					From the organization, the project and the{" "}
+					<span className="font-mono">{resolvedName}</span> environment. A variable you set above
+					with the same name wins.{" "}
+					<Link
+						href={`/dashboard/projects/${projectId}?tab=environment`}
+						className="underline underline-offset-2"
+					>
+						Edit the chain
+					</Link>
+				</p>
+				<ul className="max-h-64 divide-y divide-border overflow-auto border-t border-border">
+					{entries.map((entry) => {
+						const overridden = ownKeys.has(entry.key);
+						return (
+							<li key={entry.key} className="flex items-center gap-3 px-3 py-1.5 font-mono text-xs">
+								<span className="w-2/5 shrink-0 truncate" title={entry.key}>
+									{entry.key}
+								</span>
+								<span className="min-w-0 flex-1 truncate text-muted-foreground">
+									{revealed ? entry.value || <span className="italic">(empty)</span> : MASK}
+								</span>
+								{overridden && (
+									<span className="shrink-0 rounded bg-secondary px-1.5 py-0.5 font-sans text-[11px] text-muted-foreground">
+										overridden here
 									</span>
-									<span className="min-w-0 flex-1 truncate text-muted-foreground">
-										{revealed ? entry.value || <span className="italic">(empty)</span> : MASK}
-									</span>
-									{overridden && (
-										<span className="shrink-0 rounded bg-secondary px-1.5 py-0.5 font-sans text-[11px] text-muted-foreground">
-											overridden here
-										</span>
-									)}
-								</li>
-							);
-						})}
-					</ul>
-				</>
-			)}
-		</div>
+								)}
+							</li>
+						);
+					})}
+				</ul>
+			</CollapsibleContent>
+		</Collapsible>
 	);
 }
