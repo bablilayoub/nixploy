@@ -96,7 +96,7 @@ export function CodeEditor({
 	return (
 		<div
 			className={cn(
-				"relative overflow-hidden rounded-lg border border-border bg-control shadow-[var(--surface-shadow)] transition-[border-color,box-shadow] focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/25 [&_.cm-editor]:outline-none",
+				"relative overflow-hidden rounded-lg border border-border bg-control shadow-xs transition-[border-color,box-shadow] focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/25 [&_.cm-editor]:outline-none",
 				className,
 			)}
 		>

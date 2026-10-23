@@ -360,8 +360,8 @@ export function SsoProvidersView() {
 							}
 						}}
 					>
-						<div className="grid gap-4 sm:grid-cols-2">
-							<div className="flex flex-col gap-1.5">
+						<div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
+							<div className="flex min-w-0 flex-col gap-1.5">
 								<Label htmlFor="sso-preset">Provider</Label>
 								<Select
 									value={form.preset}
@@ -376,7 +376,7 @@ export function SsoProvidersView() {
 										}));
 									}}
 								>
-									<SelectTrigger id="sso-preset">
+									<SelectTrigger id="sso-preset" className="w-full">
 										<SelectValue />
 									</SelectTrigger>
 									<SelectContent>
@@ -388,7 +388,7 @@ export function SsoProvidersView() {
 									</SelectContent>
 								</Select>
 							</div>
-							<div className="flex flex-col gap-1.5">
+							<div className="flex min-w-0 flex-col gap-1.5">
 								<Label htmlFor="sso-name">Button label</Label>
 								<Input
 									id="sso-name"
@@ -403,7 +403,7 @@ export function SsoProvidersView() {
 						</div>
 
 						{editing ? null : (
-							<div className="flex flex-col gap-1.5">
+							<div className="flex min-w-0 flex-col gap-1.5">
 								<Label htmlFor="sso-provider-id">Provider id</Label>
 								<Input
 									id="sso-provider-id"
@@ -420,7 +420,7 @@ export function SsoProvidersView() {
 						)}
 
 						{presetInfo?.kind === "fixed" ? null : (
-							<div className="flex flex-col gap-1.5">
+							<div className="flex min-w-0 flex-col gap-1.5">
 								<Label htmlFor="sso-issuer">Issuer URL</Label>
 								<Input
 									id="sso-issuer"
@@ -438,8 +438,8 @@ export function SsoProvidersView() {
 						)}
 
 						{presetInfo?.kind !== "fixed" && !form.issuer ? (
-							<div className="grid gap-4 sm:grid-cols-2">
-								<div className="flex flex-col gap-1.5">
+							<div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
+								<div className="flex min-w-0 flex-col gap-1.5">
 									<Label htmlFor="sso-auth-url">Authorization URL</Label>
 									<Input
 										id="sso-auth-url"
@@ -449,7 +449,7 @@ export function SsoProvidersView() {
 										}
 									/>
 								</div>
-								<div className="flex flex-col gap-1.5">
+								<div className="flex min-w-0 flex-col gap-1.5">
 									<Label htmlFor="sso-token-url">Token URL</Label>
 									<Input
 										id="sso-token-url"
@@ -459,7 +459,7 @@ export function SsoProvidersView() {
 										}
 									/>
 								</div>
-								<div className="flex flex-col gap-1.5 sm:col-span-2">
+								<div className="flex min-w-0 flex-col gap-1.5 sm:col-span-2">
 									<Label htmlFor="sso-userinfo-url">Userinfo URL</Label>
 									<Input
 										id="sso-userinfo-url"
@@ -473,8 +473,8 @@ export function SsoProvidersView() {
 						) : null}
 
 						<h3 className="mt-3 border-b pb-3 text-sm font-semibold">Connection</h3>
-						<div className="grid gap-4 sm:grid-cols-2">
-							<div className="flex flex-col gap-1.5">
+						<div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
+							<div className="flex min-w-0 flex-col gap-1.5">
 								<Label htmlFor="sso-client-id">Client ID</Label>
 								<Input
 									id="sso-client-id"
@@ -485,7 +485,7 @@ export function SsoProvidersView() {
 									required
 								/>
 							</div>
-							<div className="flex flex-col gap-1.5">
+							<div className="flex min-w-0 flex-col gap-1.5">
 								<Label htmlFor="sso-client-secret">Client secret</Label>
 								<Input
 									id="sso-client-secret"
@@ -500,8 +500,8 @@ export function SsoProvidersView() {
 							</div>
 						</div>
 
-						<div className="grid gap-4 sm:grid-cols-2">
-							<div className="flex flex-col gap-1.5">
+						<div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
+							<div className="flex min-w-0 flex-col gap-1.5">
 								<Label htmlFor="sso-scopes">Scopes</Label>
 								<Input
 									id="sso-scopes"
@@ -511,7 +511,7 @@ export function SsoProvidersView() {
 									}
 								/>
 							</div>
-							<div className="flex flex-col gap-1.5">
+							<div className="flex min-w-0 flex-col gap-1.5">
 								<Label htmlFor="sso-domains">Allowed email domains</Label>
 								<Input
 									id="sso-domains"
@@ -531,8 +531,8 @@ export function SsoProvidersView() {
 						</div>
 
 						<h3 className="mt-3 border-b pb-3 text-sm font-semibold">Access</h3>
-						<div className="grid gap-4 sm:grid-cols-2">
-							<div className="flex flex-col gap-1.5">
+						<div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
+							<div className="flex min-w-0 flex-col gap-1.5">
 								<Label htmlFor="sso-default-org">New users join</Label>
 								<Select
 									value={form.defaultOrganizationId || "none"}
@@ -559,7 +559,7 @@ export function SsoProvidersView() {
 									</SelectContent>
 								</Select>
 							</div>
-							<div className="flex flex-col gap-1.5">
+							<div className="flex min-w-0 flex-col gap-1.5">
 								<Label htmlFor="sso-default-role">…as</Label>
 								<Select
 									value={form.defaultRole}
@@ -581,8 +581,8 @@ export function SsoProvidersView() {
 							</div>
 						</div>
 
-						<div className="grid gap-4 sm:grid-cols-2">
-							<div className="flex flex-col gap-1.5">
+						<div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
+							<div className="flex min-w-0 flex-col gap-1.5">
 								<Label htmlFor="sso-group-claim">Group claim</Label>
 								<Input
 									id="sso-group-claim"
@@ -593,7 +593,7 @@ export function SsoProvidersView() {
 									placeholder="groups"
 								/>
 							</div>
-							<div className="flex flex-col gap-1.5">
+							<div className="flex min-w-0 flex-col gap-1.5">
 								<Label htmlFor="sso-group-mappings">Group → role</Label>
 								<Textarea
 									id="sso-group-mappings"
@@ -607,8 +607,8 @@ export function SsoProvidersView() {
 							</div>
 						</div>
 
-						<div className="flex items-center justify-between rounded-md border p-3">
-							<div className="flex flex-col gap-1 pe-4">
+						<div className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3">
+							<div className="flex min-w-0 flex-1 basis-32 flex-col gap-1 pe-4">
 								<Label htmlFor="sso-sync-role">Re-apply the mapping on every sign-in</Label>
 								<p className="text-xs text-muted-foreground">
 									Removing someone from a group in the identity provider demotes them here too. Off
@@ -624,8 +624,10 @@ export function SsoProvidersView() {
 							/>
 						</div>
 
-						<div className="flex items-center justify-between rounded-md border p-3">
-							<Label htmlFor="sso-enabled">Show on the login page</Label>
+						<div className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3">
+							<Label htmlFor="sso-enabled" className="min-w-0 flex-1 basis-32">
+								Show on the login page
+							</Label>
 							<Switch
 								id="sso-enabled"
 								checked={form.enabled}

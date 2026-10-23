@@ -24,12 +24,12 @@ export default function ProfileSettingsPage() {
 					{ id: "developer-access", label: "Developer access" },
 				]}
 			>
-				<section id="account" tabIndex={-1} className="fieldwork-form-group">
+				<section id="account" tabIndex={-1} className="space-y-6 scroll-mt-24 min-w-0">
 					<SettingsStack>
 						<ProfileCard />
 					</SettingsStack>
 				</section>
-				<section id="security" tabIndex={-1} className="fieldwork-form-group">
+				<section id="security" tabIndex={-1} className="space-y-6 scroll-mt-24 min-w-0">
 					<SettingsStack>
 						<ChangePasswordCard />
 						<PasskeysCard />
@@ -37,7 +37,7 @@ export default function ProfileSettingsPage() {
 						<SessionsCard />
 					</SettingsStack>
 				</section>
-				<section id="developer-access" tabIndex={-1} className="fieldwork-form-group">
+				<section id="developer-access" tabIndex={-1} className="space-y-6 scroll-mt-24 min-w-0">
 					<SettingsStack>
 						<ApiKeysCard />
 						<McpSetupCard />

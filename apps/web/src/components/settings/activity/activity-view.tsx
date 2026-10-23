@@ -36,15 +36,12 @@ import { useTRPC } from "@/lib/trpc";
 const PAGE_SIZE = 50;
 const ALL = "__all__";
 
-const ACTION_VARIANTS: Record<
-	string,
-	"success" | "info" | "destructive" | "warning" | "secondary"
-> = {
-	create: "success",
-	deploy: "info",
+const ACTION_VARIANTS: Record<string, "default" | "destructive" | "outline" | "secondary"> = {
+	create: "default",
+	deploy: "secondary",
 	delete: "destructive",
 	remove: "destructive",
-	prune: "warning",
+	prune: "outline",
 };
 
 function ActionBadge({ action }: { action: string }) {

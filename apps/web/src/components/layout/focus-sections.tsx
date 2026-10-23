@@ -83,16 +83,9 @@ export function FocusSections({
 					</SelectContent>
 				</Select>
 			</div>
-			<TabsList
-				aria-label={label}
-				className="hidden h-auto min-h-11 gap-1 rounded-lg bg-transparent p-0 sm:inline-flex"
-			>
+			<TabsList aria-label={label} className="hidden h-auto sm:inline-flex">
 				{items.map((item) => (
-					<TabsTrigger
-						key={item.id}
-						value={item.id}
-						className="h-auto min-h-10 flex-none rounded-lg px-3 py-2 text-sm data-[state=active]:bg-secondary data-[state=active]:shadow-none dark:data-[state=active]:border-transparent"
-					>
+					<TabsTrigger key={item.id} value={item.id} className="flex-none">
 						{item.label}
 					</TabsTrigger>
 				))}

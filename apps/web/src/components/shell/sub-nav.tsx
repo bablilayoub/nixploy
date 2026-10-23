@@ -4,6 +4,7 @@ import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export interface SubNavItem {
@@ -20,8 +21,8 @@ export interface SubNavGroup {
 }
 
 /**
- * Segmented sub-navigation for settings and similar tab routing.
- * Horizontal pills by default; pass orientation="vertical" for a side menu.
+ * Stock shadcn buttons compose route navigation without replacing link behavior.
+ * Pass orientation="vertical" for a side menu.
  */
 export function SubNav({
 	items,
@@ -45,38 +46,18 @@ export function SubNav({
 				: pathname === item.href || pathname.startsWith(`${item.href}/`);
 			const Icon = item.icon;
 			return (
-				<Link
+				<Button
 					key={item.href}
-					href={item.href}
-					aria-current={isActive ? "page" : undefined}
-					className={cn(
-						"text-sm transition-colors",
-						vertical
-							? cn(
-									"flex min-h-10 items-center gap-2.5 rounded-md border border-transparent px-3 py-2 text-[13px]",
-									isActive
-										? "border-transparent bg-accent/70 font-medium text-foreground"
-										: "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
-								)
-							: cn(
-									"inline-flex min-h-10 items-center gap-2 whitespace-nowrap rounded-md border px-3 py-2",
-									isActive
-										? "border-border border-transparent bg-accent/70 font-medium text-foreground"
-										: "border-transparent text-muted-foreground hover:bg-secondary/70 hover:text-foreground",
-								),
-					)}
+					asChild
+					variant={isActive ? "secondary" : "ghost"}
+					size="sm"
+					className={cn("justify-start", vertical && "w-full")}
 				>
-					{Icon ? (
-						<Icon
-							className={cn(
-								"size-4 shrink-0",
-								isActive ? "text-foreground" : "text-muted-foreground",
-							)}
-							aria-hidden
-						/>
-					) : null}
-					{item.label}
-				</Link>
+					<Link href={item.href} aria-current={isActive ? "page" : undefined}>
+						{Icon ? <Icon className="size-4 shrink-0" aria-hidden /> : null}
+						{item.label}
+					</Link>
+				</Button>
 			);
 		});
 

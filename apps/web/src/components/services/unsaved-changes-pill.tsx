@@ -15,7 +15,7 @@ export function UnsavedChangesPill({ dirty, className }: { dirty: boolean; class
 	useUnsavedChanges(dirty);
 	if (!dirty) return null;
 	return (
-		<Badge variant="warning" className={cn("gap-1", className)} role="status">
+		<Badge variant="outline" className={cn("gap-1", className)} role="status">
 			<CircleDot className="size-3" aria-hidden />
 			Unsaved changes
 		</Badge>

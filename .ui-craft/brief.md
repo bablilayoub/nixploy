@@ -135,3 +135,14 @@ alerts/logs/Prometheus; schedules; account/security/API/MCP; organization/member
 teams/quotas/shared variables; server/SSH/certs; Git/registry/storage/template
 integrations; branding/SSO/platform/AI/updates/users; activity/incidents; all auth,
 setup, public status and failure states. Verify each family in both themes.
+
+## Latest authority — stock shadcn, no custom theme (2026-10-23)
+
+The user rejected the custom styling layered on library components: “pure shadcn
+no custom theme.” Use the configured New York/Zinc registry defaults for the app
+in both modes. This supersedes every earlier app palette, radius, pill, Fieldwork,
+Mobbin and ChatGPT styling direction. No custom component skin or global stylesheet
+may repaint library slots. Keep feature-specific composition and accessibility/
+correctness guards (reflow, touch targets, semantic headings, modal focus return,
+deterministic SSR, draft retention). Preserve saved data/settings and branding
+configuration. No new library dependencies. Public marketing scope is unchanged.

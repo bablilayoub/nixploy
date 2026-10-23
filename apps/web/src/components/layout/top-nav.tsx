@@ -30,7 +30,7 @@ export function TopNav() {
 		const root = document.documentElement;
 		const update = () =>
 			root.style.setProperty(
-				"--fieldwork-chrome-height",
+				"--app-chrome-height",
 				`${Math.ceil(chrome.current?.getBoundingClientRect().height ?? 64)}px`,
 			);
 		update();
@@ -38,7 +38,7 @@ export function TopNav() {
 		observer.observe(chrome.current);
 		return () => {
 			observer.disconnect();
-			root.style.removeProperty("--fieldwork-chrome-height");
+			root.style.removeProperty("--app-chrome-height");
 		};
 	}, []);
 	const trpc = useTRPC();
@@ -51,10 +51,10 @@ export function TopNav() {
 		.flatMap((g) => g.items)
 		.find((item) => isSidebarNavActive(pathname, item.url));
 	return (
-		<div ref={chrome} className="sticky top-0 z-30 bg-background/95 backdrop-blur-sm">
-			<header className="flex min-h-16 min-w-0 items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
+		<div ref={chrome} className="sticky top-0 z-30 border-b bg-background">
+			<header className="flex min-h-16 min-w-0 flex-wrap items-center justify-between gap-3 px-4 py-2 sm:px-6 lg:px-8">
 				<div className="flex min-w-0 items-center gap-3">
-					<SidebarTrigger className="size-11 shrink-0" aria-controls="workspace-navigation" />
+					<SidebarTrigger className="shrink-0" aria-controls="workspace-navigation" />
 					<Separator orientation="vertical" className="h-5" />
 					<Breadcrumb>
 						<BreadcrumbList>
@@ -70,7 +70,7 @@ export function TopNav() {
 						</BreadcrumbList>
 					</Breadcrumb>
 				</div>
-				<div className="flex shrink-0 items-center gap-1 sm:gap-2">
+				<div className="ml-auto flex max-w-full shrink-0 items-center gap-1 sm:gap-2">
 					{banner.data?.updateAvailable && banner.data.canManageUpdate && (
 						<Button asChild variant="outline" size="sm" className="hidden xl:inline-flex">
 							<Link href="/dashboard/settings/server#platform-administration">

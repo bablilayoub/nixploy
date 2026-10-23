@@ -114,19 +114,19 @@ function SaveBar({ registry }: { registry: SaveBarRegistry }) {
 	useEffect(() => {
 		if (!hasDirty || !bar.current) return;
 		const root = document.documentElement;
-		const previous = root.style.getPropertyValue("--fieldwork-savebar-height");
+		const previous = root.style.getPropertyValue("--app-savebar-height");
 		const update = () => {
 			const height = Math.ceil(bar.current?.getBoundingClientRect().height ?? 0) + 24;
 			setBarHeight(height);
-			root.style.setProperty("--fieldwork-savebar-height", `${height}px`);
+			root.style.setProperty("--app-savebar-height", `${height}px`);
 		};
 		update();
 		const observer = new ResizeObserver(update);
 		observer.observe(bar.current);
 		return () => {
 			observer.disconnect();
-			if (previous) root.style.setProperty("--fieldwork-savebar-height", previous);
-			else root.style.removeProperty("--fieldwork-savebar-height");
+			if (previous) root.style.setProperty("--app-savebar-height", previous);
+			else root.style.removeProperty("--app-savebar-height");
 		};
 	}, [hasDirty]);
 	if (!hasDirty) return null;
@@ -144,7 +144,7 @@ function SaveBar({ registry }: { registry: SaveBarRegistry }) {
 				className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-4 pb-4"
 				role="status"
 			>
-				<div className="pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-3 rounded-lg border border-border bg-popover px-4 py-3 shadow-[var(--overlay-shadow)]">
+				<div className="pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-3 rounded-lg border border-border bg-popover px-4 py-3 shadow-lg">
 					<CircleDot className="size-4 text-warning" aria-hidden />
 					<span className="text-sm text-foreground">{label}</span>
 					<Button

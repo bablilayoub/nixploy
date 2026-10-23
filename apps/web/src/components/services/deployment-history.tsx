@@ -417,7 +417,7 @@ export function DeploymentHistory({
 					<ol className="surface divide-y overflow-hidden" aria-label="Deployment timeline">
 						{deployments.map((deployment) => (
 							<li key={deployment.deploymentId} className="px-4 py-5 sm:px-5">
-								<article className="fieldwork-deployment-row min-w-0">
+								<article className="flex min-w-0 flex-col gap-3 lg:grid lg:grid-cols-[minmax(0,1fr)_auto] lg:[&>:first-child]:col-start-2 lg:[&>:first-child]:row-start-1 lg:[&>:nth-child(2)]:col-start-1 lg:[&>:nth-child(2)]:row-span-2 lg:[&>:nth-child(2)]:row-start-1 lg:[&>:nth-child(3)]:col-start-2 min-w-0">
 									<div className="flex flex-wrap items-center gap-3 lg:flex-col lg:items-end lg:gap-2">
 										<DeploymentStatusBadge
 											status={deployment.status}

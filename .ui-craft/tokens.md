@@ -58,3 +58,14 @@ Controls8px; collection surfaces12px; overlays16px; icon buttons circular.
 Spacing4/8/12/16/20/24/32/40; forms grouped by task with dividers, no card nesting.
 Hover/focus120–150ms only, OS reduced motion respected. Desktop controls36–40px,
 touch44px. Working forms use library behavior and the existing save/dirty guards.
+
+## Latest app authority — shadcn New York/Zinc defaults
+
+All earlier app theme tables are historical and superseded. `apps/web/components.json`
+selects `new-york` and `zinc`; use the official registry's `inlineColors.light` and
+`inlineColors.dark` from https://ui.shadcn.com/r/colors/zinc.json verbatim, with its
+0.625rem base radius and standard derived radius scale. Library source comes from
+https://ui.shadcn.com/r/styles/new-york-v4/{component}.json. Do not introduce another
+palette, shadows, rounded pill skin, or override `data-slot` presentation globally.
+Existing legacy token names are aliases to stock semantic values, not a second theme.
+Only operational layout and accessibility rules remain outside the registry source.

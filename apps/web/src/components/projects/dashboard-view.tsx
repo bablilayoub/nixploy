@@ -91,7 +91,7 @@ export function DashboardView() {
 				className="min-w-0 scroll-mt-40 space-y-5"
 				aria-labelledby="project-list-heading"
 			>
-				<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+				<div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
 					<div className="flex items-center gap-2">
 						<h2 id="project-list-heading" className="text-base font-medium tracking-tight">
 							Projects
@@ -102,7 +102,7 @@ export function DashboardView() {
 							</span>
 						)}
 					</div>
-					<div className="flex min-w-0 flex-col items-stretch gap-2 sm:flex-row sm:items-center">
+					<div className="flex min-w-0 max-w-full flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center">
 						<div className="relative min-w-0 w-full sm:w-auto sm:flex-none">
 							<Search
 								aria-hidden="true"

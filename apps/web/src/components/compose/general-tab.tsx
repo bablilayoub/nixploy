@@ -242,7 +242,7 @@ export function GeneralTab({
 					},
 				]}
 			>
-				<div id="compose-source" tabIndex={-1} className="fieldwork-form-group">
+				<div id="compose-source" tabIndex={-1} className="space-y-6 scroll-mt-24 min-w-0">
 					<SettingsSection
 						title="Source"
 						description="Choose the repository or stored Compose file to deploy."
@@ -254,7 +254,7 @@ export function GeneralTab({
 									value={sourceType}
 									onValueChange={(value) => changeSourceType(value as SourceType)}
 								>
-									<SelectTrigger id="source-type" className="max-w-sm">
+									<SelectTrigger id="source-type" className="w-full max-w-sm">
 										<SelectValue />
 									</SelectTrigger>
 									<SelectContent>
@@ -323,7 +323,7 @@ export function GeneralTab({
 											<SelectTrigger
 												id="provider"
 												disabled={!providerQuery?.isSuccess}
-												className="max-w-sm"
+												className="w-full max-w-sm"
 											>
 												<SelectValue
 													placeholder={
@@ -390,7 +390,7 @@ export function GeneralTab({
 						</div>
 					</SettingsSection>
 				</div>
-				<div id="compose-behavior" tabIndex={-1} className="fieldwork-form-group">
+				<div id="compose-behavior" tabIndex={-1} className="space-y-6 scroll-mt-24 min-w-0">
 					{" "}
 					<SettingsSection
 						title="Deployment behavior"
@@ -405,7 +405,7 @@ export function GeneralTab({
 										draft.patch({ composeType: value as ComposeService["composeType"] })
 									}
 								>
-									<SelectTrigger id="compose-type" className="max-w-sm">
+									<SelectTrigger id="compose-type" className="w-full max-w-sm">
 										<SelectValue />
 									</SelectTrigger>
 									<SelectContent>
@@ -418,7 +418,7 @@ export function GeneralTab({
 									<code>docker compose up</code>. <HelpLink slug="deploy" />
 								</p>
 							</div>
-							<div className="fieldwork-toggle-row">
+							<div className="flex flex-wrap items-start justify-between gap-4 border-b py-4">
 								<div>
 									<Label htmlFor="isolated-deployment">Isolated deployment</Label>
 									<p className="text-sm text-muted-foreground">
@@ -432,7 +432,7 @@ export function GeneralTab({
 									onCheckedChange={(checked) => draft.patch({ isolatedDeployment: checked })}
 								/>
 							</div>
-							<div className="fieldwork-toggle-row">
+							<div className="flex flex-wrap items-start justify-between gap-4 border-b py-4">
 								<div>
 									<Label htmlFor="auto-deploy">Auto deploy</Label>
 									<p className="text-sm text-muted-foreground">
@@ -445,7 +445,7 @@ export function GeneralTab({
 									onCheckedChange={(checked) => draft.patch({ autoDeploy: checked })}
 								/>
 							</div>
-							<div className="fieldwork-toggle-row">
+							<div className="flex flex-wrap items-start justify-between gap-4 border-b py-4">
 								<div>
 									<Label htmlFor="build-enabled">Build services from source</Label>
 									<p className="text-sm text-muted-foreground">
@@ -479,7 +479,7 @@ export function GeneralTab({
 									</p>
 								</div>
 							)}
-							<div className="fieldwork-toggle-row">
+							<div className="flex flex-wrap items-start justify-between gap-4 border-b py-4">
 								<div>
 									<Label htmlFor="publish-ports">Publish host ports</Label>
 									<p className="text-sm text-muted-foreground">
@@ -498,7 +498,7 @@ export function GeneralTab({
 						</div>
 					</SettingsSection>
 				</div>
-				<div id="compose-commands" tabIndex={-1} className="fieldwork-form-group">
+				<div id="compose-commands" tabIndex={-1} className="space-y-6 scroll-mt-24 min-w-0">
 					<SettingsSection
 						title="Lifecycle commands"
 						description="Optional commands around a deployment. Save these with the rest of the configuration."

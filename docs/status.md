@@ -5,6 +5,43 @@ and move items between the backlog sections. Durable knowledge belongs in
 [`../CLAUDE.md`](../CLAUDE.md) / [`codebase-map.md`](./codebase-map.md); this
 file is for **state** and **tasks**.
 
+## Stock shadcn app, no custom theme — 2026-10-23
+
+Latest user correction supersedes earlier app themes: use **pure shadcn/ui**.
+Restored 31 existing components from the official New York v4 registry and the
+unaltered Zinc light/dark palette/radius scale. Deleted the 789-line Fieldwork
+stylesheet and removed custom auth/Card/Sidebar/navigation skins. Settings and
+focused sections now use standard Card/Tabs composition. No new dependency,
+server API, schema or data-model change; all 606 query/mutation/key source
+occurrences match the pre-correction commit.
+Editors/charts/terminals, roles, confirmations, service aliases and retained drafts
+remain available. Existing branding settings are preserved.
+
+Retained accessibility/behavior guards around the stock source: controlled-modal
+focus return, bounded long dialogs, inert collapsed navigation, announced form
+errors, labelled controls, reachable tab scrolling, touch targets, enlarged-text
+wrapping and reduced motion. Responsive fixes cover populated migration forms,
+notification events, SSO, templates and header tools at 200% text.
+
+Validation: production build/typecheck, strict workspace Biome (1,195 files), knip,
+119 web and 3,353 server tests pass (137 optional server tests skipped). Browser
+proof includes 392 route/theme and 408 responsive cases, 216 dialog cases, 104
+route/control captures, 28 focused controls, four migration sequences, 18 template
+steps, 16 deep-link/role cases, 12 error-boundary cases, 14 theme/accessibility and
+16 header cases. Fresh setup completes all five steps in a separate test DB.
+Independent design/accessibility findings are closed. Evidence and practical limits:
+[app workspace](../.ui-craft/app-workspace.md). Private receipts/backups:
+`.nixploy-data/verification/shadcn-defaults/`.
+
+The final `.next-stock-ship` build runs on localhost:3000 with the original all-role
+custom server, database, config directory and encryption keys. Private database
+and 62-file config backups precede the graceful switch; the previous build is
+retained for rollback. Restart hashes match all tables/settings and 62 files; after
+read-only checks only the periodic platform report’s `checkedAt` advances. No
+primary seed/reset/restore/migration runs. The public
+website remains on localhost:3373. PR 34 remains a draft. Known separate dependency
+security CI baseline is documented below; this correction suppresses no checks.
+
 ## Confirmed shadcn/ui standardization — 2026-10-23
 
 User clarification: the actual app must use **exclusively shadcn/ui components**.

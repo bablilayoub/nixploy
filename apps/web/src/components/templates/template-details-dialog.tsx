@@ -36,15 +36,12 @@ type TemplateDetails = inferRouterOutputs<AppRouter>["template"]["one"];
 
 function LinkChip({ href, label }: { href: string; label: string }) {
 	return (
-		<a
-			href={href}
-			target="_blank"
-			rel="noreferrer"
-			className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-		>
-			{label}
-			<ExternalLink className="size-3" />
-		</a>
+		<Button asChild variant="outline" size="sm">
+			<a href={href} target="_blank" rel="noreferrer">
+				{label}
+				<ExternalLink className="size-3" />
+			</a>
+		</Button>
 	);
 }
 
@@ -130,7 +127,7 @@ function DetailsBody({
 
 	return (
 		<>
-			<div className="flex items-start gap-3">
+			<div className="flex min-w-0 flex-col items-start gap-3 sm:flex-row">
 				<TemplateLogo name={template.name} logo={template.logo} className="size-10" />
 				<div className="flex min-w-0 flex-col gap-1">
 					<p className="text-sm text-muted-foreground">{template.description}</p>

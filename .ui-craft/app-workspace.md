@@ -1,11 +1,15 @@
-# Focused actual app — verification and feature map
+# Actual app — stock shadcn/ui
 
-The public Mobbin-reference website remains as approved. This pass rebuilds the
-actual platform with the existing shadcn/ui component system. The user confirmed
-“exclusively shadcn/ui components”; the quiet monochrome workspace remains, with
-all remaining native/custom controls standardized on those primitives. Editors,
-charts and terminals retain their specialized engines inside shadcn surfaces.
-No new dependency, backend API, migration, data model or encryption setting.
+The latest user instruction is authoritative: **pure shadcn, no custom theme**.
+The actual app uses its existing New York/Zinc configuration, official light/dark
+palette, radius scale, Card, Sidebar, Tabs, forms, menus and dialogs. Removed the
+789-line Fieldwork stylesheet and its custom surface, navigation and auth skins.
+This supersedes the previous app visual directions. The public Mobbin-reference
+website remains unchanged in this correction.
+
+No new dependency, server API, schema, migration or encryption change. Existing
+branding settings remain available and stored values are preserved. Specialized
+CodeMirror, Recharts and xterm engines remain inside shared shadcn surfaces.
 
 | Family | Preserved capabilities | Presentation |
 |---|---|---|
@@ -20,103 +24,86 @@ No new dependency, backend API, migration, data model or encryption setting.
 | Platform/integrations | Servers/SSH/certs/Git/registries/storage/template sources; routing/DNS/proxy/egress/health/maintenance/updates/AI/users/SSO/branding | Open form layouts; legacy hashes and contextual links reach the right task |
 | Public/auth/failure | Login, reset/forgot password, 2FA, setup, invitations, status, maintenance, docs API, forbidden/not-found/error/retry | Quiet authentication shell, light/dark/system preserved |
 
+## Stock components and compatibility
+
+Restored 31 existing primitives from the official New York v4 registry. Theme
+values come directly from the official Zinc `inlineColors` light/dark records:
+[registry](https://ui.shadcn.com/r/styles/new-york-v4/button.json),
+[Zinc colors](https://ui.shadcn.com/r/colors/zinc.json).
+Legacy semantic names alias stock tokens; they do not introduce another palette.
+
+Preserved necessary behavior around those defaults: controlled-dialog focus
+return, viewport-bounded confirmations, inert collapsed navigation, announced
+validation, labelled sliders, reachable scrolling tabs, coarse-pointer targets,
+mobile input text size, deterministic skeleton widths, sticky table headings,
+reduced motion, scroll locking and wrapping under enlarged text. These safeguards
+are not an alternate visual theme. Settings use default Card composition, section
+navigation uses default Tabs, and authentication retains the standard Card.
+
 ## Product previews
 
-Actual production fixture screens; these contain demo records, not user data.
+Actual production fixture screens; demo records only, never user data.
 
 [Light workspace](../docs/images/app-workspace-light.png) ·
 [Dark workspace](../docs/images/app-workspace-dark.png)
 
-## Evidence and limits
+## Verification and practical limits
 
-Private reproducible evidence lives under
-`.nixploy-data/verification/app-rebuild/` (ignored; includes fixture cookies).
-All ordinary visual checks use isolated fixture Postgres on 59580, never the live
-primary database on 54329. The first-run check uses a separate disposable setup
-DB. Source/build variants restore their original fixture fields in `finally`.
+Private reproducible evidence is ignored under
+`.nixploy-data/verification/shadcn-defaults/`. Fixture checks use Postgres on
+59580; first-run setup uses a separate database there. The primary database on
+54329 is never reset, seeded, restored or migrated by this UI correction.
 
-- 392 production route/theme captures: canonical routes, old aliases, service
-  kinds/tabs/sub-tabs/advanced categories, settings, focused hashes, monitoring
-  views and public/auth routes. No page/hydration errors, document overflow or
-  unnamed visible controls detected.
-- 408 responsive captures: 34 families × 320/390/768px × 100/200% text × 2 themes.
-- 216 dialog captures: 36 workflows ×3 viewports × 2 themes. Six initial startup
-  connection refusals were retried after readiness; all verified cases pass.
-- 18 template wizard steps, 12 isolated real error-boundary/reset/theme checks,
- 16 final controls/deep links/role-display cases and 56 source/build variants.
-- First-run welcome/owner/organization/review/complete flows and empty dashboard
-  completed in the dedicated setup DB. Test selectors were scoped after the
-  first harness matched both Projects headings; no application failure/reset.
-- Dirty navigation cancel/discard, filter empty/reset, offline/reconnect,
-  reduced motion and query loading/error/retry pass in both modes.
-- Independent design and a 11y reviews closed all actionable findings.74 mobile
-  section visits, all six draft families in both themes, keyboard/modal focus,
-  hashes, picker search and enlarged text were checked. WCAG contrast calculations
-  are a fallback, not a complete screen-reader certification.
-- Source inventory preserves all 582 tracked existing query/mutation/key bindings across
- 380 visual/support sources. The unused SectionLinks helper is replaced by
-  FocusSections. This is a preservation guard, not proof from a count alone.
-- Web production build/typecheck, strict workspace Biome, knip, 119 web tests and
- 3, 353 server tests pass (137 optional server tests skipped). A deterministic
- scan of the five new/shared compositions has no findings; independent rendered
- reviews cover the broader design.
-
-Production rollout must retain the original environment, config directory,
-existing DB, encryption keys and all-role custom server. Back up before switching,
-verify all 72 tables/240 rows and 62 config files, and keep the older build available.
-`platform-alerts.json` is a periodically refreshed health report; compare current
-state across restart rather than rolling that live report back to an older hash.
-
-## Live verification
-
-The final all-role custom server runs on 3000 from `.next-shadcn-release`; health and
-readiness return 200. Restart hashes match all 72 tables/240 rows and 62 files, plus
-the original Desktop environment/type files. The private custom-format database
-backup was verified with `pg_restore --list`; no primary restore/reset/seed or
-migration ran. Original keys, runtime environment and data/config paths remain.
-Existing-session checks pass in light and dark. Later browser reads change only
-`web_server_settings.metrics_config.webServer.updateLastCheckedAt`, confirmed
-field-by-field against backup COPY rows. All other user settings/data and config
-hashes remain. The earlier Mobbin build is retained for rollback.
-
-## Confirmed shadcn/ui component contract — 2026-10-23
-
-The user clarified that “fully ChatGPT” meant **exclusively shadcn/ui components**.
-The actual app now has no native button/input/select/textarea/table/disclosure/label
-markup outside `components/ui`. All consumers use the existing primitives. Added
-shadcn Radio Group and Collapsible source on the already-installed Radix dependency;
-no package or lockfile changes. Specialized CodeMirror, Recharts and xterm engines
-remain inside the shared UI surfaces to preserve editing, charts and terminals.
-
-Builder choices now use a labelled radio group; migration selectors retain cascading
-selection, the empty target's auto-match semantics, disabled states and stale-plan
-revision guards. GitOps uses Checkbox. File and color inputs use Input; templates,
-service actions, Docker links and filters use Button; both remaining data tables use
-Table. Disclosures have visible chevrons and retain local drafts while closed content
-stays hidden. The migration table has one bounded scrolling container so its headings
-stay visible during review.
-
-Correction verification (separate from the broader rebuild evidence above):
-
-- 104 production route/control captures across desktop/mobile and both themes;
-  no hydration/page errors, unnamed visible controls or document overflow detected.
-- Four migration sequences at 1440/320px in both themes, including 200% text,
-  source project/environment cascade, target auto-match, sticky headers and late-plan
-  discard. Browser-only inspect/plan responses; no external import or apply request.
-- 28 focused controls checks: tag/branding color fields, GitOps checkbox and local
-  file reading, zip/env/branding file-picker wiring, inherited-variable disclosure,
-  Copilot suggestions. Copilot and inherited values use browser-only responses;
-  no model request, branding upload, import, deploy or settings save is submitted.
-- 18 template wizard steps and 12 real boundary/theme/reset cases pass.
-- The 582 tracked API bindings are unchanged across 382 visual/support sources.
-  Typecheck, production build, strict Biome (1,196 files), knip, 119 web tests and
+- 392 production route/theme captures cover canonical and legacy service tabs,
+  settings, focused sections, monitoring and public/auth routes. No page/hydration
+  errors, document overflow or unnamed visible controls detected.
+- 408 responsive captures cover 34 families at 320/390/768px, 100/200% text and
+  both themes. Additional populated migration and notification forms exposed
+  narrow-width issues; their grid/text wrapping was corrected and retested.
+- 216 dialog cases cover 36 workflows at desktop/mobile widths in both themes,
+  including focus containment, Escape and focus return. The final production
+  rerun includes the notification correction.
+- 104 route/control captures check builder keyboard operation and draft retention,
+  disclosures, file/color inputs, command palette and template details. Separate
+  28-control, four migration-sequence, 18 template-step, 16 deep-link/role-display,
+  12 real error-boundary and 14 accessibility/theme checks cover specific behavior.
+- 16 header cases cover four widths, enlarged text and both themes. A visual check
+  caught overlapping header tools that document-width checks alone did not; tools
+  now wrap and the existing ResizeObserver updates sticky offsets.
+- Dirty navigation cancel/discard, filter empty/reset, offline/reconnect, reduced
+  motion and query loading/error/retry recover in both modes. All five first-run
+  steps complete in the separate setup database; empty dashboards render in both
+  modes. Browser-only mocked responses exercise import planning, Copilot suggestions,
+  inherited variables and owner-only confirmations without external calls or saves.
+- All 606 query/mutation/key source occurrences match the pre-correction commit
+  (204 query options, 230 mutation options, 172 keys). This is a preservation
+  guard, not proof from a count alone.
+- Web typecheck/production build, strict workspace Biome, knip, 119 web tests and
   3,353 server tests pass (137 optional server tests skipped). Independent design
-  and accessibility review findings are resolved and rendered checks cover the fixes.
+  and accessibility reviews closed their actionable findings. Browser coverage is
+  not a full assistive-technology certification or a live deployment of each service.
 
-Private receipts/backups: `.nixploy-data/verification/shadcn-components/`.
-The primary restart matches all 72 tables/240 rows, 62 config files and original
-settings/environment files. Existing-session verification passes (12 route/control
-and two saved-service theme checks). Subsequent reads advance only the automatic
-`webServer.updateLastCheckedAt` field. Original encryption keys/config paths and the
-all-role custom server remain. The previous `.next-app-ship` build is retained;
-there was no primary seed/reset/restore/migration. The public website stays on 3373.
+One hydration warning occurred while an earlier test changed root font size before
+hydration; it did not recur in 40 follow-up visits or the later route/reflow checks.
+No application hydration suppression or speculative behavior patch was added.
+
+## Live data preservation
+
+The final production build is `.next-stock-ship`, served by the original all-role
+custom server on localhost:3000. The existing runtime environment, config path,
+database URL and encryption keys are retained. A private custom-format database
+backup is validated with `pg_restore --list`; config files are backed up before
+the graceful switch. Restart comparisons cover 72 tables/240 rows, all 62 persistent
+config files and the original Desktop environment/type files. Post-start browser
+verification uses an existing session and submits no settings or deployment changes.
+The previous `.next-shadcn-release` build remains available for rollback. The public
+website stays on localhost:3373. Exact rollout results are recorded in private
+`launcher.json`, snapshots and the field-by-field settings comparison.
+
+Final restart hashes matched every table, all 62 config files and original settings
+files. After the read-only browser checks, all 72 table hashes and user settings
+still match; the only config change is the periodic platform health report's
+`checkedAt` timestamp. Its active alerts and cooldowns are unchanged. Existing-session
+verification passes 12 route/control and two saved-application checks in both modes.
+Health/readiness return 200, the public website returns 200 and test listeners are
+stopped. No user's stored setting or data was changed by the UI work.

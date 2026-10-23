@@ -50,12 +50,12 @@ export function AdvancedTab() {
 			value={tab}
 			onValueChange={selectTab}
 			orientation="vertical"
-			className="fieldwork-category-workspace w-full"
+			className="flex-col lg:grid lg:grid-cols-[14rem_minmax(0,1fr)] lg:items-start lg:gap-6 w-full"
 		>
 			<div className="grid gap-2 text-sm font-medium lg:hidden">
 				Advanced section
 				<Select value={tab} onValueChange={selectTab}>
-					<SelectTrigger aria-label="Advanced section" className="w-full min-w-40">
+					<SelectTrigger aria-label="Advanced section" className="w-full min-w-0">
 						<SelectValue />
 					</SelectTrigger>
 					<SelectContent>
@@ -70,7 +70,10 @@ export function AdvancedTab() {
 					{ADVANCED_CATEGORIES.find((category) => category.value === tab)?.description}
 				</span>
 			</div>
-			<TabsList aria-label="Advanced configuration categories" className="fieldwork-category-list">
+			<TabsList
+				aria-label="Advanced configuration categories"
+				className="hidden lg:flex lg:w-full lg:items-stretch"
+			>
 				{ADVANCED_CATEGORIES.map((category) => (
 					<TabsTrigger key={category.value} value={category.value}>
 						<span className="min-w-0">

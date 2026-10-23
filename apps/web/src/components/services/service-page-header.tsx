@@ -193,7 +193,7 @@ export function ServicePageHeader({
 
 	return (
 		<PageHeader
-			className="fieldwork-service-header"
+			className=""
 			breadcrumb={
 				<Breadcrumb>
 					<BreadcrumbList>

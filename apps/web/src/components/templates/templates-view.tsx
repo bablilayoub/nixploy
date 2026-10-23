@@ -43,7 +43,7 @@ export type TemplateSummary = inferRouterOutputs<AppRouter>["template"]["all"][n
  * templates, so a three-column grid left almost every section with one
  * stranded card on a row of its own.
  */
-const GRID_CLASS = "grid gap-4 sm:grid-cols-2 2xl:grid-cols-3";
+const GRID_CLASS = "grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-3";
 
 /** A page of cards, and a page of rows. Both land just under one screenful. */
 const GRID_PAGE_SIZE = 24;
@@ -234,12 +234,12 @@ export function TemplatesWorkbench({
 				title="Templates"
 				description="One-click deploys for popular self-hosted apps."
 				actions={
-					<div className="flex items-center gap-2">
+					<div className="flex min-w-0 flex-wrap items-center gap-2">
 						<Select
 							value={filters.sort}
 							onValueChange={(value) => filters.set({ sort: value as TemplateSort })}
 						>
-							<SelectTrigger className="h-9 w-44" aria-label="Sort templates">
+							<SelectTrigger className="h-9 w-full sm:w-44" aria-label="Sort templates">
 								<SelectValue />
 							</SelectTrigger>
 							<SelectContent align="end">

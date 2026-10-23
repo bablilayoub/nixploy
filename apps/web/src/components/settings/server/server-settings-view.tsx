@@ -179,7 +179,7 @@ function DashboardDomainFields({
 				Encrypt email below, then save.
 			</p>
 			<div className="flex max-w-xl flex-wrap items-end gap-2">
-				<div className="grid min-w-64 flex-1 gap-2">
+				<div className="grid min-w-0 flex-1 gap-2">
 					<Label htmlFor="dashboard-domain">Domain</Label>
 					<Input
 						id="dashboard-domain"
@@ -462,7 +462,7 @@ export function ServerSettingsView() {
 										onSave={(host) => updateMutation.mutate({ host })}
 									/>
 									<div className="flex max-w-xl flex-wrap items-end gap-2">
-										<div className="grid min-w-64 flex-1 gap-2">
+										<div className="grid min-w-0 flex-1 gap-2">
 											<Label htmlFor="letsencrypt-email">Let&apos;s Encrypt email</Label>
 											<Input
 												id="letsencrypt-email"
@@ -793,7 +793,7 @@ export function ServerSettingsView() {
 						</SettingsSection>
 					</SettingsStack>
 				</div>
-				<div id="platform-administration" tabIndex={-1} className="fieldwork-form-group">
+				<div id="platform-administration" tabIndex={-1} className="space-y-6 scroll-mt-24 min-w-0">
 					<UpdatesCard />
 					<AiSettingsCard />
 					<UsersCard />

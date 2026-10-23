@@ -26,7 +26,7 @@ export function PageHeader({
 		typeof description === "string" && description.length > 0 ? description : undefined;
 
 	return (
-		<header className={cn("fieldwork-page-header mb-2 flex min-w-0 flex-col gap-3", className)}>
+		<header className={cn("mb-2 flex min-w-0 flex-col gap-3", className)}>
 			{breadcrumb && <div className="text-xs text-muted-foreground">{breadcrumb}</div>}
 			<div
 				className={cn(

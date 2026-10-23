@@ -52,7 +52,7 @@ const TRIGGER_LABELS: Record<string, string> = {
 function StatusBadge({ status, error }: { status: BackupRunRow["status"]; error: string | null }) {
 	if (status === "running") {
 		return (
-			<Badge variant="warning">
+			<Badge variant="outline">
 				<Loader2 className="animate-spin" />
 				Running
 			</Badge>
@@ -60,7 +60,7 @@ function StatusBadge({ status, error }: { status: BackupRunRow["status"]; error:
 	}
 	if (status === "success") {
 		return (
-			<Badge variant="success">
+			<Badge variant="default">
 				<CheckCircle2 />
 				Succeeded
 			</Badge>

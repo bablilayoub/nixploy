@@ -3,7 +3,6 @@
 import * as React from "react";
 import type { TooltipValueType } from "recharts";
 import * as RechartsPrimitive from "recharts";
-
 import { cn } from "@/lib/utils";
 
 // Format: { THEME_NAME: CSS_SELECTOR }
@@ -63,7 +62,7 @@ function ChartContainer({
 				data-slot="chart"
 				data-chart={chartId}
 				className={cn(
-					"flex min-w-0 aspect-video justify-center text-[11px] tabular-nums [&_.recharts-cartesian-axis-tick-value]:fill-chart-axis [&_.recharts-cartesian-axis-tick-value]:font-mono [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-border/50 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-border [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-hidden [&_.recharts-polar-grid_[stroke='#ccc']]:stroke-border [&_.recharts-radial-bar-background-sector]:fill-muted [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-muted [&_.recharts-reference-line_[stroke='#ccc']]:stroke-border [&_.recharts-sector]:outline-hidden [&_.recharts-sector[stroke='#fff']]:stroke-transparent",
+					"flex aspect-video justify-center text-xs [&_.recharts-cartesian-axis-tick_text]:fill-muted-foreground [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-border/50 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-border [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-hidden [&_.recharts-polar-grid_[stroke='#ccc']]:stroke-border [&_.recharts-radial-bar-background-sector]:fill-muted [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-muted [&_.recharts-reference-line_[stroke='#ccc']]:stroke-border [&_.recharts-sector]:outline-hidden [&_.recharts-sector[stroke='#fff']]:stroke-transparent [&_.recharts-surface]:outline-hidden",
 					className,
 				)}
 				{...props}
@@ -86,8 +85,7 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
 
 	return (
 		<style
-			// Theme CSS variables for chart series — values come from ChartConfig only.
-			// biome-ignore lint/security/noDangerouslySetInnerHtml: required for chart CSS variable injection
+			// biome-ignore lint/security/noDangerouslySetInnerHtml: stock shadcn chart CSS is generated from local ChartConfig values.
 			dangerouslySetInnerHTML={{
 				__html: Object.entries(THEMES)
 					.map(
@@ -170,7 +168,7 @@ function ChartTooltipContent({
 	return (
 		<div
 			className={cn(
-				"grid min-w-[8rem] items-start gap-1.5 rounded-lg border border-border bg-popover px-3 py-2 text-xs shadow-[var(--overlay-shadow)]",
+				"grid min-w-[8rem] items-start gap-1.5 rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs shadow-xl",
 				className,
 			)}
 		>
@@ -283,7 +281,7 @@ function ChartLegendContent({
 
 					return (
 						<div
-							key={String(item.value ?? item.dataKey ?? index)}
+							key={String(item.dataKey ?? item.value ?? index)}
 							className={cn(
 								"flex items-center gap-1.5 [&>svg]:h-3 [&>svg]:w-3 [&>svg]:text-muted-foreground",
 							)}

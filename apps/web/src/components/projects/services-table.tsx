@@ -119,7 +119,7 @@ export function ServicesTable({
 		);
 		if (!deployment) return null;
 		return (
-			<Badge variant="info" className="gap-1.5 font-normal">
+			<Badge variant="secondary" className="gap-1.5 font-normal">
 				<Loader2 className="size-3 animate-spin" />
 				{deployment.status === "queued"
 					? `Queued${deployment.queuePosition ? ` (#${deployment.queuePosition})` : ""}`

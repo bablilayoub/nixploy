@@ -32,13 +32,13 @@ export function GeneralTab() {
 				},
 			]}
 		>
-			<div id="application-source" tabIndex={-1} className="fieldwork-form-group">
+			<div id="application-source" tabIndex={-1} className="space-y-6 scroll-mt-24 min-w-0">
 				<SourceConfig application={application} />
 			</div>
-			<div id="application-build" tabIndex={-1} className="fieldwork-form-group">
+			<div id="application-build" tabIndex={-1} className="space-y-6 scroll-mt-24 min-w-0">
 				{buildsFromSource ? <BuildTypeConfig application={application} /> : <BuildTypeInfoCard />}
 			</div>
-			<div id="application-resources" tabIndex={-1} className="fieldwork-form-group">
+			<div id="application-resources" tabIndex={-1} className="space-y-6 scroll-mt-24 min-w-0">
 				<ResourcesForm application={application} />
 			</div>
 		</FocusSections>

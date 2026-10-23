@@ -313,7 +313,7 @@ export function MigrationsView() {
 						key={step.title}
 						aria-current={step.current ? "step" : undefined}
 						className={cn(
-							"flex items-start gap-3 rounded-lg px-4 py-3",
+							"flex min-w-0 items-start gap-3 rounded-lg px-4 py-3",
 							step.current && "bg-secondary",
 						)}
 					>
@@ -323,7 +323,7 @@ export function MigrationsView() {
 						>
 							{step.complete ? "✓" : index + 1}
 						</span>
-						<span>
+						<span className="min-w-0 [overflow-wrap:anywhere]">
 							<span className="block text-sm font-medium">{step.title}</span>
 							<span className="mt-1 block text-xs text-muted-foreground">{step.detail}</span>
 						</span>
@@ -436,8 +436,8 @@ export function MigrationsView() {
 								</Button>
 							</fieldset>
 							{mode === "live" ? (
-								<div className="grid gap-4 sm:grid-cols-2">
-									<div className="space-y-2">
+								<div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
+									<div className="min-w-0 space-y-2">
 										<Label htmlFor="migration-url">Source panel URL</Label>
 										<Input
 											id="migration-url"
@@ -455,7 +455,7 @@ export function MigrationsView() {
 											Private addresses require the instance's private-egress setting.
 										</p>
 									</div>
-									<div className="space-y-2">
+									<div className="min-w-0 space-y-2">
 										<Label htmlFor="migration-key">Source API key</Label>
 										<Input
 											id="migration-key"
@@ -474,7 +474,7 @@ export function MigrationsView() {
 									</div>
 								</div>
 							) : (
-								<div className="space-y-2">
+								<div className="min-w-0 space-y-2">
 									<Label htmlFor="migration-file">PostgreSQL dump</Label>
 									<Input
 										id="migration-file"
@@ -552,8 +552,8 @@ export function MigrationsView() {
 							</p>
 						) : (
 							<>
-								<div className="grid gap-4 sm:grid-cols-2">
-									<div className="space-y-2">
+								<div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
+									<div className="min-w-0 space-y-2">
 										<Label htmlFor="migration-project">Source project</Label>
 										<Select
 											value={sourceProjectId}
@@ -575,7 +575,7 @@ export function MigrationsView() {
 											</SelectContent>
 										</Select>
 									</div>
-									<div className="space-y-2">
+									<div className="min-w-0 space-y-2">
 										<Label htmlFor="migration-environment">Source environment</Label>
 										<Select
 											value={sourceEnvironment}
@@ -598,7 +598,7 @@ export function MigrationsView() {
 									</div>
 								</div>
 								{currentEnvironment && (
-									<section className="space-y-2">
+									<section className="min-w-0 space-y-2">
 										<div className="flex flex-wrap items-center justify-between gap-3">
 											<h3 className="text-sm font-medium">
 												Services{" "}
@@ -672,8 +672,8 @@ export function MigrationsView() {
 										onRetry={() => void projects.refetch()}
 									/>
 								) : (
-									<div className="grid gap-4 sm:grid-cols-2">
-										<div className="space-y-2">
+									<div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
+										<div className="min-w-0 space-y-2">
 											<Label htmlFor="migration-target">Target project</Label>
 											<Select
 												value={projectId || MATCH_SOURCE_PROJECT}
@@ -701,7 +701,7 @@ export function MigrationsView() {
 												Only projects visible to your organization and teams are listed.
 											</p>
 										</div>
-										<div className="space-y-2">
+										<div className="min-w-0 space-y-2">
 											<Label htmlFor="migration-target-environment">Target environment name</Label>
 											<Input
 												id="migration-target-environment"

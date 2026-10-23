@@ -8,7 +8,7 @@ type ServiceStatus = "idle" | "running" | "done" | "error" | null | undefined;
 type ServiceStatusStyle = {
 	label: string;
 	status: StatusDotStatus;
-	variant: "secondary" | "success" | "destructive";
+	variant: "secondary" | "default" | "destructive";
 };
 
 /** Also the fallback for a status the panel does not know yet. */
@@ -20,9 +20,9 @@ const SERVICE_STATUS_IDLE: ServiceStatusStyle = {
 
 const serviceStatusConfig: Record<string, ServiceStatusStyle> = {
 	idle: SERVICE_STATUS_IDLE,
-	running: { label: "Running", status: "success", variant: "success" },
+	running: { label: "Running", status: "success", variant: "default" },
 	// Legacy post-deploy status — treat as healthy/running in the UI.
-	done: { label: "Running", status: "success", variant: "success" },
+	done: { label: "Running", status: "success", variant: "default" },
 	error: { label: "Error", status: "error", variant: "destructive" },
 };
 
@@ -31,7 +31,7 @@ export function ServiceStatusBadge({ status }: { status: ServiceStatus }) {
 
 	return (
 		<Badge variant={config.variant} className="gap-1.5 font-medium">
-			<StatusDot status={config.status} className="ring-0 shadow-none" />
+			<StatusDot status={config.status} className="bg-current ring-0 shadow-none" />
 			{config.label}
 		</Badge>
 	);
@@ -39,7 +39,7 @@ export function ServiceStatusBadge({ status }: { status: ServiceStatus }) {
 
 type DeploymentStatus = "queued" | "running" | "done" | "error" | "cancelled" | null | undefined;
 
-type BadgeVariant = "secondary" | "success" | "destructive" | "info";
+type BadgeVariant = "secondary" | "default" | "destructive";
 
 /**
  * Only the badge treatment lives here — the words come from
@@ -50,8 +50,8 @@ type BadgeVariant = "secondary" | "success" | "destructive" | "info";
 const deploymentBadgeVariant: Record<string, BadgeVariant> = {
 	queued: "secondary",
 	// Neutral tones and explicit labels keep the same status vocabulary as the dashboard.
-	running: "info",
-	done: "success",
+	running: "secondary",
+	done: "default",
 	error: "destructive",
 	cancelled: "secondary",
 };
@@ -70,11 +70,11 @@ export function DeploymentStatusBadge({
 	const label = key === "queued" && queuePosition ? `${base} (#${queuePosition})` : base;
 
 	return (
-		<Badge variant={deploymentBadgeVariant[key] ?? "success"} className="gap-1.5 font-medium">
+		<Badge variant={deploymentBadgeVariant[key] ?? "default"} className="gap-1.5 font-medium">
 			{/* Only work in flight pulses; a finished deployment is a static fact. */}
 			<StatusDot
 				status={dot}
-				className={cn("ring-0 shadow-none", key === "running" && "animate-pulse")}
+				className={cn("bg-current ring-0 shadow-none", key === "running" && "animate-pulse")}
 			/>
 			{label}
 		</Badge>

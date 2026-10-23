@@ -459,10 +459,10 @@ export function NotificationDialog({
 						event.preventDefault();
 						submit();
 					}}
-					className="grid gap-5"
+					className="grid min-w-0 grid-cols-1 gap-5"
 				>
 					<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-						<div className="grid gap-2">
+						<div className="grid min-w-0 grid-cols-1 gap-2">
 							<Label htmlFor="notification-name">
 								Name <span className="text-xs font-normal text-muted-foreground">(required)</span>
 							</Label>
@@ -473,7 +473,7 @@ export function NotificationDialog({
 								onChange={(e) => setName(e.target.value)}
 							/>
 						</div>
-						<div className="grid gap-2">
+						<div className="grid min-w-0 grid-cols-1 gap-2">
 							<Label>Type</Label>
 							<Select
 								value={type}
@@ -483,7 +483,7 @@ export function NotificationDialog({
 									setValues({});
 								}}
 							>
-								<SelectTrigger aria-label="Type">
+								<SelectTrigger aria-label="Type" className="w-full">
 									<SelectValue />
 								</SelectTrigger>
 								<SelectContent>
@@ -505,7 +505,7 @@ export function NotificationDialog({
 					)}
 
 					{fields.map((field) => (
-						<div key={field.key} className="grid gap-2">
+						<div key={field.key} className="grid min-w-0 grid-cols-1 gap-2">
 							<Label htmlFor={`notification-${field.key}`}>
 								{field.label}
 								{field.required && !keepStoredConfig && (
@@ -530,11 +530,11 @@ export function NotificationDialog({
 
 					<Separator />
 
-					<div className="grid gap-2">
+					<div className="grid min-w-0 grid-cols-1 gap-2">
 						<Label>Notify on</Label>
 						<div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
 							{EVENT_TOGGLES.map((eventToggle) => (
-								<div key={eventToggle.key} className="flex items-center gap-2">
+								<div key={eventToggle.key} className="flex min-w-0 items-center gap-2">
 									<Checkbox
 										id={`event-${eventToggle.key}`}
 										checked={Boolean(events[eventToggle.key])}
@@ -545,7 +545,10 @@ export function NotificationDialog({
 											}))
 										}
 									/>
-									<Label htmlFor={`event-${eventToggle.key}`} className="font-normal">
+									<Label
+										htmlFor={`event-${eventToggle.key}`}
+										className="block break-words font-normal"
+									>
 										{eventToggle.label}
 									</Label>
 								</div>

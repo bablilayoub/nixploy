@@ -29,7 +29,7 @@ export function TemplateCard({
 		Boolean(link.href),
 	);
 	return (
-		<article className="group relative flex h-full min-w-0 flex-col rounded-xl border bg-card transition-colors hover:border-input">
+		<article className="group relative flex h-full min-w-0 flex-col [overflow-wrap:anywhere] rounded-xl border bg-card transition-colors hover:border-input">
 			<header className="flex items-start gap-3 px-5 pt-5">
 				<span className="flex size-11 shrink-0 items-center justify-center rounded-lg border bg-panel-inset">
 					<TemplateLogo name={template.name} logo={template.logo} className="size-7" />
@@ -42,7 +42,7 @@ export function TemplateCard({
 							type="button"
 							onClick={onInspect}
 							aria-label={`${template.name} details`}
-							className="fieldwork-template-title h-auto min-h-0 px-0 py-0 text-base font-medium inline-flex max-w-full items-center text-start underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+							className="h-auto min-h-0 px-0 py-0 text-base font-medium inline-flex max-w-full items-center text-start underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
 						>
 							<span className="truncate">{template.name}</span>
 						</Button>
@@ -71,7 +71,7 @@ export function TemplateCard({
 								event.stopPropagation();
 								onTag(tag);
 							}}
-							className="fieldwork-template-tag h-auto min-h-7 relative z-10 rounded-md bg-secondary px-2 py-1 text-xs text-muted-foreground hover:border-input hover:text-foreground"
+							className="h-auto min-h-7 relative z-10 rounded-md bg-secondary px-2 py-1 text-xs text-muted-foreground hover:border-input hover:text-foreground"
 						>
 							{tag}
 						</Button>
@@ -95,20 +95,21 @@ export function TemplateCard({
 					{template.source && <span className="truncate">{template.source.name}</span>}
 				</div>
 			</div>
-			<footer className="flex items-center justify-between gap-2 rounded-b-xl px-4 pb-4 pt-1">
-				<div className="flex items-center gap-1">
+			<footer className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-b-xl px-4 pb-4 pt-1">
+				<div className="flex min-w-0 flex-wrap items-center gap-1">
 					{links.map((link) => (
-						<a
-							key={link.label}
-							href={link.href}
-							target="_blank"
-							rel="noreferrer"
-							aria-label={`${template.name}: ${link.label}`}
-							onClick={(event) => event.stopPropagation()}
-							className="fieldwork-template-link relative z-10 inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-						>
-							<link.icon aria-hidden="true" className="size-3.5" />
-						</a>
+						<Button key={link.label} asChild variant="ghost" size="icon-sm">
+							<a
+								href={link.href}
+								target="_blank"
+								rel="noreferrer"
+								aria-label={`${template.name}: ${link.label}`}
+								onClick={(event) => event.stopPropagation()}
+								className="relative z-10 text-muted-foreground"
+							>
+								<link.icon aria-hidden="true" className="size-3.5" />
+							</a>
+						</Button>
 					))}
 				</div>
 				<Button

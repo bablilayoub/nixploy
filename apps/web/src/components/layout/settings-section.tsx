@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
-/** An open form section: headings explain the task; dividers separate related forms. */
+/** Shared settings composition using the standard shadcn Card. */
 export function SettingsSection({
 	title,
 	description,
@@ -39,24 +39,24 @@ export function SettingsSection({
 			data-danger={danger}
 			tabIndex={id ? -1 : undefined}
 			className={cn(
-				"scroll-mt-24 rounded-none border-0 border-b bg-transparent py-7 shadow-none",
-				bare && "border-0 py-0",
-				danger && "rounded-xl border border-input px-5",
+				"scroll-mt-24 min-w-0",
+				bare && "border-0 p-0 shadow-none",
+				danger && "border-destructive/50",
 				className,
 			)}
 		>
-			<CardHeader className="px-0">
+			<CardHeader>
 				<CardTitle as="h2">{title}</CardTitle>
 				{description && <CardDescription>{description}</CardDescription>}
 			</CardHeader>
 			{children && (
-				<CardContent className="px-0">
+				<CardContent>
 					<div className={cn("flex min-w-0 flex-col gap-4", !wide && !bare && "max-w-3xl")}>
 						{children}
 					</div>
 				</CardContent>
 			)}
-			{actions && <CardFooter className="px-0">{actions}</CardFooter>}
+			{actions && <CardFooter>{actions}</CardFooter>}
 		</Card>
 	);
 }
@@ -67,9 +67,5 @@ export function SettingsStack({
 	children: ReactNode;
 	className?: string;
 }) {
-	return (
-		<div className={cn("settings-stack flex w-full min-w-0 flex-col gap-0", className)}>
-			{children}
-		</div>
-	);
+	return <div className={cn("flex w-full min-w-0 flex-col gap-6", className)}>{children}</div>;
 }

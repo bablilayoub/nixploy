@@ -32,7 +32,7 @@ export function AppSidebar() {
 	const close = () => setOpenMobile(false);
 	return (
 		<Sidebar variant="sidebar" collapsible="offcanvas">
-			<SidebarHeader className="gap-4 px-3 py-4">
+			<SidebarHeader className="gap-4">
 				<Link
 					href="/dashboard"
 					aria-label={branding.productName}
@@ -43,8 +43,8 @@ export function AppSidebar() {
 				</Link>
 				<OrgSwitcher className="w-full max-w-full justify-between" />
 			</SidebarHeader>
-			<SidebarSeparator className="bg-transparent" />
-			<SidebarContent className="px-1 py-1">
+			<SidebarSeparator />
+			<SidebarContent>
 				<nav id="workspace-navigation" aria-label="Workspace navigation">
 					{sidebarNavGroups.map((group) => (
 						<SidebarGroup key={group.title}>
@@ -60,7 +60,6 @@ export function AppSidebar() {
 												<SidebarMenuButton
 													asChild
 													isActive={isSidebarNavActive(pathname, item.url)}
-													className="h-auto min-h-10 rounded-lg px-3 py-2.5"
 												>
 													<Link
 														href={item.url}
@@ -81,10 +80,10 @@ export function AppSidebar() {
 					))}
 				</nav>
 			</SidebarContent>
-			<SidebarFooter className="p-3">
+			<SidebarFooter>
 				<SidebarMenu>
 					<SidebarMenuItem>
-						<SidebarMenuButton asChild className="h-auto min-h-10 rounded-lg px-3 py-2.5">
+						<SidebarMenuButton asChild>
 							<a
 								href={branding.docsUrl ?? "https://nixploy.com/docs"}
 								target="_blank"
@@ -98,7 +97,7 @@ export function AppSidebar() {
 					</SidebarMenuItem>
 					{branding.supportUrl && (
 						<SidebarMenuItem>
-							<SidebarMenuButton asChild className="h-auto min-h-10 rounded-lg px-3 py-2.5">
+							<SidebarMenuButton asChild>
 								<a href={branding.supportUrl} target="_blank" rel="noreferrer">
 									<LifeBuoy aria-hidden="true" />
 									<span>Support</span>

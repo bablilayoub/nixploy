@@ -225,7 +225,7 @@ export function ActivityTray() {
 			className="fixed bottom-4 end-4 z-40 w-[min(24rem,calc(100vw-2rem))]"
 		>
 			{expanded ? (
-				<div className="overflow-hidden rounded-xl border bg-popover shadow-[var(--overlay-shadow)]">
+				<div className="overflow-hidden rounded-xl border bg-popover shadow-lg">
 					<div className="flex items-center justify-between gap-2 border-b bg-panel-inset px-4 py-3">
 						<p className="text-sm font-medium">
 							Activity

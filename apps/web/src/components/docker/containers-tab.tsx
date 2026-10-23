@@ -84,7 +84,7 @@ const searchContainer = (row: ContainerRow) => [row.Names, row.Image, row.State,
 
 function StateBadge({ state }: { state: string }) {
 	const variant =
-		state === "running" ? "success" : state === "restarting" ? "warning" : "secondary";
+		state === "running" ? "default" : state === "restarting" ? "outline" : "secondary";
 	return (
 		<Badge variant={variant} className="capitalize">
 			{state}

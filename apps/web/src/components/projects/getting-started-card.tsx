@@ -145,7 +145,7 @@ export function GettingStartedCard({ firstProjectId }: { firstProjectId?: string
 							) : (
 								<Circle className="size-4 shrink-0 text-muted-foreground/50" aria-hidden />
 							)}
-							<div className="flex min-w-40 flex-1 flex-col gap-1">
+							<div className="flex min-w-0 flex-1 flex-col gap-1">
 								<span
 									className={cn(
 										"text-sm leading-relaxed",

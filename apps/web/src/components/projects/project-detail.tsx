@@ -400,7 +400,7 @@ export function ProjectDetail({
 
 	const serviceFilters = (
 		<>
-			<div className="relative min-w-40 flex-1 lg:max-w-80">
+			<div className="relative min-w-0 flex-1 lg:max-w-80">
 				<Search
 					aria-hidden
 					className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"

@@ -30,29 +30,29 @@ export default function OrganizationSettingsPage() {
 					{ id: "organization-danger", label: "Delete organization" },
 				]}
 			>
-				<section id="organization-details" tabIndex={-1} className="fieldwork-form-group">
+				<section id="organization-details" tabIndex={-1} className="space-y-6 scroll-mt-24 min-w-0">
 					<SettingsStack>
 						<OrganizationCard />
 					</SettingsStack>
 				</section>
-				<section id="organization-access" tabIndex={-1} className="fieldwork-form-group">
+				<section id="organization-access" tabIndex={-1} className="space-y-6 scroll-mt-24 min-w-0">
 					<SettingsStack>
 						<MembersCard />
 						<TeamsCard />
 						<SecurityCard />
 					</SettingsStack>
 				</section>
-				<section id="organization-limits" className="fieldwork-form-group">
+				<section id="organization-limits" className="space-y-6 scroll-mt-24 min-w-0">
 					<SettingsStack>
 						<QuotasCard />
 					</SettingsStack>
 				</section>
-				<section id="organization-variables" className="fieldwork-form-group">
+				<section id="organization-variables" className="space-y-6 scroll-mt-24 min-w-0">
 					<SettingsStack>
 						<SharedVariablesCard />
 					</SettingsStack>
 				</section>
-				<section id="organization-danger" tabIndex={-1} className="fieldwork-form-group">
+				<section id="organization-danger" tabIndex={-1} className="space-y-6 scroll-mt-24 min-w-0">
 					<SettingsStack>
 						<DangerZoneCard />
 					</SettingsStack>

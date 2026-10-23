@@ -123,7 +123,7 @@ export function RuntimeLogHistory({
 				<div className="grid gap-2 text-xs text-muted-foreground">
 					<span>Log level</span>
 					<Select value={level} onValueChange={setLevel}>
-						<SelectTrigger aria-label="Log level" className="w-full min-w-40">
+						<SelectTrigger aria-label="Log level" className="w-full min-w-0">
 							<SelectValue />
 						</SelectTrigger>
 						<SelectContent>
@@ -148,7 +148,7 @@ export function RuntimeLogHistory({
 								);
 							}}
 						>
-							<SelectTrigger aria-label="Log time range" className="w-full min-w-40">
+							<SelectTrigger aria-label="Log time range" className="w-full min-w-0">
 								<SelectValue />
 							</SelectTrigger>
 							<SelectContent>
