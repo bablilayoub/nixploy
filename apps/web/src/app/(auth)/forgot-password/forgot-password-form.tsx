@@ -7,8 +7,9 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
 	Form,
 	FormControl,
@@ -75,14 +76,14 @@ export function ForgotPasswordForm() {
 		return (
 			<Card>
 				<CardHeader className="text-center">
-					<CardTitle as="h1" className="text-xl">
+					<CardTitle className="flex items-center justify-center gap-2 text-xl">
 						<MailCheck className="size-5" />
 						Check your inbox
 					</CardTitle>
-					<div className="text-sm text-muted-foreground">
+					<CardDescription>
 						If an account exists for that address, a reset link is on its way. It expires in one
 						hour.
-					</div>
+					</CardDescription>
 				</CardHeader>
 				<CardContent>
 					<Button asChild variant="outline" className="w-full">
@@ -96,20 +97,15 @@ export function ForgotPasswordForm() {
 	return (
 		<Card>
 			<CardHeader className="text-center">
-				<CardTitle as="h1" className="text-xl">
-					Forgot your password?
-				</CardTitle>
-				<div className="text-sm text-muted-foreground">
+				<CardTitle className="text-xl">Forgot your password?</CardTitle>
+				<CardDescription>
 					We will email you a link to choose a new one. Your instance must have an email
 					notification channel configured.
-				</div>
+				</CardDescription>
 			</CardHeader>
 			<CardContent>
 				<Form {...form}>
-					<form
-						onSubmit={form.handleSubmit(onSubmit)}
-						className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4"
-					>
+					<form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4">
 						{formError && (
 							<div className="flex items-start gap-2 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
 								<AlertCircle className="mt-0.5 size-4 shrink-0" />

@@ -35,7 +35,7 @@ export default function NotFound() {
 	return (
 		<PageFrame
 			eyebrow="404"
-			title="A route with no destination."
+			title="That page is not here"
 			description="The link may be out of date, or the page may have moved. These are the ones people usually want."
 			actions={
 				<Button asChild size="lg" className="rounded-lg">

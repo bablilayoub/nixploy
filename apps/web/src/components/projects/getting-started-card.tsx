@@ -125,7 +125,7 @@ export function GettingStartedCard({ firstProjectId }: { firstProjectId?: string
 			</CardHeader>
 			<CardContent className="space-y-4 pt-0">
 				{can("gitops.manage") && !data.service && (
-					<div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted p-3">
+					<div className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-muted/30 p-3">
 						<p className="text-sm text-muted-foreground">
 							Already running services on Dokploy or Coolify?
 						</p>
@@ -136,26 +136,23 @@ export function GettingStartedCard({ firstProjectId }: { firstProjectId?: string
 				)}
 				<ol className="divide-y">
 					{steps.map((step) => (
-						<li
-							key={step.key}
-							className="flex flex-wrap items-start gap-3 py-3.5 first:pt-0 last:pb-0"
-						>
+						<li key={step.key} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
 							{step.done ? (
 								<Check className="size-4 shrink-0 text-success" aria-label="Done" />
 							) : (
 								<Circle className="size-4 shrink-0 text-muted-foreground/50" aria-hidden />
 							)}
-							<div className="flex min-w-0 flex-1 flex-col gap-1">
+							<div className="flex min-w-0 flex-1 flex-col">
 								<span
 									className={cn(
-										"text-sm leading-relaxed",
+										"truncate text-sm",
 										step.done ? "text-muted-foreground line-through" : "font-medium",
 									)}
 								>
 									{step.label}
 								</span>
 								{!step.done && (
-									<span className="text-xs leading-relaxed text-muted-foreground">{step.hint}</span>
+									<span className="truncate text-xs text-muted-foreground">{step.hint}</span>
 								)}
 							</div>
 							{!step.done && (

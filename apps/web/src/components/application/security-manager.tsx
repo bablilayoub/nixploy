@@ -25,8 +25,8 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
-import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
 	Table,
@@ -244,19 +244,19 @@ export function SecurityManager(parent: TraefikParent) {
 							e.preventDefault();
 							onSubmit();
 						}}
-						className="flex min-w-0 flex-col gap-5"
+						className="flex flex-col gap-4"
 					>
-						<Field>
-							<FieldLabel htmlFor="username">Username</FieldLabel>
+						<div className="flex flex-col gap-2">
+							<Label htmlFor="username">Username</Label>
 							<Input
 								id="username"
 								autoComplete="off"
 								value={form.username}
 								onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
 							/>
-						</Field>
-						<Field>
-							<FieldLabel htmlFor="password">Password</FieldLabel>
+						</div>
+						<div className="flex flex-col gap-2">
+							<Label htmlFor="password">Password</Label>
 							<Input
 								id="password"
 								type="password"
@@ -264,7 +264,7 @@ export function SecurityManager(parent: TraefikParent) {
 								value={form.password}
 								onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
 							/>
-						</Field>
+						</div>
 						<DialogFooter>
 							<Button type="submit" disabled={!isValid || isPending}>
 								{isPending && <Loader2 className="size-4 animate-spin" />}

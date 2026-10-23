@@ -3,14 +3,6 @@
 import { AlertTriangle } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import {
-	Empty,
-	EmptyContent,
-	EmptyDescription,
-	EmptyHeader,
-	EmptyMedia,
-	EmptyTitle,
-} from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import { describeError } from "@/lib/describe-error";
 
@@ -30,22 +22,19 @@ export function LoadError({
 	onRetry?: () => void;
 }) {
 	return (
-		<Empty role="alert" className="border bg-card">
-			<EmptyHeader>
-				<EmptyMedia variant="icon">
-					<AlertTriangle aria-hidden="true" />
-				</EmptyMedia>
-				<EmptyTitle>{title}</EmptyTitle>
-				{message && <EmptyDescription>{message}</EmptyDescription>}
-			</EmptyHeader>
-			{onRetry && (
-				<EmptyContent>
-					<Button variant="outline" size="sm" onClick={onRetry}>
-						Retry
-					</Button>
-				</EmptyContent>
-			)}
-		</Empty>
+		<div
+			role="alert"
+			className="flex flex-col items-center gap-2 rounded-lg border border-dashed bg-card px-6 py-12 text-center"
+		>
+			<AlertTriangle className="mb-1 size-8 text-muted-foreground" />
+			<p className="text-sm font-medium">{title}</p>
+			{message ? <p className="max-w-sm text-sm text-muted-foreground">{message}</p> : null}
+			{onRetry ? (
+				<Button variant="outline" size="sm" className="mt-2" onClick={onRetry}>
+					Retry
+				</Button>
+			) : null}
+		</div>
 	);
 }
 
@@ -70,15 +59,13 @@ export function QueryState({
 }) {
 	if (isPending) {
 		return (
-			<div role="status" aria-label="Loading content" aria-busy="true">
-				{skeleton ?? (
-					<div className="divide-y rounded-lg border">
-						<Skeleton className="h-10 w-full" />
-						<Skeleton className="h-10 w-full" />
-						<Skeleton className="h-10 w-full" />
-					</div>
-				)}
-			</div>
+			skeleton ?? (
+				<div className="divide-y rounded-lg border">
+					<Skeleton className="h-10 w-full" />
+					<Skeleton className="h-10 w-full" />
+					<Skeleton className="h-10 w-full" />
+				</div>
+			)
 		);
 	}
 

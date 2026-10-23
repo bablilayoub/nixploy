@@ -92,7 +92,7 @@ export function ConfirmDeleteDialog({
 				</AlertDialogHeader>
 				<AlertDialogFooter>
 					<AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
-					<Button variant="outline" disabled={pending} onClick={() => void confirm()}>
+					<Button variant="destructive" disabled={pending} onClick={() => void confirm()}>
 						{pending && <Loader2 className="size-4 animate-spin" />}
 						Delete
 					</Button>

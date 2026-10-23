@@ -5,11 +5,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { KeyRound, Loader2, Pencil, Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+
+import { SettingsSection } from "@/components/layout/settings-section";
 import { LoadError } from "@/components/query-state";
 import { CopyButton } from "@/components/services/copy-button";
 import { EmptyState } from "@/components/services/empty-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
-import { PageHeader } from "@/components/shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,7 +21,6 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
-import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -55,7 +55,7 @@ import { useTRPC } from "@/lib/trpc";
  */
 
 const DESCRIPTION =
-	"Identity providers for this instance. Require SSO per organization in Organization settings. Only instance admins can change these providers.";
+	"Identity providers for this whole instance. They appear on the login page for everyone, so only instance admins can change them.";
 
 type ProviderRow = {
 	ssoProviderId: string;
@@ -250,17 +250,17 @@ export function SsoProvidersView() {
 	const pending = create.isPending || update.isPending;
 
 	return (
-		<div className="flex min-w-0 flex-col gap-6">
-			<PageHeader
-				title="Single sign-on"
-				description={DESCRIPTION}
-				actions={
-					<Button size="sm" onClick={openCreate}>
-						<Plus className="size-4" />
-						Add provider
-					</Button>
-				}
-			/>
+		<SettingsSection
+			wide
+			title="Single sign-on"
+			description={DESCRIPTION}
+			actions={
+				<Button size="sm" onClick={openCreate}>
+					<Plus className="size-4" />
+					Add provider
+				</Button>
+			}
+		>
 			{providersQuery.isPending ? (
 				<Skeleton className="h-24 w-full" />
 			) : providersQuery.isError ? (
@@ -273,6 +273,12 @@ export function SsoProvidersView() {
 					icon={KeyRound}
 					title="No identity provider yet"
 					description="Add one and a “Continue with …” button appears on the login page. Password sign-in keeps working alongside it."
+					action={
+						<Button size="sm" onClick={openCreate}>
+							<Plus className="size-4" />
+							Add provider
+						</Button>
+					}
 				/>
 			) : (
 				<Table>
@@ -343,7 +349,7 @@ export function SsoProvidersView() {
 					</DialogHeader>
 
 					<form
-						className="flex min-w-0 flex-col gap-5"
+						className="flex flex-col gap-4"
 						onSubmit={(event) => {
 							event.preventDefault();
 							if (editing) {
@@ -361,9 +367,9 @@ export function SsoProvidersView() {
 							}
 						}}
 					>
-						<div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
-							<Field className="min-w-0">
-								<FieldLabel htmlFor="sso-preset">Provider</FieldLabel>
+						<div className="grid gap-4 sm:grid-cols-2">
+							<div className="flex flex-col gap-1.5">
+								<Label htmlFor="sso-preset">Provider</Label>
 								<Select
 									value={form.preset}
 									onValueChange={(preset) => {
@@ -377,7 +383,7 @@ export function SsoProvidersView() {
 										}));
 									}}
 								>
-									<SelectTrigger id="sso-preset" className="w-full">
+									<SelectTrigger id="sso-preset">
 										<SelectValue />
 									</SelectTrigger>
 									<SelectContent>
@@ -388,9 +394,9 @@ export function SsoProvidersView() {
 										))}
 									</SelectContent>
 								</Select>
-							</Field>
-							<Field className="min-w-0">
-								<FieldLabel htmlFor="sso-name">Button label</FieldLabel>
+							</div>
+							<div className="flex flex-col gap-1.5">
+								<Label htmlFor="sso-name">Button label</Label>
 								<Input
 									id="sso-name"
 									value={form.name}
@@ -400,12 +406,12 @@ export function SsoProvidersView() {
 									placeholder="Acme SSO"
 									required
 								/>
-							</Field>
+							</div>
 						</div>
 
 						{editing ? null : (
-							<Field className="min-w-0">
-								<FieldLabel htmlFor="sso-provider-id">Provider id</FieldLabel>
+							<div className="flex flex-col gap-1.5">
+								<Label htmlFor="sso-provider-id">Provider id</Label>
 								<Input
 									id="sso-provider-id"
 									value={form.providerId}
@@ -417,12 +423,12 @@ export function SsoProvidersView() {
 									required
 								/>
 								<RedirectUriHint providerId={form.providerId} />
-							</Field>
+							</div>
 						)}
 
 						{presetInfo?.kind === "fixed" ? null : (
-							<Field className="min-w-0">
-								<FieldLabel htmlFor="sso-issuer">Issuer URL</FieldLabel>
+							<div className="flex flex-col gap-1.5">
+								<Label htmlFor="sso-issuer">Issuer URL</Label>
 								<Input
 									id="sso-issuer"
 									value={form.issuer}
@@ -435,13 +441,13 @@ export function SsoProvidersView() {
 									Its discovery document supplies every endpoint. Leave empty to enter them by hand
 									below.
 								</p>
-							</Field>
+							</div>
 						)}
 
 						{presetInfo?.kind !== "fixed" && !form.issuer ? (
-							<div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
-								<Field className="min-w-0">
-									<FieldLabel htmlFor="sso-auth-url">Authorization URL</FieldLabel>
+							<div className="grid gap-4 sm:grid-cols-2">
+								<div className="flex flex-col gap-1.5">
+									<Label htmlFor="sso-auth-url">Authorization URL</Label>
 									<Input
 										id="sso-auth-url"
 										value={form.authorizationUrl}
@@ -449,9 +455,9 @@ export function SsoProvidersView() {
 											setForm((current) => ({ ...current, authorizationUrl: event.target.value }))
 										}
 									/>
-								</Field>
-								<Field className="min-w-0">
-									<FieldLabel htmlFor="sso-token-url">Token URL</FieldLabel>
+								</div>
+								<div className="flex flex-col gap-1.5">
+									<Label htmlFor="sso-token-url">Token URL</Label>
 									<Input
 										id="sso-token-url"
 										value={form.tokenUrl}
@@ -459,9 +465,9 @@ export function SsoProvidersView() {
 											setForm((current) => ({ ...current, tokenUrl: event.target.value }))
 										}
 									/>
-								</Field>
-								<Field className="min-w-0 sm:col-span-2">
-									<FieldLabel htmlFor="sso-userinfo-url">Userinfo URL</FieldLabel>
+								</div>
+								<div className="flex flex-col gap-1.5 sm:col-span-2">
+									<Label htmlFor="sso-userinfo-url">Userinfo URL</Label>
 									<Input
 										id="sso-userinfo-url"
 										value={form.userInfoUrl}
@@ -469,14 +475,13 @@ export function SsoProvidersView() {
 											setForm((current) => ({ ...current, userInfoUrl: event.target.value }))
 										}
 									/>
-								</Field>
+								</div>
 							</div>
 						) : null}
 
-						<h3 className="mt-3 border-b pb-3 text-sm font-semibold">Connection</h3>
-						<div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
-							<Field className="min-w-0">
-								<FieldLabel htmlFor="sso-client-id">Client ID</FieldLabel>
+						<div className="grid gap-4 sm:grid-cols-2">
+							<div className="flex flex-col gap-1.5">
+								<Label htmlFor="sso-client-id">Client ID</Label>
 								<Input
 									id="sso-client-id"
 									value={form.clientId}
@@ -485,9 +490,9 @@ export function SsoProvidersView() {
 									}
 									required
 								/>
-							</Field>
-							<Field className="min-w-0">
-								<FieldLabel htmlFor="sso-client-secret">Client secret</FieldLabel>
+							</div>
+							<div className="flex flex-col gap-1.5">
+								<Label htmlFor="sso-client-secret">Client secret</Label>
 								<Input
 									id="sso-client-secret"
 									type="password"
@@ -498,12 +503,12 @@ export function SsoProvidersView() {
 									placeholder={editing ? "Leave blank to keep the current secret" : ""}
 									required={!editing}
 								/>
-							</Field>
+							</div>
 						</div>
 
-						<div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
-							<Field className="min-w-0">
-								<FieldLabel htmlFor="sso-scopes">Scopes</FieldLabel>
+						<div className="grid gap-4 sm:grid-cols-2">
+							<div className="flex flex-col gap-1.5">
+								<Label htmlFor="sso-scopes">Scopes</Label>
 								<Input
 									id="sso-scopes"
 									value={form.scopes}
@@ -511,9 +516,9 @@ export function SsoProvidersView() {
 										setForm((current) => ({ ...current, scopes: event.target.value }))
 									}
 								/>
-							</Field>
-							<Field className="min-w-0">
-								<FieldLabel htmlFor="sso-domains">Allowed email domains</FieldLabel>
+							</div>
+							<div className="flex flex-col gap-1.5">
+								<Label htmlFor="sso-domains">Allowed email domains</Label>
 								<Input
 									id="sso-domains"
 									value={form.allowedEmailDomains}
@@ -528,13 +533,12 @@ export function SsoProvidersView() {
 								<p className="text-xs text-muted-foreground">
 									Empty admits any domain the provider authenticates.
 								</p>
-							</Field>
+							</div>
 						</div>
 
-						<h3 className="mt-3 border-b pb-3 text-sm font-semibold">Access</h3>
-						<div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
-							<Field className="min-w-0">
-								<FieldLabel htmlFor="sso-default-org">New users join</FieldLabel>
+						<div className="grid gap-4 sm:grid-cols-2">
+							<div className="flex flex-col gap-1.5">
+								<Label htmlFor="sso-default-org">New users join</Label>
 								<Select
 									value={form.defaultOrganizationId || "none"}
 									onValueChange={(value) =>
@@ -559,9 +563,9 @@ export function SsoProvidersView() {
 										))}
 									</SelectContent>
 								</Select>
-							</Field>
-							<Field className="min-w-0">
-								<FieldLabel htmlFor="sso-default-role">…as</FieldLabel>
+							</div>
+							<div className="flex flex-col gap-1.5">
+								<Label htmlFor="sso-default-role">…as</Label>
 								<Select
 									value={form.defaultRole}
 									onValueChange={(defaultRole) =>
@@ -579,12 +583,12 @@ export function SsoProvidersView() {
 										))}
 									</SelectContent>
 								</Select>
-							</Field>
+							</div>
 						</div>
 
-						<div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
-							<Field className="min-w-0">
-								<FieldLabel htmlFor="sso-group-claim">Group claim</FieldLabel>
+						<div className="grid gap-4 sm:grid-cols-2">
+							<div className="flex flex-col gap-1.5">
+								<Label htmlFor="sso-group-claim">Group claim</Label>
 								<Input
 									id="sso-group-claim"
 									value={form.groupClaim}
@@ -593,9 +597,9 @@ export function SsoProvidersView() {
 									}
 									placeholder="groups"
 								/>
-							</Field>
-							<Field className="min-w-0">
-								<FieldLabel htmlFor="sso-group-mappings">Group → role</FieldLabel>
+							</div>
+							<div className="flex flex-col gap-1.5">
+								<Label htmlFor="sso-group-mappings">Group → role</Label>
 								<Textarea
 									id="sso-group-mappings"
 									className="h-20 font-mono text-xs"
@@ -605,11 +609,11 @@ export function SsoProvidersView() {
 									}
 									placeholder={"platform-admins = admin\ndevelopers = deployer"}
 								/>
-							</Field>
+							</div>
 						</div>
 
-						<div className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3">
-							<div className="flex min-w-0 flex-1 basis-32 flex-col gap-1 pe-4">
+						<div className="flex items-center justify-between rounded-md border p-3">
+							<div className="flex flex-col gap-1 pe-4">
 								<Label htmlFor="sso-sync-role">Re-apply the mapping on every sign-in</Label>
 								<p className="text-xs text-muted-foreground">
 									Removing someone from a group in the identity provider demotes them here too. Off
@@ -625,10 +629,8 @@ export function SsoProvidersView() {
 							/>
 						</div>
 
-						<div className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3">
-							<Label htmlFor="sso-enabled" className="min-w-0 flex-1 basis-32">
-								Show on the login page
-							</Label>
+						<div className="flex items-center justify-between rounded-md border p-3">
+							<Label htmlFor="sso-enabled">Show on the login page</Label>
 							<Switch
 								id="sso-enabled"
 								checked={form.enabled}
@@ -645,7 +647,7 @@ export function SsoProvidersView() {
 					</form>
 				</DialogContent>
 			</Dialog>
-		</div>
+		</SettingsSection>
 	);
 }
 

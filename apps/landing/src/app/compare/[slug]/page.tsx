@@ -35,7 +35,9 @@ export default async function ComparePage({ params }: { params: Promise<{ slug: 
 }
 
 const Label = ({ children }: { children: React.ReactNode }) => (
-	<dt className="text-xs text-muted-foreground normal-case">{children}</dt>
+	<dt className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
+		{children}
+	</dt>
 );
 
 /*
@@ -46,13 +48,11 @@ function CompareBody({ entry }: { entry: Comparison }) {
 	return (
 		<PageFrame eyebrow="Compare" title={`Nixploy vs ${entry.name}`} description={entry.headline}>
 			<Card className="mx-auto max-w-3xl p-6 text-center text-sm text-muted-foreground">
-				<p>
-					Every claim about {entry.name} below links to where it was read, and was read rather than
-					remembered — last checked <span className="text-foreground">{VERIFIED_ON}</span>. These
-					projects ship weekly, so if something here is out of date,{" "}
-					<ProseLink href={`${site.github}/issues`}>tell us</ProseLink> and it gets fixed. We have
-					not included opinions about anybody&apos;s reliability or security history.
-				</p>
+				Every claim about {entry.name} below links to where it was read, and was read rather than
+				remembered — last checked <span className="text-foreground">{VERIFIED_ON}</span>. These
+				projects ship weekly, so if something here is out of date,{" "}
+				<ProseLink href={`${site.github}/issues`}>tell us</ProseLink> and it gets fixed. We have not
+				included opinions about anybody&apos;s reliability or security history.
 			</Card>
 
 			<div className="mt-12 grid gap-4 lg:grid-cols-12">
@@ -68,7 +68,7 @@ function CompareBody({ entry }: { entry: Comparison }) {
 					<CardContent>
 						<dl className="flex flex-col gap-5">
 							<div>
-								<Label>GitHub stars at source review</Label>
+								<Label>GitHub stars</Label>
 								<dd className="mt-2">{entry.stars} · Nixploy has 3</dd>
 							</div>
 							<div>
@@ -84,9 +84,9 @@ function CompareBody({ entry }: { entry: Comparison }) {
 
 			<section className="mt-20">
 				<h2 className="text-3xl font-semibold tracking-tight lg:text-4xl">Where they differ</h2>
-				<div className="mt-8 flex flex-col">
+				<div className="mt-8 flex flex-col gap-4">
 					{entry.facts.map((fact) => (
-						<section key={fact.label} className="signal-comparison-fact">
+						<Card key={fact.label} className="p-6">
 							<h3 className="font-medium">{fact.label}</h3>
 							<dl className="mt-4 grid gap-6 sm:grid-cols-2">
 								<div>
@@ -100,7 +100,7 @@ function CompareBody({ entry }: { entry: Comparison }) {
 									<dd className="mt-2 text-sm">{fact.ours}</dd>
 								</div>
 							</dl>
-						</section>
+						</Card>
 					))}
 				</div>
 			</section>

@@ -4,9 +4,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Upload } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { toast } from "sonner";
+
 import { capabilityHint } from "@/components/services/capability-hint";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { formatBytes } from "@/lib/format";
 import { useTRPC } from "@/lib/trpc";
@@ -94,12 +94,12 @@ export function DropUpload({ applicationId }: { applicationId: string }) {
 				<p className="text-muted-foreground">
 					Drop a <span className="font-medium text-foreground">.zip</span> of your project here, or
 				</p>
-				<Input
+				<input
 					id={inputId}
 					ref={inputRef}
 					type="file"
 					accept=".zip,application/zip"
-					className="hidden"
+					className="sr-only"
 					disabled={!canWrite || uploading}
 					onChange={(event) => {
 						const file = event.target.files?.[0];

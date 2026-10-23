@@ -5,6 +5,36 @@ and move items between the backlog sections. Durable knowledge belongs in
 [`../CLAUDE.md`](../CLAUDE.md) / [`codebase-map.md`](./codebase-map.md); this
 file is for **state** and **tasks**.
 
+## Original frontend restoration — 2026-10-23
+
+The user explicitly requested the original design from before all redesigns.
+App/site source, assets, component configuration and README are restored from
+`ec35e36`, identical to pre-Studio `60c80bf` for those surfaces. A source comparison
+checks 463 files without mismatches or extras. The sole route correction retains
+`%5F%5Fmaintenance` so the original maintenance page remains routable. Current
+backend, dependency versions and stored data/settings are retained.
+
+Both production builds, app/site typechecks, strict Biome, knip, 119 web and 3,353
+server tests pass (137 optional server tests skipped). Original desktop/mobile
+surfaces and authentication/search/dialog/navigation behavior are checked in both
+app modes; the original website retains its fixed dark presentation. Private
+receipts/backups: `.nixploy-data/verification/original-restore/`.
+
+The original production app is running on localhost:3000 and the original public
+website on localhost:3373, using isolated `.next-original-release` builds. Database
+and configuration backups precede the switch. Immediate comparisons match all
+72 tables / 240 rows and 62 persistent configuration files; the original runtime,
+config directory and encryption keys remain in use. No primary reset, seed,
+restore or migration. The previous build is retained for rollback. Sixteen live checks pass using an
+existing session, including an existing project/application, settings and mobile
+navigation. Post-check comparisons preserve all original rows and settings; one
+new organization audit entry is appended, while only automatic update-check and
+platform-alert check timestamps change. No saved configuration values change.
+
+All design checkpoints below are historical and superseded by this restoration.
+The current [brief](../.ui-craft/brief.md) requires the original design; no redesign
+work should resume from those earlier notes.
+
 ## Monochrome native app rebuild — 2026-10-23
 
 Latest user correction supersedes the design checkpoints below: monochrome,

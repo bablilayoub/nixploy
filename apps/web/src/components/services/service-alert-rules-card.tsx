@@ -5,8 +5,8 @@ import { Loader2, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { SettingsSection } from "@/components/layout/settings-section";
 import { Button } from "@/components/ui/button";
-import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
 	Select,
 	SelectContent,
@@ -69,7 +69,7 @@ export function ServiceAlertRulesCard({
 						{(rules.data ?? []).map((rule) => (
 							<div
 								key={rule.alertRuleId}
-								className="flex flex-wrap items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm"
+								className="flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm"
 							>
 								<div>
 									<span className="font-medium">{rule.metric}</span>
@@ -80,7 +80,6 @@ export function ServiceAlertRulesCard({
 								</div>
 								<div className="flex items-center gap-2">
 									<Switch
-										aria-label={`Enable ${rule.metric} alert rule`}
 										checked={rule.enabled}
 										onCheckedChange={(enabled) =>
 											upsert.mutate({
@@ -108,10 +107,10 @@ export function ServiceAlertRulesCard({
 				)}
 
 				<div className="grid gap-3 rounded-md border border-dashed p-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-					<Field>
-						<FieldLabel>Metric</FieldLabel>
+					<div className="grid gap-1.5">
+						<Label>Metric</Label>
 						<Select value={metric} onValueChange={(value) => setMetric(value as Metric)}>
-							<SelectTrigger aria-label="Metric">
+							<SelectTrigger>
 								<SelectValue />
 							</SelectTrigger>
 							<SelectContent>
@@ -121,9 +120,9 @@ export function ServiceAlertRulesCard({
 								<SelectItem value="deploy_failure_streak">Deploy failure streak</SelectItem>
 							</SelectContent>
 						</Select>
-					</Field>
-					<Field>
-						<FieldLabel>Threshold</FieldLabel>
+					</div>
+					<div className="grid gap-1.5">
+						<Label>Threshold</Label>
 						<Input
 							type="number"
 							aria-label="Threshold"
@@ -131,7 +130,7 @@ export function ServiceAlertRulesCard({
 							value={threshold}
 							onChange={(event) => setThreshold(event.target.value)}
 						/>
-					</Field>
+					</div>
 					<Button
 						disabled={upsert.isPending}
 						onClick={() =>

@@ -21,7 +21,7 @@ export function EnvironmentTab({ compose }: { compose: ComposeService }) {
 	});
 
 	return (
-		<div className="flex min-w-0 flex-col gap-5">
+		<div className="flex flex-col gap-4">
 			<EnvEditor
 				value={compose.env}
 				loading={saveMutation.isPending}

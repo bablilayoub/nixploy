@@ -1,15 +1,12 @@
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="apps/web/public/brand/nixploy-mark-dark.png" />
-    <img src="apps/web/public/brand/nixploy-mark-light.png" alt="Nixploy" width="88" height="88" />
-  </picture>
+  <img src="apps/web/public/brand/nixploy-mark-light.png" alt="Nixploy" width="88" height="88" />
 </p>
 
 <h1 align="center">Nixploy</h1>
 
 <p align="center">
-  <strong>Your apps and databases. On your servers.</strong><br />
-  Deploy applications, Compose stacks and databases on your own servers. One workspace for releases, domains, logs and backups.
+  <strong>Deploy like a managed platform. Run it on your own server.</strong><br />
+  Git push → build → HTTPS → database → monitoring → rollback. On hardware you control, with no per-app pricing.
 </p>
 
 <p align="center">
@@ -24,19 +21,14 @@
 <p align="center">
   <a href="https://github.com/bablilayoub/nixploy/actions/workflows/ci.yml"><img src="https://github.com/bablilayoub/nixploy/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
   <a href="https://github.com/bablilayoub/nixploy/actions/workflows/release.yml"><img src="https://github.com/bablilayoub/nixploy/actions/workflows/release.yml/badge.svg" alt="Release" /></a>
-  <img src="https://img.shields.io/badge/license-Apache--2.0-737373" alt="License" />
-  <img src="https://img.shields.io/badge/node-%3E%3D22-737373" alt="Node" />
-  <img src="https://img.shields.io/badge/docker-swarm-737373" alt="Docker Swarm" />
+  <img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License" />
+  <img src="https://img.shields.io/badge/node-%3E%3D22-green" alt="Node" />
+  <img src="https://img.shields.io/badge/docker-swarm-blue" alt="Docker Swarm" />
 </p>
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/images/app-workspace-dark.png" />
-    <img src="docs/images/app-workspace-light.png" alt="Nixploy project overview with environments, service health and deployment activity" width="960" />
-  </picture>
+  <img src="docs/images/dashboard.png" alt="Nixploy dashboard" width="880" />
 </p>
-
-<p align="center"><sub>Example workspace · light and dark themes</sub></p>
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/bablilayoub/nixploy/main/install.sh | sudo bash
@@ -50,7 +42,7 @@ curl -fsSL https://raw.githubusercontent.com/bablilayoub/nixploy/main/install.sh
 - **See why it broke.** Live logs, a web terminal into the container, 48 h of metrics, and a per-service timeline that records OOM kills, restarts and config changes.
 - **Undo a bad deploy.** Roll back to any previous release, config and environment included.
 - **Run many servers from one panel.** Remote hosts join over SSH; deploys, logs and backups work the same on all of them.
-- **Hand it to an AI agent.** An MCP endpoint with 42 annotated tools, through the same routers as the UI — so the org scope, capability checks and audit trail still apply. [See what that looks like](https://nixploy.com/agents).
+- **Hand it to an AI agent.** An MCP endpoint with 35 annotated tools, through the same routers as the UI — so the org scope, capability checks and audit trail still apply. [See what that looks like](https://nixploy.com/agents).
 - **Nothing is paywalled.** SSO, teams, forward auth, audit export and white-labelling are in the box. There is no paid tier to upgrade to.
 
 ## Install
@@ -81,36 +73,41 @@ Full installer options: [`docs/install.md`](./docs/install.md). Update with [`up
 | **Observe** | Live logs & metrics (48h history) · web terminal · alert rules · uptime probes · incidents |
 | **Team** | Orgs · roles (viewer→owner) · **capability overlays** · **teams + per-project access** · 2FA · **passkeys (WebAuthn)** · **SSO (OIDC, group→role)** · audit log + CSV export · quotas · **white-label** |
 | **Notify** | Slack, Discord, Telegram, email, Gotify, ntfy, Pushover, Mattermost, Lark, Teams, webhooks |
-| **Automate** | REST API + `/swagger` · `@nixploy/cli` (`--wait` returns a real outcome) · GitOps (`nixploy.yaml`) · **MCP** (`POST /api/mcp`, 42 annotated tools) |
+| **Automate** | REST API + `/swagger` · `@nixploy/cli` (`--wait` returns a real outcome) · GitOps (`nixploy.yaml`) · **MCP** (`POST /api/mcp`, 35 annotated tools) |
 | **AI** | Deploy Copilot — explain failures, confirm-gated chat, generate compose (BYO key) · `llms.txt` / `agents.md` / per-page Markdown |
 | **Infra** | Remote Swarm servers · Docker control center · registries · schedules · in-app GHCR updates · `doctor` |
 | **Catalog** | 146 one-click templates (15 categories), CI-checked image tags |
 
 Product docs: [nixploy.com/docs](https://nixploy.com/docs) · API: [nixploy.com/api](https://nixploy.com/api)
 
-## Inside the workspace
+## Screenshots
 
-Projects bring environments and services together. The app uses native shadcn/ui
-components with monochrome New York/Neutral light, dark and system modes. A
-collapsible workspace sidebar leads into a project list and deployment activity.
-Services use native Cards and Tabs; settings navigation stays with the workspace.
-Editors, terminals, monitoring, templates and
-infrastructure tools remain connected to the same APIs and permissions.
-
-<details>
-<summary>Service configuration</summary>
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/app-service-dark.png" />
-  <img src="docs/images/app-service-light.png" alt="Service configuration with source, build and resource navigation" width="960" />
-</picture>
-
-</details>
-
-The template catalog, fleet monitoring, deployment history and server management
-share the same component system. See the [workspace feature map and verification
-scope](.ui-craft/app-workspace.md) for coverage. Screenshots contain example records,
-not live production data.
+<table>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <strong>Templates</strong><br />
+      <img src="docs/images/templates.png" alt="Template catalog" />
+    </td>
+    <td width="50%" align="center" valign="top">
+      <strong>Project</strong><br />
+      <img src="docs/images/project.png" alt="Project services" />
+    </td>
+    <td width="50%" align="center" valign="top">
+      <strong>Docker</strong><br />
+      <img src="docs/images/docker.png" alt="Docker control center" />
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <strong>Application</strong><br />
+      <img src="docs/images/service.png" alt="Application service" />
+    </td>
+    <td width="50%" align="center" valign="top">
+      <strong>Monitoring</strong><br />
+      <img src="docs/images/monitoring.png" alt="Service monitoring" />
+    </td>
+  </tr>
+</table>
 
 ## Architecture
 

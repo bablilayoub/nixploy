@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { FocusSections } from "@/components/layout/focus-sections";
 import { SettingsStack } from "@/components/layout/settings-section";
 import { DangerZoneCard } from "@/components/settings/organization/danger-zone-card";
 import { MembersCard } from "@/components/settings/organization/members-card";
@@ -21,43 +20,15 @@ export default function OrganizationSettingsPage() {
 				title="Organization"
 				description="Name, members, roles, capabilities, and teams."
 			/>
-			<FocusSections
-				items={[
-					{ id: "organization-details", label: "General" },
-					{ id: "organization-access", label: "People and access" },
-					{ id: "organization-limits", label: "Resource limits" },
-					{ id: "organization-variables", label: "Shared variables" },
-					{ id: "organization-danger", label: "Delete organization" },
-				]}
-			>
-				<section id="organization-details" tabIndex={-1} className="space-y-6 scroll-mt-24 min-w-0">
-					<SettingsStack>
-						<OrganizationCard />
-					</SettingsStack>
-				</section>
-				<section id="organization-access" tabIndex={-1} className="space-y-6 scroll-mt-24 min-w-0">
-					<SettingsStack>
-						<MembersCard />
-						<TeamsCard />
-						<SecurityCard />
-					</SettingsStack>
-				</section>
-				<section id="organization-limits" className="space-y-6 scroll-mt-24 min-w-0">
-					<SettingsStack>
-						<QuotasCard />
-					</SettingsStack>
-				</section>
-				<section id="organization-variables" className="space-y-6 scroll-mt-24 min-w-0">
-					<SettingsStack>
-						<SharedVariablesCard />
-					</SettingsStack>
-				</section>
-				<section id="organization-danger" tabIndex={-1} className="space-y-6 scroll-mt-24 min-w-0">
-					<SettingsStack>
-						<DangerZoneCard />
-					</SettingsStack>
-				</section>
-			</FocusSections>
+			<SettingsStack>
+				<OrganizationCard />
+				<QuotasCard />
+				<SharedVariablesCard />
+				<SecurityCard />
+				<MembersCard />
+				<TeamsCard />
+				<DangerZoneCard />
+			</SettingsStack>
 		</div>
 	);
 }

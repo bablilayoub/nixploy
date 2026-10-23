@@ -191,9 +191,9 @@ export function UsersCard() {
 		return (
 			<SettingsSection id="users" title="Users" description={CARD_DESCRIPTION}>
 				<div className="grid gap-2">
-					<Skeleton className="h-auto min-h-10 w-full min-w-0" />
-					<Skeleton className="h-auto min-h-10 w-full min-w-0" />
-					<Skeleton className="h-auto min-h-10 w-full min-w-0" />
+					<Skeleton className="h-9 w-full" />
+					<Skeleton className="h-9 w-full" />
+					<Skeleton className="h-9 w-full" />
 				</div>
 			</SettingsSection>
 		);
@@ -221,7 +221,7 @@ export function UsersCard() {
 			description={CARD_DESCRIPTION}
 			actions={
 				<form
-					className="flex min-w-0 flex-wrap items-center gap-2"
+					className="flex items-center gap-2"
 					onSubmit={(event) => {
 						event.preventDefault();
 						void loadUsers(search);
@@ -243,9 +243,9 @@ export function UsersCard() {
 		>
 			{isLoading ? (
 				<div className="grid gap-2">
-					<Skeleton className="h-auto min-h-10 w-full min-w-0" />
-					<Skeleton className="h-auto min-h-10 w-full min-w-0" />
-					<Skeleton className="h-auto min-h-10 w-full min-w-0" />
+					<Skeleton className="h-9 w-full" />
+					<Skeleton className="h-9 w-full" />
+					<Skeleton className="h-9 w-full" />
 				</div>
 			) : loadError ? (
 				<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-8 text-center">
@@ -321,7 +321,7 @@ export function UsersCard() {
 											</TableCell>
 											<TableCell>
 												{banned ? (
-													<Badge variant="outline" title={user.banReason ?? undefined}>
+													<Badge variant="destructive" title={user.banReason ?? undefined}>
 														Banned
 													</Badge>
 												) : (

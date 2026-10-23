@@ -15,7 +15,6 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
-import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { Label } from "@/components/ui/label";
@@ -122,7 +121,7 @@ export function TwoFactorCard() {
 				title="Two-factor authentication"
 				description="Secure your account with a TOTP authenticator app."
 				actions={
-					<div className="flex flex-wrap items-center gap-3">
+					<div className="flex items-center gap-3">
 						<span className="flex items-center gap-2 text-sm text-muted-foreground">
 							<StatusDot status={enabled ? "success" : "neutral"} />
 							{enabled ? "Enabled" : "Disabled"}
@@ -162,15 +161,15 @@ export function TwoFactorCard() {
 					</DialogHeader>
 
 					{!totpURI && (
-						<Field>
-							<FieldLabel htmlFor="twofa-password">Password</FieldLabel>
+						<div className="grid gap-2">
+							<Label htmlFor="twofa-password">Password</Label>
 							<Input
 								id="twofa-password"
 								type="password"
 								value={password}
 								onChange={(e) => setPassword(e.target.value)}
 							/>
-						</Field>
+						</div>
 					)}
 
 					{totpURI && !enabled && (
@@ -216,13 +215,8 @@ export function TwoFactorCard() {
 								</div>
 							)}
 							<div className="grid min-w-0 gap-2">
-								<Label htmlFor="twofa-code">Verification code</Label>
-								<InputOTP
-									id="twofa-code"
-									maxLength={6}
-									value={code}
-									onChange={(value) => setCode(value)}
-								>
+								<Label>Verification code</Label>
+								<InputOTP maxLength={6} value={code} onChange={(value) => setCode(value)}>
 									<InputOTPGroup>
 										<InputOTPSlot index={0} />
 										<InputOTPSlot index={1} />
@@ -238,7 +232,7 @@ export function TwoFactorCard() {
 
 					<DialogFooter>
 						{enabled ? (
-							<Button variant="outline" disabled={isPending || !password} onClick={disable}>
+							<Button variant="destructive" disabled={isPending || !password} onClick={disable}>
 								{isPending && <Loader2 className="size-4 animate-spin" />}
 								Disable
 							</Button>

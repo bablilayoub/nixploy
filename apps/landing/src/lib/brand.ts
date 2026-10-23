@@ -29,8 +29,3 @@ export function brandIconSrc(logo: string) {
 		? `https://cdn.simpleicons.org/${logo}/f4f4f5`
 		: `https://cdn.simpleicons.org/${logo}`;
 }
-
-/** True for marks requested in neutral white so they can invert on light surfaces. */
-export function isNeutralBrandMark(logo: string) {
-	return DARK_MARKS.has(logo);
-}

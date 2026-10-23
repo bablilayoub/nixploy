@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Bell, Loader2, Pencil, Plus, Send } from "lucide-react";
 import { useState } from "react";
+import { SettingsSection } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
 import { EmptyState } from "@/components/services/empty-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
@@ -69,6 +70,16 @@ export function NotificationsView() {
 			<PageHeader
 				title="Notifications"
 				description="Channels that receive deployment, backup and platform events."
+			/>
+			<SettingsSection
+				wide
+				title={
+					<span className="flex items-center gap-2">
+						<Bell className="size-4 text-muted-foreground" />
+						Channels
+					</span>
+				}
+				description="Notification channels grouped by type."
 				actions={
 					<Button
 						size="sm"
@@ -80,8 +91,7 @@ export function NotificationsView() {
 						Add notification
 					</Button>
 				}
-			/>
-			<div className="min-w-0">
+			>
 				<QueryState
 					isPending={isPending}
 					isError={isError}
@@ -105,7 +115,7 @@ export function NotificationsView() {
 					<div className="grid gap-6">
 						{Object.entries(grouped).map(([type, rows]) => (
 							<div key={type} className="grid gap-2">
-								<h3 className="text-xs leading-relaxed font-medium text-muted-foreground">
+								<h3 className="text-sm font-medium text-muted-foreground">
 									{NOTIFICATION_TYPE_LABELS[type as NotificationType] ?? type}
 								</h3>
 								<Table>
@@ -204,7 +214,7 @@ export function NotificationsView() {
 						))}
 					</div>
 				</QueryState>
-			</div>
+			</SettingsSection>
 			<NotificationDialog open={createOpen} onOpenChange={setCreateOpen} />
 			<NotificationDialog
 				open={editing !== null}

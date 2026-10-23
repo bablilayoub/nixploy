@@ -2,10 +2,9 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Field, FieldLabel } from "@/components/ui/field";
 
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
 	Select,
 	SelectContent,
@@ -175,35 +174,33 @@ export function GitProviderRepoPicker({
 		return (
 			<div className="flex flex-col gap-2">
 				<div className="grid gap-4 sm:grid-cols-2">
-					<Field>
-						<FieldLabel htmlFor="repo-path">Repository</FieldLabel>
+					<div className="flex flex-col gap-2">
+						<Label htmlFor="repo-path">Repository</Label>
 						<Input
 							id="repo-path"
 							placeholder="owner/repository"
 							value={repoSelection}
 							onChange={(e) => onRepoSelectionChange(e.target.value)}
 						/>
-					</Field>
-					<Field>
-						<FieldLabel htmlFor="branch">Branch</FieldLabel>
+					</div>
+					<div className="flex flex-col gap-2">
+						<Label htmlFor="branch">Branch</Label>
 						<Input
 							id="branch"
 							placeholder="main"
 							value={branch}
 							onChange={(e) => onBranchChange(e.target.value)}
 						/>
-					</Field>
+					</div>
 				</div>
 				{providerId && (
-					<Button
-						variant="link"
-						size="sm"
+					<button
 						type="button"
-						className="h-auto min-h-0 px-0 py-0 has-[>svg]:px-0 self-start text-xs text-muted-foreground underline-offset-4 hover:underline"
+						className="self-start text-xs text-muted-foreground underline-offset-4 hover:underline"
 						onClick={() => setManualOverride(false)}
 					>
 						Browse repositories instead
-					</Button>
+					</button>
 				)}
 			</div>
 		);
@@ -212,8 +209,8 @@ export function GitProviderRepoPicker({
 	return (
 		<div className="flex flex-col gap-2">
 			<div className="grid gap-4 sm:grid-cols-2">
-				<Field>
-					<FieldLabel>Repository</FieldLabel>
+				<div className="flex flex-col gap-2">
+					<Label>Repository</Label>
 					<Select
 						value={repoSelection}
 						onValueChange={(value) => {
@@ -222,7 +219,7 @@ export function GitProviderRepoPicker({
 						}}
 						disabled={reposLoading || !!reposError}
 					>
-						<SelectTrigger aria-label="Repository" className="w-full">
+						<SelectTrigger className="w-full">
 							<SelectValue placeholder={reposLoading ? "Loading…" : "Select a repository"} />
 						</SelectTrigger>
 						<SelectContent>
@@ -233,15 +230,15 @@ export function GitProviderRepoPicker({
 							))}
 						</SelectContent>
 					</Select>
-				</Field>
-				<Field>
-					<FieldLabel>Branch</FieldLabel>
+				</div>
+				<div className="flex flex-col gap-2">
+					<Label>Branch</Label>
 					<Select
 						value={branch}
 						onValueChange={onBranchChange}
 						disabled={!repoSelection || branchesLoading}
 					>
-						<SelectTrigger aria-label="Branch" className="w-full">
+						<SelectTrigger className="w-full">
 							<SelectValue placeholder={branchesLoading ? "Loading…" : "Select a branch"} />
 						</SelectTrigger>
 						<SelectContent>
@@ -252,7 +249,7 @@ export function GitProviderRepoPicker({
 							))}
 						</SelectContent>
 					</Select>
-				</Field>
+				</div>
 			</div>
 			{reposError ? (
 				<p className="text-xs text-destructive">
@@ -266,15 +263,13 @@ export function GitProviderRepoPicker({
 					</p>
 				)
 			)}
-			<Button
-				variant="link"
-				size="sm"
+			<button
 				type="button"
-				className="h-auto min-h-0 px-0 py-0 has-[>svg]:px-0 self-start text-xs text-muted-foreground underline-offset-4 hover:underline"
+				className="self-start text-xs text-muted-foreground underline-offset-4 hover:underline"
 				onClick={() => setManualOverride(true)}
 			>
 				Enter repository manually
-			</Button>
+			</button>
 		</div>
 	);
 }

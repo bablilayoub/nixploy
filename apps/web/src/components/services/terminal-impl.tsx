@@ -8,7 +8,6 @@ import { useEffect, useRef, useState } from "react";
 
 import { NotRunningState, type RuntimeEmptyProps } from "@/components/services/not-running-state";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { nixployTerminalTheme } from "@/lib/codemirror-theme";
 import { terminalInputFrames } from "@/lib/terminal-input";
 import { cn } from "@/lib/utils";
@@ -139,11 +138,10 @@ export function ServiceTerminal({
 			if (disposed || ended) return;
 
 			terminal = new XTerm({
-				cursorBlink: false,
-				screenReaderMode: true,
+				cursorBlink: true,
 				disableStdin: true,
 				fontSize: 13,
-				fontFamily: "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace",
+				fontFamily: "var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, monospace",
 				convertEol: true,
 				theme: nixployTerminalTheme[isDark ? "dark" : "light"],
 			});
@@ -305,7 +303,12 @@ export function ServiceTerminal({
 					className="min-h-[26rem]"
 				/>
 			)}
-			<Card className={cn("relative overflow-hidden", notRunning && "hidden")}>
+			<div
+				className={cn(
+					"relative overflow-hidden rounded-lg border border-border bg-card",
+					notRunning && "hidden",
+				)}
+			>
 				{status !== "connected" && !notRunning && (
 					<div
 						className={cn(
@@ -346,7 +349,7 @@ export function ServiceTerminal({
 					</div>
 				)}
 				<div ref={containerRef} className="h-[26rem] p-2" />
-			</Card>
+			</div>
 		</>
 	);
 }

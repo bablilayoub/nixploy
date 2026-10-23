@@ -34,7 +34,6 @@ import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { isSettingsNavItemAllowed, settingsNavItems } from "@/components/nav-settings";
 import { SERVICE_TYPE_META, type ServiceType } from "@/components/projects/service-types";
-import { Button } from "@/components/ui/button";
 import {
 	CommandDialog,
 	CommandEmpty,
@@ -507,7 +506,7 @@ export function CommandPalette({ className }: { className?: string }) {
 					"rbac",
 					"organization",
 				],
-				run: go("/dashboard/settings/organization#organization-access"),
+				run: go("/dashboard/settings/organization"),
 			},
 		);
 		if (!capabilitiesPending && can("gitops.manage")) {
@@ -528,7 +527,7 @@ export function CommandPalette({ className }: { className?: string }) {
 				group: "Pages",
 				icon: Bot,
 				keywords: ["ai", "openai", "ollama", "anthropic", "copilot", "llm"],
-				run: go("/dashboard/settings/server#platform-administration"),
+				run: go("/dashboard/settings/server"),
 			});
 		}
 		for (const item of settingsNavItems) {
@@ -718,38 +717,34 @@ export function CommandPalette({ className }: { className?: string }) {
 
 	return (
 		<>
-			<Button
-				variant="ghost"
-				size="sm"
+			<button
 				type="button"
 				data-slot="command-palette-trigger"
 				onClick={() => setOpen(true)}
 				aria-keyshortcuts="Meta+K Control+K"
 				className={cn(
-					"group relative hidden h-8 justify-start items-center gap-2 rounded-md bg-muted/40 pe-12 ps-2.5 text-sm font-normal text-muted-foreground shadow-none hover:bg-accent sm:inline-flex sm:w-40 lg:w-52 xl:w-64",
+					"group relative hidden h-8 items-center gap-2 rounded-md bg-muted/40 pe-12 ps-2.5 text-sm font-normal text-muted-foreground shadow-none hover:bg-accent sm:inline-flex sm:w-40 lg:w-52 xl:w-64",
 					className,
 				)}
 			>
 				<Search aria-hidden className="size-4 shrink-0 opacity-70" />
 				<span className="truncate">Search…</span>
-				<kbd className="pointer-events-none absolute end-1.5 top-1/2 hidden h-5 -translate-y-1/2 items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[11px] font-medium select-none sm:inline-flex">
+				<kbd className="pointer-events-none absolute end-1.5 top-1/2 hidden h-5 -translate-y-1/2 items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium select-none sm:inline-flex">
 					<span className="text-xs">⌘</span>K
 				</kbd>
-			</Button>
-			<Button
-				variant="ghost"
-				size="sm"
+			</button>
+			<button
 				type="button"
 				data-slot="command-palette-trigger-mobile"
 				onClick={() => setOpen(true)}
 				aria-label="Search"
 				className={cn(
-					"inline-flex size-8 min-h-8 px-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground sm:hidden",
+					"inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground sm:hidden",
 					className,
 				)}
 			>
 				<Search className="size-4" />
-			</Button>
+			</button>
 
 			<CommandDialog
 				open={open}
@@ -786,15 +781,15 @@ export function CommandPalette({ className }: { className?: string }) {
 				<CommandSeparator className="mx-0" />
 				<div className="flex items-center gap-4 px-3 py-2 text-[11px] text-muted-foreground">
 					<span className="flex items-center gap-1.5">
-						<kbd className="rounded border bg-secondary px-1 font-mono text-[11px]">↑↓</kbd>
+						<kbd className="rounded border bg-secondary px-1 font-mono text-[10px]">↑↓</kbd>
 						Navigate
 					</span>
 					<span className="flex items-center gap-1.5">
-						<kbd className="rounded border bg-secondary px-1 font-mono text-[11px]">↵</kbd>
+						<kbd className="rounded border bg-secondary px-1 font-mono text-[10px]">↵</kbd>
 						Select
 					</span>
 					<span className="flex items-center gap-1.5">
-						<kbd className="rounded border bg-secondary px-1 font-mono text-[11px]">esc</kbd>
+						<kbd className="rounded border bg-secondary px-1 font-mono text-[10px]">esc</kbd>
 						Close
 					</span>
 				</div>

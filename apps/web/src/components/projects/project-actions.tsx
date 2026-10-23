@@ -31,8 +31,8 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useSaveMutation } from "@/hooks/use-save-mutation";
@@ -116,7 +116,7 @@ export function ProjectActions({
 					</DropdownMenuItem>
 					<DropdownMenuSeparator />
 					<DropdownMenuItem
-						variant="default"
+						variant="destructive"
 						disabled={!canDelete}
 						title={canDelete ? undefined : capabilityHint("project.delete")}
 						onSelect={() => setDeleteOpen(true)}
@@ -144,24 +144,24 @@ export function ProjectActions({
 						}}
 						className="flex flex-col gap-4"
 					>
-						<Field>
-							<FieldLabel htmlFor="rename-project-name">Name</FieldLabel>
+						<div className="flex flex-col gap-2">
+							<Label htmlFor="rename-project-name">Name</Label>
 							<Input
 								id="rename-project-name"
 								value={name}
 								onChange={(event) => setName(event.target.value)}
 								autoFocus
 							/>
-						</Field>
-						<Field>
-							<FieldLabel htmlFor="rename-project-description">Description</FieldLabel>
+						</div>
+						<div className="flex flex-col gap-2">
+							<Label htmlFor="rename-project-description">Description</Label>
 							<Textarea
 								id="rename-project-description"
 								value={description}
 								onChange={(event) => setDescription(event.target.value)}
 								rows={3}
 							/>
-						</Field>
+						</div>
 						<DialogFooter>
 							<Button type="submit" disabled={!name.trim() || updateProject.isPending}>
 								{updateProject.isPending ? "Saving..." : "Save"}
@@ -197,10 +197,10 @@ export function ProjectActions({
 						<li>{serviceSummary ?? "All services"}, including their containers and volumes</li>
 						<li>Every domain, route and deployment history of those services</li>
 					</ul>
-					<Field className="space-y-1.5">
-						<FieldLabel htmlFor="delete-project-confirm">
+					<div className="space-y-1.5">
+						<Label htmlFor="delete-project-confirm">
 							Type <span className="font-mono font-semibold">{project.name}</span> to confirm
-						</FieldLabel>
+						</Label>
 						<Input
 							id="delete-project-confirm"
 							value={confirmation}
@@ -208,11 +208,11 @@ export function ProjectActions({
 							placeholder={project.name}
 							autoComplete="off"
 						/>
-					</Field>
+					</div>
 					<AlertDialogFooter>
 						<AlertDialogCancel disabled={deleteProject.isPending}>Cancel</AlertDialogCancel>
 						<AlertDialogAction
-							variant="outline"
+							variant="destructive"
 							disabled={!deleteConfirmed || deleteProject.isPending}
 							onClick={(event) => {
 								// The cascade can take many seconds — keep the dialog (and its

@@ -245,7 +245,7 @@ export function CopilotChatDrawer({ target }: { target: CopilotTarget }) {
 					<TooltipTrigger asChild>
 						<span className="inline-flex">
 							<Button variant="outline" asChild>
-								<Link href="/dashboard/settings/server#platform-administration">
+								<Link href="/dashboard/settings/server">
 									<Bot className="size-4" />
 									Copilot
 								</Link>
@@ -288,18 +288,16 @@ export function CopilotChatDrawer({ target }: { target: CopilotTarget }) {
 							<p className="text-sm text-muted-foreground">Try one of these:</p>
 							<div className="flex flex-col gap-1.5">
 								{SUGGESTIONS[target.type].map((suggestion) => (
-									<Button
-										variant="outline"
-										size="sm"
+									<button
 										key={suggestion}
 										type="button"
-										className="h-auto justify-start whitespace-normal text-left"
+										className="rounded-md border bg-muted/30 px-3 py-2 text-left text-sm transition-colors hover:bg-muted/60 disabled:opacity-50"
 										onClick={() => send(suggestion)}
 										disabled={chat.isPending || !canChat}
 										title={canChat ? undefined : capabilityHint("ai.use")}
 									>
 										{suggestion}
-									</Button>
+									</button>
 								))}
 							</div>
 						</div>
@@ -358,10 +356,7 @@ export function CopilotChatDrawer({ target }: { target: CopilotTarget }) {
 
 				<div className="flex items-center gap-2 border-t px-4 py-2 text-xs text-muted-foreground">
 					<Settings2 className="size-3.5" />
-					<Link
-						href="/dashboard/settings/server#platform-administration"
-						className="underline-offset-2 hover:underline"
-					>
+					<Link href="/dashboard/settings/server" className="underline-offset-2 hover:underline">
 						AI settings
 					</Link>
 				</div>

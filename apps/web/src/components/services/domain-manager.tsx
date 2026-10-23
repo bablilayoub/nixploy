@@ -6,7 +6,6 @@ import {
 	Globe,
 	Loader2,
 	Lock,
-	MoreHorizontal,
 	Pencil,
 	Plus,
 	RefreshCw,
@@ -42,14 +41,6 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuSeparator,
-	DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Field, FieldLabel } from "@/components/ui/field";
 import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -342,13 +333,13 @@ function NixployAuthFields({
 			</p>
 
 			<div className="grid gap-2 sm:grid-cols-2">
-				<Field className="space-y-1">
-					<FieldLabel className="text-xs">Minimum role</FieldLabel>
+				<div className="space-y-1">
+					<Label className="text-xs">Minimum role</Label>
 					<Select
 						value={text("minRole") || "any"}
 						onValueChange={(value) => set("minRole", value === "any" ? "" : value)}
 					>
-						<SelectTrigger aria-label="Minimum role" className="h-8">
+						<SelectTrigger className="h-8">
 							<SelectValue />
 						</SelectTrigger>
 						<SelectContent>
@@ -359,16 +350,16 @@ function NixployAuthFields({
 							<SelectItem value="owner">Owner only</SelectItem>
 						</SelectContent>
 					</Select>
-				</Field>
-				<Field className="space-y-1">
-					<FieldLabel className="text-xs">Session length (hours)</FieldLabel>
+				</div>
+				<div className="space-y-1">
+					<Label className="text-xs">Session length (hours)</Label>
 					<Input
 						aria-label="Session length (hours)"
 						inputMode="numeric"
 						value={text("sessionHours")}
 						onChange={(event) => set("sessionHours", event.target.value)}
 					/>
-				</Field>
+				</div>
 			</div>
 
 			{canReadTeams && teams.length > 0 ? (
@@ -378,7 +369,7 @@ function NixployAuthFields({
 						{teams.map((team) => {
 							const checked = selectedTeams.has(team.teamId);
 							return (
-								<Label
+								<label
 									key={team.teamId}
 									htmlFor={`mw-nixployauth-team-${team.teamId}`}
 									className="flex cursor-pointer items-center gap-2 rounded-md border px-2 py-1 text-xs"
@@ -394,15 +385,15 @@ function NixployAuthFields({
 										}}
 									/>
 									{team.name}
-								</Label>
+								</label>
 							);
 						})}
 					</div>
 				</div>
 			) : null}
 
-			<Field className="space-y-1">
-				<FieldLabel className="text-xs">Allowed email domains (optional)</FieldLabel>
+			<div className="space-y-1">
+				<Label className="text-xs">Allowed email domains (optional)</Label>
 				<Input
 					aria-label="Allowed email domains"
 					className="font-mono text-xs"
@@ -410,10 +401,10 @@ function NixployAuthFields({
 					value={text("emailDomains")}
 					onChange={(event) => set("emailDomains", event.target.value)}
 				/>
-			</Field>
+			</div>
 
-			<Field className="space-y-1">
-				<FieldLabel className="text-xs">Paths served without signing in (one per line)</FieldLabel>
+			<div className="space-y-1">
+				<Label className="text-xs">Paths served without signing in (one per line)</Label>
 				<Textarea
 					aria-label="Paths served without signing in"
 					rows={2}
@@ -425,7 +416,7 @@ function NixployAuthFields({
 				<p className="text-xs text-muted-foreground">
 					Health checks and webhooks carry no browser session, so they need a way past the gate.
 				</p>
-			</Field>
+			</div>
 
 			<div className="flex items-center gap-2">
 				<Checkbox
@@ -465,41 +456,41 @@ function MiddlewareFieldsEditor({
 	if (kind === "rateLimit") {
 		return (
 			<div className="grid grid-cols-3 gap-2">
-				<Field className="space-y-1">
-					<FieldLabel className="text-xs">Average</FieldLabel>
+				<div className="space-y-1">
+					<Label className="text-xs">Average</Label>
 					<Input
 						aria-label="Average"
 						inputMode="numeric"
 						value={text("average")}
 						onChange={(event) => set("average", event.target.value)}
 					/>
-				</Field>
-				<Field className="space-y-1">
-					<FieldLabel className="text-xs">Burst</FieldLabel>
+				</div>
+				<div className="space-y-1">
+					<Label className="text-xs">Burst</Label>
 					<Input
 						aria-label="Burst"
 						inputMode="numeric"
 						value={text("burst")}
 						onChange={(event) => set("burst", event.target.value)}
 					/>
-				</Field>
-				<Field className="space-y-1">
-					<FieldLabel className="text-xs">Period</FieldLabel>
+				</div>
+				<div className="space-y-1">
+					<Label className="text-xs">Period</Label>
 					<Input
 						aria-label="Period"
 						placeholder="1s"
 						value={text("period")}
 						onChange={(event) => set("period", event.target.value)}
 					/>
-				</Field>
+				</div>
 			</div>
 		);
 	}
 
 	if (kind === "ipAllowList") {
 		return (
-			<Field className="space-y-1">
-				<FieldLabel className="text-xs">Allowed CIDRs (one per line)</FieldLabel>
+			<div className="space-y-1">
+				<Label className="text-xs">Allowed CIDRs (one per line)</Label>
 				<Textarea
 					aria-label="Allowed CIDRs (one per line)"
 					rows={3}
@@ -508,15 +499,15 @@ function MiddlewareFieldsEditor({
 					value={text("sourceRange")}
 					onChange={(event) => set("sourceRange", event.target.value)}
 				/>
-			</Field>
+			</div>
 		);
 	}
 
 	if (kind === "headers") {
 		return (
 			<div className="space-y-2">
-				<Field className="space-y-1">
-					<FieldLabel className="text-xs">Response headers (Name: value)</FieldLabel>
+				<div className="space-y-1">
+					<Label className="text-xs">Response headers (Name: value)</Label>
 					<Textarea
 						aria-label="Response headers (Name: value)"
 						rows={2}
@@ -525,9 +516,9 @@ function MiddlewareFieldsEditor({
 						value={text("responseHeaders")}
 						onChange={(event) => set("responseHeaders", event.target.value)}
 					/>
-				</Field>
-				<Field className="space-y-1">
-					<FieldLabel className="text-xs">Request headers (Name: value)</FieldLabel>
+				</div>
+				<div className="space-y-1">
+					<Label className="text-xs">Request headers (Name: value)</Label>
 					<Textarea
 						aria-label="Request headers (Name: value)"
 						rows={2}
@@ -536,10 +527,10 @@ function MiddlewareFieldsEditor({
 						value={text("requestHeaders")}
 						onChange={(event) => set("requestHeaders", event.target.value)}
 					/>
-				</Field>
-				<div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-					<Field className="space-y-1">
-						<FieldLabel className="text-xs">HSTS max-age (seconds)</FieldLabel>
+				</div>
+				<div className="grid grid-cols-2 gap-2">
+					<div className="space-y-1">
+						<Label className="text-xs">HSTS max-age (seconds)</Label>
 						<Input
 							aria-label="HSTS max-age (seconds)"
 							inputMode="numeric"
@@ -547,16 +538,16 @@ function MiddlewareFieldsEditor({
 							value={text("stsSeconds")}
 							onChange={(event) => set("stsSeconds", event.target.value)}
 						/>
-					</Field>
-					<Field className="space-y-1">
-						<FieldLabel className="text-xs">CORS origins</FieldLabel>
+					</div>
+					<div className="space-y-1">
+						<Label className="text-xs">CORS origins</Label>
 						<Input
 							aria-label="CORS origins"
 							placeholder="https://app.example.com"
 							value={text("corsOrigins")}
 							onChange={(event) => set("corsOrigins", event.target.value)}
 						/>
-					</Field>
+					</div>
 				</div>
 				<div className="flex gap-4">
 					<div className="flex items-center gap-2">
@@ -591,8 +582,8 @@ function MiddlewareFieldsEditor({
 
 	if (kind === "compress") {
 		return (
-			<Field className="space-y-1">
-				<FieldLabel className="text-xs">Minimum response size (bytes, optional)</FieldLabel>
+			<div className="space-y-1">
+				<Label className="text-xs">Minimum response size (bytes, optional)</Label>
 				<Input
 					aria-label="Minimum response size (bytes, optional)"
 					inputMode="numeric"
@@ -600,7 +591,7 @@ function MiddlewareFieldsEditor({
 					value={text("minResponseBodyBytes")}
 					onChange={(event) => set("minResponseBodyBytes", event.target.value)}
 				/>
-			</Field>
+			</div>
 		);
 	}
 
@@ -611,8 +602,8 @@ function MiddlewareFieldsEditor({
 	if (kind === "forwardAuth") {
 		return (
 			<div className="space-y-2">
-				<Field className="space-y-1">
-					<FieldLabel className="text-xs">Auth endpoint</FieldLabel>
+				<div className="space-y-1">
+					<Label className="text-xs">Auth endpoint</Label>
 					<Input
 						aria-label="Auth endpoint"
 						className="font-mono text-xs"
@@ -623,9 +614,9 @@ function MiddlewareFieldsEditor({
 					<p className="text-xs text-muted-foreground">
 						Either the app name of another service in this organization, or a public HTTPS URL.
 					</p>
-				</Field>
-				<Field className="space-y-1">
-					<FieldLabel className="text-xs">Headers to copy from the auth response</FieldLabel>
+				</div>
+				<div className="space-y-1">
+					<Label className="text-xs">Headers to copy from the auth response</Label>
 					<Input
 						aria-label="Headers to copy from the auth response"
 						className="font-mono text-xs"
@@ -633,7 +624,7 @@ function MiddlewareFieldsEditor({
 						value={text("authResponseHeaders")}
 						onChange={(event) => set("authResponseHeaders", event.target.value)}
 					/>
-				</Field>
+				</div>
 				<div className="flex items-center gap-2">
 					<Checkbox
 						id={`mw-${kind}-trustForwardHeader`}
@@ -650,15 +641,15 @@ function MiddlewareFieldsEditor({
 
 	return (
 		<div className="space-y-2">
-			<Field className="space-y-1">
-				<FieldLabel className="text-xs">Cookie name</FieldLabel>
+			<div className="space-y-1">
+				<Label className="text-xs">Cookie name</Label>
 				<Input
 					aria-label="Cookie name"
 					placeholder="nixploy_sticky"
 					value={text("name")}
 					onChange={(event) => set("name", event.target.value)}
 				/>
-			</Field>
+			</div>
 			<div className="flex gap-4">
 				<div className="flex items-center gap-2">
 					<Checkbox
@@ -1223,7 +1214,11 @@ export function DomainManager({
 						<Table>
 							<TableHeader>
 								<TableRow>
-									<TableHead>Domain and route</TableHead>
+									<TableHead>Host</TableHead>
+									<TableHead>Protocol</TableHead>
+									<TableHead>Path</TableHead>
+									<TableHead>Port</TableHead>
+									{serviceType === "compose" && <TableHead>Service</TableHead>}
 									<TableHead>Certificate</TableHead>
 									<TableHead>Middlewares</TableHead>
 									<TableHead>Uptime</TableHead>
@@ -1233,13 +1228,13 @@ export function DomainManager({
 							<TableBody>
 								{domains.map((domain) => (
 									<TableRow key={domain.domainId}>
-										<TableCell className="min-w-56 max-w-md whitespace-normal">
+										<TableCell>
 											{(domain.protocol ?? "http") === "http" ? (
 												<a
 													href={`${domain.https ? "https" : "http"}://${domain.host}`}
 													target="_blank"
 													rel="noreferrer"
-													className="inline-flex max-w-full items-center gap-1.5 break-all text-sm font-medium hover:underline"
+													className="inline-flex items-center gap-1.5 font-mono text-xs hover:underline"
 												>
 													{domain.https && <Lock className="size-3 text-success" />}
 													{domain.host}
@@ -1247,31 +1242,41 @@ export function DomainManager({
 											) : (
 												// A layer-4 route is not a URL a browser can open; a plain
 												// TCP router does not even match on the host.
-												<span className="inline-flex max-w-full items-center gap-1.5 break-all text-sm font-medium">
+												<span className="inline-flex items-center gap-1.5 font-mono text-xs">
 													{domain.tlsMode !== "none" && <Lock className="size-3 text-success" />}
 													{domain.tlsMode === "none" ? "any host" : domain.host}
 												</span>
 											)}
-
-											<p className="mt-2 break-all font-mono text-xs text-muted-foreground">
-												{(domain.protocol ?? "http") === "http" ? (
-													<>
-														{domain.https ? "HTTPS" : "HTTP"} · {domain.path ?? "/"}
-														{domain.internalPath && domain.internalPath !== "/"
-															? ` → ${domain.internalPath}`
-															: ""}{" "}
-														· {domain.serviceName ? `${domain.serviceName}:` : "port "}
-														{domain.port ?? "—"}
-													</>
-												) : (
-													<>
-														{domain.protocol.toUpperCase()} · {domain.entrypoint} →{" "}
-														{domain.serviceName ? `${domain.serviceName}:` : ""}
-														{domain.port ?? "—"}
-													</>
-												)}
-											</p>
 										</TableCell>
+										<TableCell>
+											{(domain.protocol ?? "http") === "http" ? (
+												<Badge variant="outline" className="text-xs">
+													{domain.https ? "HTTPS" : "HTTP"}
+												</Badge>
+											) : (
+												<Badge variant="outline" className="text-xs">
+													{domain.protocol.toUpperCase()} · {domain.entrypoint}
+												</Badge>
+											)}
+										</TableCell>
+										<TableCell className="font-mono text-xs">
+											{(domain.protocol ?? "http") !== "http" ? "—" : (domain.path ?? "/")}
+											{domain.internalPath && domain.internalPath !== "/" ? (
+												<span
+													className="text-muted-foreground"
+													title={`Rewritten to ${domain.internalPath} before reaching the container`}
+												>
+													{" "}
+													→ {domain.internalPath}
+												</span>
+											) : null}
+										</TableCell>
+										<TableCell className="font-mono text-xs">{domain.port ?? "—"}</TableCell>
+										{serviceType === "compose" && (
+											<TableCell className="font-mono text-xs">
+												{domain.serviceName ?? "—"}
+											</TableCell>
+										)}
 										<TableCell>
 											<Badge variant="outline" className="text-xs capitalize">
 												{(domain.protocol ?? "http") !== "http" && domain.tlsMode === "passthrough"
@@ -1303,7 +1308,6 @@ export function DomainManager({
 												return (
 													<div className="flex items-center gap-2">
 														<Switch
-															aria-label={`Monitor uptime for ${domain.host}`}
 															checked={Boolean(probe?.enabled)}
 															disabled={setProbe.isPending || !canProbe}
 															title={canProbe ? undefined : capabilityHint("project.write")}
@@ -1319,55 +1323,48 @@ export function DomainManager({
 											})()}
 										</TableCell>
 										<TableCell className="text-right">
-											<div className="flex items-center justify-end gap-1">
+											<div className="flex justify-end gap-1">
 												<Button
 													variant="ghost"
-													size="sm"
+													size="icon-sm"
 													aria-label={`Diagnose domain ${domain.host}`}
+													title="Why does this host answer 502 or 404?"
 													onClick={() => setDiagnosing(domain)}
 												>
-													<Stethoscope className="size-4" />
-													Diagnose
+													<Stethoscope className="size-3.5" />
 												</Button>
-												<DropdownMenu>
-													<DropdownMenuTrigger asChild>
-														<Button
-															variant="ghost"
-															size="icon-sm"
-															aria-label={`Actions for domain ${domain.host}`}
-														>
-															<MoreHorizontal className="size-4" />
-														</Button>
-													</DropdownMenuTrigger>
-													<DropdownMenuContent align="end">
-														<DropdownMenuItem
-															disabled={!canManage}
-															title={manageHint}
-															onSelect={() => openEdit(domain)}
-														>
-															<Pencil className="size-4" />
-															Edit domain
-														</DropdownMenuItem>
-														<DropdownMenuItem
-															disabled={!canManage || ensureDns.isPending}
-															title={manageHint}
-															onSelect={() => ensureDns.mutate({ domainId: domain.domainId })}
-														>
-															<Globe className="size-4" />
-															Create DNS record
-														</DropdownMenuItem>
-														<DropdownMenuSeparator />
-														<DropdownMenuItem
-															variant="default"
-															disabled={!canManage}
-															title={manageHint}
-															onSelect={() => setDeleting(domain)}
-														>
-															<Trash2 className="size-4" />
-															Delete domain
-														</DropdownMenuItem>
-													</DropdownMenuContent>
-												</DropdownMenu>
+												<Button
+													variant="ghost"
+													size="icon-sm"
+													aria-label={`Create DNS record for ${domain.host}`}
+													disabled={!canManage || ensureDns.isPending}
+													title={
+														manageHint ?? "Point this host at the server at the linked DNS provider"
+													}
+													onClick={() => ensureDns.mutate({ domainId: domain.domainId })}
+												>
+													<Globe className="size-3.5" />
+												</Button>
+												<Button
+													variant="ghost"
+													size="icon-sm"
+													aria-label={`Edit domain ${domain.host}`}
+													disabled={!canManage}
+													title={manageHint}
+													onClick={() => openEdit(domain)}
+												>
+													<Pencil className="size-3.5" />
+												</Button>
+												<Button
+													variant="ghost"
+													size="icon-sm"
+													aria-label={`Delete domain ${domain.host}`}
+													disabled={!canManage}
+													title={manageHint}
+													onClick={() => setDeleting(domain)}
+												>
+													<Trash2 className="size-3.5 text-destructive" />
+												</Button>
 											</div>
 										</TableCell>
 									</TableRow>
@@ -1395,7 +1392,7 @@ export function DomainManager({
 					>
 						<div className="space-y-1.5">
 							<Label htmlFor="domain-host">Host</Label>
-							<div className="flex flex-col gap-2 sm:flex-row">
+							<div className="flex gap-2">
 								<Input
 									id="domain-host"
 									placeholder="app.example.com"
@@ -1435,7 +1432,7 @@ export function DomainManager({
 										{dnsCheck.serverIp})
 									</p>
 								) : dnsCheck.resolved.length > 0 ? (
-									<p className="text-xs text-warning">
+									<p className="text-xs text-amber-600 dark:text-amber-400">
 										{dnsCheck.host} resolves to {dnsCheck.resolved.join(", ")}
 										{dnsCheck.serverIp
 											? ` — this server is ${dnsCheck.serverIp}. Point an A record here, or ignore this if a CDN or load balancer sits in front.`
@@ -1452,13 +1449,13 @@ export function DomainManager({
 						</div>
 
 						{!external && (
-							<Field className="space-y-1.5">
-								<FieldLabel>Protocol</FieldLabel>
+							<div className="space-y-1.5">
+								<Label>Protocol</Label>
 								<Select
 									value={protocol}
 									onValueChange={(value) => setProtocol(value as RouteProtocol)}
 								>
-									<SelectTrigger aria-label="Protocol">
+									<SelectTrigger>
 										<SelectValue />
 									</SelectTrigger>
 									<SelectContent>
@@ -1473,17 +1470,17 @@ export function DomainManager({
 										: "Layer 4: Traefik forwards the raw stream on a dedicated entrypoint. No paths, redirects or middlewares."}{" "}
 									<HelpLink slug="tcp-udp-routing" />
 								</p>
-							</Field>
+							</div>
 						)}
 
 						{protocol !== "http" && (
-							<Field className="space-y-1.5">
-								<FieldLabel>Entrypoint</FieldLabel>
+							<div className="space-y-1.5">
+								<Label>Entrypoint</Label>
 								<Select
 									value={entrypoint ?? ""}
 									onValueChange={(value) => setEntrypoint(value || null)}
 								>
-									<SelectTrigger aria-label="Entrypoint">
+									<SelectTrigger>
 										<SelectValue placeholder="Select an entrypoint" />
 									</SelectTrigger>
 									<SelectContent>
@@ -1501,14 +1498,14 @@ export function DomainManager({
 										? "The host port clients connect to. Entrypoints are instance-wide."
 										: `No ${protocol.toUpperCase()} entrypoint exists yet — the instance administrator adds one under Settings → Server.`}
 								</p>
-							</Field>
+							</div>
 						)}
 
 						{protocol === "tcp" && (
-							<Field className="space-y-1.5">
-								<FieldLabel>TLS</FieldLabel>
+							<div className="space-y-1.5">
+								<Label>TLS</Label>
 								<Select value={tlsMode} onValueChange={(value) => setTlsMode(value as TlsMode)}>
-									<SelectTrigger aria-label="TLS">
+									<SelectTrigger>
 										<SelectValue />
 									</SelectTrigger>
 									<SelectContent>
@@ -1522,30 +1519,26 @@ export function DomainManager({
 										? "The entrypoint's port is the only selector: this router takes every connection on it, whatever the host above says."
 										: "Traefik matches the host from the TLS handshake (SNI), so several services can share one port."}
 								</p>
-							</Field>
+							</div>
 						)}
 
 						<div
-							className={
-								protocol === "http"
-									? "grid grid-cols-1 sm:grid-cols-2 gap-3"
-									: "grid grid-cols-1 gap-3"
-							}
+							className={protocol === "http" ? "grid grid-cols-2 gap-3" : "grid grid-cols-1 gap-3"}
 						>
 							{protocol === "http" && (
-								<Field className="space-y-1.5">
-									<FieldLabel htmlFor="domain-path">Path</FieldLabel>
+								<div className="space-y-1.5">
+									<Label htmlFor="domain-path">Path</Label>
 									<Input
 										id="domain-path"
 										placeholder="/"
 										value={path}
 										onChange={(event) => setPath(event.target.value)}
 									/>
-								</Field>
+								</div>
 							)}
 							{!external && (
-								<Field className="space-y-1.5">
-									<FieldLabel htmlFor="domain-port">Container port</FieldLabel>
+								<div className="space-y-1.5">
+									<Label htmlFor="domain-port">Container port</Label>
 									<Input
 										id="domain-port"
 										placeholder={DEFAULT_HTTP_PORT}
@@ -1553,7 +1546,7 @@ export function DomainManager({
 										value={port}
 										onChange={(event) => setPort(event.target.value)}
 									/>
-								</Field>
+								</div>
 							)}
 						</div>
 						{!external && (
@@ -1564,8 +1557,8 @@ export function DomainManager({
 						)}
 
 						{protocol === "http" && (
-							<Field className="space-y-1.5">
-								<FieldLabel htmlFor="domain-internal-path">Internal path (optional)</FieldLabel>
+							<div className="space-y-1.5">
+								<Label htmlFor="domain-internal-path">Internal path (optional)</Label>
 								<Input
 									id="domain-internal-path"
 									placeholder="/"
@@ -1581,17 +1574,17 @@ export function DomainManager({
 									</code>
 									. Leave empty to forward the path unchanged.
 								</p>
-							</Field>
+							</div>
 						)}
 
 						{serviceType === "compose" && (
-							<Field className="space-y-1.5">
-								<FieldLabel>Compose service</FieldLabel>
+							<div className="space-y-1.5">
+								<Label>Compose service</Label>
 								<Select
 									value={serviceName ?? ""}
 									onValueChange={(value) => setServiceName(value || null)}
 								>
-									<SelectTrigger aria-label="Compose service">
+									<SelectTrigger>
 										<SelectValue placeholder="Select a service" />
 									</SelectTrigger>
 									<SelectContent>
@@ -1602,7 +1595,7 @@ export function DomainManager({
 										))}
 									</SelectContent>
 								</Select>
-							</Field>
+							</div>
 						)}
 
 						{protocol === "http" && (
@@ -1630,13 +1623,13 @@ export function DomainManager({
 						{/* A certificate only matters when something terminates TLS; the
 						    select used to sit there on a plain-HTTP domain. */}
 						{((protocol === "http" && https) || tlsMode === "terminate") && (
-							<Field className="space-y-1.5">
-								<FieldLabel>Certificate</FieldLabel>
+							<div className="space-y-1.5">
+								<Label>Certificate</Label>
 								<Select
 									value={certificateType}
 									onValueChange={(value) => setCertificateType(value as CertificateType)}
 								>
-									<SelectTrigger aria-label="Certificate">
+									<SelectTrigger>
 										<SelectValue />
 									</SelectTrigger>
 									<SelectContent>
@@ -1646,7 +1639,7 @@ export function DomainManager({
 									</SelectContent>
 								</Select>
 								{host.trim().toLowerCase().endsWith(".traefik.me") && (
-									<p className="text-xs text-warning">
+									<p className="text-xs text-amber-600 dark:text-amber-400">
 										*.traefik.me is for localhost only — keep certificate on “None”. Open the HTTPS
 										URL and accept the browser warning for Traefik’s default cert.
 									</p>
@@ -1658,18 +1651,18 @@ export function DomainManager({
 										reachable from the internet.
 									</p>
 								)}
-							</Field>
+							</div>
 						)}
 
 						{certificateType === "custom" &&
 							((protocol === "http" && https) || tlsMode === "terminate") && (
-								<Field className="space-y-1.5">
-									<FieldLabel>Custom certificate</FieldLabel>
+								<div className="space-y-1.5">
+									<Label>Custom certificate</Label>
 									<Select
 										value={certificateId ?? ""}
 										onValueChange={(value) => setCertificateId(value || null)}
 									>
-										<SelectTrigger aria-label="Custom certificate">
+										<SelectTrigger>
 											<SelectValue placeholder="Select a certificate" />
 										</SelectTrigger>
 										<SelectContent>
@@ -1683,7 +1676,7 @@ export function DomainManager({
 											))}
 										</SelectContent>
 									</Select>
-								</Field>
+								</div>
 							)}
 						<DialogFooter>
 							<Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
@@ -1710,7 +1703,7 @@ export function DomainManager({
 					<AlertDialogFooter>
 						<AlertDialogCancel disabled={deleteMutation.isPending}>Cancel</AlertDialogCancel>
 						<AlertDialogAction
-							variant="outline"
+							variant="destructive"
 							disabled={deleteMutation.isPending}
 							onClick={(event) => {
 								// Keep the dialog open (with its spinner) until the mutation settles.
@@ -1774,7 +1767,7 @@ function DomainDiagnosisDialog({
 										? "outline"
 										: data.verdict === "degraded"
 											? "secondary"
-											: "outline"
+											: "destructive"
 								}
 								className="ml-2 align-middle capitalize"
 							>

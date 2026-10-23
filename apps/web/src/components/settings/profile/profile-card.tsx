@@ -8,8 +8,8 @@ import { SettingsSection } from "@/components/layout/settings-section";
 import { useSaveBar } from "@/components/services/save-bar";
 import { SESSIONS_QUERY_KEY } from "@/components/settings/profile/sessions-card";
 import { Button } from "@/components/ui/button";
-import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { UserAvatar } from "@/components/user-avatar";
 import { useDraft } from "@/hooks/use-draft";
 import { useMounted } from "@/hooks/use-mounted";
@@ -84,12 +84,12 @@ export function ProfileCard() {
 	// The page is already titled "Profile"; the card names what it holds.
 	return (
 		<SettingsSection title="Name and avatar">
-			<div className="flex min-w-0 flex-col gap-7">
+			<div className="flex flex-col gap-6">
 				<div className="flex items-center gap-4">
 					<UserAvatar
 						user={user}
 						className="size-14"
-						fallbackClassName="text-xl leading-snug font-semibold tracking-tight"
+						fallbackClassName="text-lg font-semibold"
 						size={112}
 					/>
 					<div className="grid gap-1">
@@ -99,8 +99,8 @@ export function ProfileCard() {
 				</div>
 
 				<form onSubmit={onNameSubmit} className="grid max-w-sm gap-3">
-					<Field>
-						<FieldLabel htmlFor="profile-name">Display name</FieldLabel>
+					<div className="grid gap-2">
+						<Label htmlFor="profile-name">Display name</Label>
 						<Input
 							id="profile-name"
 							value={name}
@@ -108,7 +108,7 @@ export function ProfileCard() {
 							disabled={pending}
 							required
 						/>
-					</Field>
+					</div>
 					<div>
 						<Button type="submit" size="sm" disabled={pending || nameUnchanged}>
 							{pending && <Loader2 className="size-4 animate-spin" />}
@@ -129,24 +129,20 @@ export function ProfileCard() {
 						{PRESET_AVATARS.map((preset) => {
 							const selected = currentImage === presetImageValue(preset.id);
 							return (
-								<Button
-									variant="ghost"
-									size="icon"
+								<button
 									key={preset.id}
 									type="button"
 									title={preset.label}
-									aria-label={preset.label}
-									aria-pressed={selected}
 									disabled={pending}
 									onClick={() => void saveImage(presetImageValue(preset.id))}
 									className={cn(
-										"size-11 overflow-hidden rounded-full border border-border transition-colors hover:border-foreground/40 disabled:opacity-50",
+										"size-10 overflow-hidden rounded-full border border-border transition-colors hover:border-foreground/40 disabled:opacity-50",
 										selected && "ring-2 ring-foreground ring-offset-2 ring-offset-background",
 									)}
 								>
 									{/* biome-ignore lint/performance/noImgElement: inline data-URI presets */}
 									<img src={preset.src} alt="" className="size-full object-cover" />
-								</Button>
+								</button>
 							);
 						})}
 					</div>
@@ -217,8 +213,8 @@ export function ChangePasswordCard() {
 			description="Update your password. Other sessions will be signed out."
 		>
 			<form onSubmit={onSubmit} className="grid max-w-sm gap-4">
-				<Field>
-					<FieldLabel htmlFor="current-password">Current password</FieldLabel>
+				<div className="grid gap-2">
+					<Label htmlFor="current-password">Current password</Label>
 					<Input
 						id="current-password"
 						type="password"
@@ -226,9 +222,9 @@ export function ChangePasswordCard() {
 						value={currentPassword}
 						onChange={(e) => setCurrentPassword(e.target.value)}
 					/>
-				</Field>
-				<Field>
-					<FieldLabel htmlFor="new-password">New password</FieldLabel>
+				</div>
+				<div className="grid gap-2">
+					<Label htmlFor="new-password">New password</Label>
 					<Input
 						id="new-password"
 						type="password"
@@ -237,9 +233,9 @@ export function ChangePasswordCard() {
 						value={newPassword}
 						onChange={(e) => setNewPassword(e.target.value)}
 					/>
-				</Field>
-				<Field>
-					<FieldLabel htmlFor="confirm-password">Confirm new password</FieldLabel>
+				</div>
+				<div className="grid gap-2">
+					<Label htmlFor="confirm-password">Confirm new password</Label>
 					<Input
 						id="confirm-password"
 						type="password"
@@ -248,7 +244,7 @@ export function ChangePasswordCard() {
 						value={confirmPassword}
 						onChange={(e) => setConfirmPassword(e.target.value)}
 					/>
-				</Field>
+				</div>
 				<div>
 					<Button type="submit" disabled={isPending}>
 						{isPending && <Loader2 className="size-4 animate-spin" />}

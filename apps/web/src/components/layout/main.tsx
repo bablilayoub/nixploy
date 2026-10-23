@@ -1,19 +1,18 @@
 import { cn } from "@/lib/utils";
 
-type MainProps = React.ComponentPropsWithoutRef<"main"> & {
-	as?: "main" | "div";
+type MainProps = React.ComponentProps<"main"> & {
 	fixed?: boolean;
 	fluid?: boolean;
 };
 
-export function Main({ as: Tag = "main", fixed, fluid, className, ...props }: MainProps) {
+export function Main({ fixed, fluid, className, ...props }: MainProps) {
 	return (
-		<Tag
+		<main
 			data-layout={fixed ? "fixed" : "auto"}
 			className={cn(
-				"mx-auto w-full min-w-0 px-4 py-6 sm:px-6 lg:px-8 lg:py-8",
+				"mx-auto w-full min-w-0 px-4 py-6 sm:px-6",
 				fixed && "flex grow flex-col overflow-hidden",
-				!fluid && "max-w-7xl",
+				!fluid && "max-w-[1400px]",
 				className,
 			)}
 			{...props}

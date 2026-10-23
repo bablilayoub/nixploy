@@ -2,11 +2,10 @@
 
 import { Slider as SliderPrimitive } from "radix-ui";
 import * as React from "react";
+
 import { cn } from "@/lib/utils";
 
 function Slider({
-	"aria-label": ariaLabel,
-	"aria-labelledby": ariaLabelledBy,
 	className,
 	defaultValue,
 	value,
@@ -45,13 +44,10 @@ function Slider({
 					)}
 				/>
 			</SliderPrimitive.Track>
-			{Array.from({ length: _values.length }, (_, index) => (
+			{_values.map((value) => (
 				<SliderPrimitive.Thumb
 					data-slot="slider-thumb"
-					// biome-ignore lint/suspicious/noArrayIndexKey: thumbs have fixed positional identities and never reorder.
-					key={index}
-					aria-label={ariaLabel}
-					aria-labelledby={ariaLabelledBy}
+					key={`thumb-${value}`}
 					className="block size-4 shrink-0 rounded-full border border-primary bg-white shadow-sm ring-ring/50 transition-[color,box-shadow] hover:ring-4 focus-visible:ring-4 focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50"
 				/>
 			))}

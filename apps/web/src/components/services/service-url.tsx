@@ -1,8 +1,8 @@
 "use client";
 
 import { ExternalLink } from "lucide-react";
+
 import { CopyButton } from "@/components/services/copy-button";
-import { Button } from "@/components/ui/button";
 import { type DomainLike, domainLabel, domainUrl, primaryDomain } from "@/lib/service-url";
 import { cn } from "@/lib/utils";
 
@@ -66,15 +66,13 @@ export function ServiceUrlBar({
 		<span className={cn("flex min-w-0 items-center gap-2", className)}>
 			<ServiceUrl domain={primary} />
 			{others > 0 ? (
-				<Button
-					variant="link"
-					size="sm"
+				<button
 					type="button"
-					className="h-auto min-h-0 px-0 py-0 has-[>svg]:px-0 shrink-0 text-xs text-muted-foreground underline-offset-2 hover:underline"
+					className="shrink-0 text-xs text-muted-foreground underline-offset-2 hover:underline"
 					onClick={onShowAll}
 				>
 					+{others} more
-				</Button>
+				</button>
 			) : null}
 		</span>
 	);

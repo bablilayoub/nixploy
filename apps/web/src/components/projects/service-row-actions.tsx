@@ -20,7 +20,7 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Field, FieldLabel } from "@/components/ui/field";
+import { Label } from "@/components/ui/label";
 import {
 	Select,
 	SelectContent,
@@ -172,10 +172,10 @@ export function ServiceRowActions({
 							Move this service to another environment, in any project of the organization.
 						</DialogDescription>
 					</DialogHeader>
-					<Field>
-						<FieldLabel>Target environment</FieldLabel>
+					<div className="flex flex-col gap-2">
+						<Label>Target environment</Label>
 						<Select value={targetEnvironmentId} onValueChange={setTargetEnvironmentId}>
-							<SelectTrigger aria-label="Target environment">
+							<SelectTrigger>
 								<SelectValue placeholder="Select an environment" />
 							</SelectTrigger>
 							<SelectContent>
@@ -187,7 +187,7 @@ export function ServiceRowActions({
 								))}
 							</SelectContent>
 						</Select>
-					</Field>
+					</div>
 					<DialogFooter>
 						<Button disabled={!targetEnvironmentId || move.isPending} onClick={() => move.mutate()}>
 							{move.isPending && <Loader2 className="size-4 animate-spin" />}

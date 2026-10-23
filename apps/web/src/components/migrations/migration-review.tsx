@@ -7,16 +7,6 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
-import {
-	Table,
-	TableBody,
-	TableCaption,
-	TableCell,
-	TableHead,
-	TableHeader,
-	TableRow,
-} from "@/components/ui/table";
 import { importBlockers, migrationTasks } from "./migration-model";
 
 export function MigrationReview({
@@ -86,38 +76,31 @@ export function MigrationReview({
 						explicit action.
 					</p>
 					{plan.plan && (
-						<Table
-							containerClassName="max-h-72 overflow-auto rounded-md border"
-							className="w-full text-start text-sm"
-						>
-							<TableCaption className="sr-only">Changes to the target environment</TableCaption>
-							<TableHeader className="sticky top-0 bg-muted text-xs text-muted-foreground">
-								<TableRow>
-									<TableHead className="whitespace-normal px-3 py-2 text-start font-medium">
-										Action
-									</TableHead>
-									<TableHead className="whitespace-normal px-3 py-2 text-start font-medium">
-										Resource
-									</TableHead>
-									<TableHead className="whitespace-normal px-3 py-2 text-start font-medium">
-										Changed fields
-									</TableHead>
-								</TableRow>
-							</TableHeader>
-							<TableBody className="divide-y">
-								{plan.plan.items.map((item) => (
-									<TableRow key={`${item.parentKind}:${item.parent}:${item.kind}:${item.name}`}>
-										<TableCell className="whitespace-normal px-3 py-2">{item.action}</TableCell>
-										<TableCell className="whitespace-normal px-3 py-2 break-words">
-											{item.kind} / {item.name}
-										</TableCell>
-										<TableCell className="whitespace-normal px-3 py-2 text-muted-foreground">
-											{item.changes?.join(", ") || "—"}
-										</TableCell>
-									</TableRow>
-								))}
-							</TableBody>
-						</Table>
+						<div className="max-h-72 overflow-auto rounded-md border">
+							<table className="w-full text-start text-sm">
+								<caption className="sr-only">Changes to the target environment</caption>
+								<thead className="sticky top-0 bg-muted text-xs text-muted-foreground">
+									<tr>
+										<th className="px-3 py-2 text-start font-medium">Action</th>
+										<th className="px-3 py-2 text-start font-medium">Resource</th>
+										<th className="px-3 py-2 text-start font-medium">Changed fields</th>
+									</tr>
+								</thead>
+								<tbody className="divide-y">
+									{plan.plan.items.map((item) => (
+										<tr key={`${item.parentKind}:${item.parent}:${item.kind}:${item.name}`}>
+											<td className="px-3 py-2">{item.action}</td>
+											<td className="px-3 py-2 break-words">
+												{item.kind} / {item.name}
+											</td>
+											<td className="px-3 py-2 text-muted-foreground">
+												{item.changes?.join(", ") || "—"}
+											</td>
+										</tr>
+									))}
+								</tbody>
+							</table>
+						</div>
 					)}
 					{plan.valueGroups?.length > 0 && (
 						<section className="space-y-2">
@@ -210,7 +193,7 @@ export function MigrationReview({
 						</div>
 					) : (
 						<div className="space-y-4 border-t pt-4">
-							<Label htmlFor="migration-confirm" className="flex items-start gap-3 text-sm">
+							<label htmlFor="migration-confirm" className="flex items-start gap-3 text-sm">
 								<Checkbox
 									id="migration-confirm"
 									checked={confirmed}
@@ -222,7 +205,7 @@ export function MigrationReview({
 									I reviewed the changes and notes. Copy configuration and readable values to this
 									target; I will restore data and deploy separately.
 								</span>
-							</Label>
+							</label>
 							{blockers.length > 0 && (
 								<p className="text-sm text-muted-foreground">
 									Applying requires: {blockers.join(", ")}. Ask an organization administrator to

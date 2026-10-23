@@ -1,9 +1,9 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Field, FieldLabel } from "@/components/ui/field";
 
 import { HelpLink } from "@/components/ui/help-link";
+import { Label } from "@/components/ui/label";
 import {
 	Select,
 	SelectContent,
@@ -46,8 +46,8 @@ export function PreviewDatabaseFields({
 
 	return (
 		<>
-			<Field>
-				<FieldLabel htmlFor={`${idPrefix}-database`}>Database per preview</FieldLabel>
+			<div className="flex flex-col gap-2">
+				<Label htmlFor={`${idPrefix}-database`}>Database per preview</Label>
 				<Select
 					value={selected}
 					disabled={disabled || targets.isPending}
@@ -70,10 +70,10 @@ export function PreviewDatabaseFields({
 					<code className="font-mono">DATABASE_URL</code> and dropped with the preview. Only the
 					databases of this environment are offered. <HelpLink slug="domains" />
 				</p>
-			</Field>
+			</div>
 			{selected !== NONE ? (
-				<Field>
-					<FieldLabel htmlFor={`${idPrefix}-seed`}>Seed command (optional)</FieldLabel>
+				<div className="flex flex-col gap-2">
+					<Label htmlFor={`${idPrefix}-seed`}>Seed command (optional)</Label>
 					<Textarea
 						id={`${idPrefix}-seed`}
 						className="min-h-16 font-mono text-xs sm:max-w-lg"
@@ -87,7 +87,7 @@ export function PreviewDatabaseFields({
 						preview's own image for an application, in a container of the preview project for a
 						compose stack.
 					</p>
-				</Field>
+				</div>
 			) : null}
 		</>
 	);

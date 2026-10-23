@@ -27,9 +27,9 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
-import { Field, FieldLabel } from "@/components/ui/field";
 import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
 	Select,
 	SelectContent,
@@ -115,12 +115,10 @@ export function TraefikEntrypointsCard() {
 				title="TCP and UDP entrypoints"
 				description="Extra ports Traefik listens on, so a service can be routed at layer 4 instead of over HTTP."
 				actions={
-					entrypoints.length > 0 ? (
-						<Button size="sm" onClick={openCreate}>
-							<Plus className="size-4" />
-							Add entrypoint
-						</Button>
-					) : undefined
+					<Button size="sm" onClick={openCreate}>
+						<Plus className="size-4" />
+						Add entrypoint
+					</Button>
 				}
 			>
 				<p className="text-xs text-muted-foreground">
@@ -207,8 +205,8 @@ export function TraefikEntrypointsCard() {
 						}}
 						className="space-y-4"
 					>
-						<Field className="space-y-1.5">
-							<FieldLabel htmlFor="entrypoint-name">Name</FieldLabel>
+						<div className="space-y-1.5">
+							<Label htmlFor="entrypoint-name">Name</Label>
 							<Input
 								id="entrypoint-name"
 								placeholder="pg-15432"
@@ -218,10 +216,10 @@ export function TraefikEntrypointsCard() {
 							<p className="text-xs text-muted-foreground">
 								Lowercase letters, digits and dashes. Domains reference the entrypoint by this name.
 							</p>
-						</Field>
+						</div>
 						<div className="grid grid-cols-2 gap-3">
-							<Field className="space-y-1.5">
-								<FieldLabel htmlFor="entrypoint-port">Port</FieldLabel>
+							<div className="space-y-1.5">
+								<Label htmlFor="entrypoint-port">Port</Label>
 								<Input
 									id="entrypoint-port"
 									placeholder="15432"
@@ -229,14 +227,14 @@ export function TraefikEntrypointsCard() {
 									value={port}
 									onChange={(event) => setPort(event.target.value)}
 								/>
-							</Field>
-							<Field className="space-y-1.5">
-								<FieldLabel>Protocol</FieldLabel>
+							</div>
+							<div className="space-y-1.5">
+								<Label>Protocol</Label>
 								<Select
 									value={protocol}
 									onValueChange={(value) => setProtocol(value as EntrypointProtocol)}
 								>
-									<SelectTrigger aria-label="Protocol">
+									<SelectTrigger>
 										<SelectValue />
 									</SelectTrigger>
 									<SelectContent>
@@ -244,7 +242,7 @@ export function TraefikEntrypointsCard() {
 										<SelectItem value="udp">UDP</SelectItem>
 									</SelectContent>
 								</Select>
-							</Field>
+							</div>
 						</div>
 						<p className="text-xs text-muted-foreground">
 							Privileged ports and the ports the platform already uses are rejected. Pick something
@@ -276,7 +274,7 @@ export function TraefikEntrypointsCard() {
 					<AlertDialogFooter>
 						<AlertDialogCancel disabled={deleteMutation.isPending}>Cancel</AlertDialogCancel>
 						<AlertDialogAction
-							variant="outline"
+							variant="destructive"
 							disabled={deleteMutation.isPending}
 							onClick={(event) => {
 								event.preventDefault();

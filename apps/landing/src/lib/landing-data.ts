@@ -1,5 +1,6 @@
 // Relative, not `@/`: `docs/pages.ts` imports this file and is itself imported
 // by a test in `apps/web`, where `@/` means `apps/web/src`. See CLAUDE.md.
+import { site, version } from "./site";
 import { templateCount } from "./templates";
 
 /**
@@ -12,11 +13,18 @@ import { templateCount } from "./templates";
  * number on this page is a claim, not a typo.
  */
 
+/** The fold's badge: the headline item of the latest release, linking to the changelog. */
+export const heroBadge = {
+	version,
+	text: "DNS records created for you",
+	href: `${site.github}/blob/main/CHANGELOG.md`,
+} as const;
+
 /** The fold's two lines; the second one is the quiet half of the promise. */
-export const heroTitle = ["Your apps and databases.", "On your servers."] as const;
+export const heroTitle = ["Ship anything.", "Own everything."] as const;
 
 export const heroLead =
-	"Deploy applications, databases and Compose stacks on your servers. One workspace for releases and operations.";
+	"A platform as a service that runs on your own box: git deploys, Compose stacks, databases, domains with TLS, backups and monitoring. One command, Apache-2.0.";
 
 /**
  * What `docker stats` reports for the three Swarm services on the production

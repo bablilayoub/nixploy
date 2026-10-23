@@ -21,7 +21,7 @@ import { useCapabilities } from "@/hooks/use-capabilities";
 import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { useTRPC } from "@/lib/trpc";
 
-const DEFAULT_COLOR = "#737373";
+const DEFAULT_COLOR = "#6366f1";
 
 /** Create / delete org tags from the project services toolbar. */
 export function ManageTagsDialog() {
@@ -109,13 +109,13 @@ export function ManageTagsDialog() {
 						<ul className="max-h-48 space-y-2 overflow-y-auto">
 							{(tagsQuery.data ?? []).map((tag) =>
 								editingId === tag.tagId ? (
-									<li key={tag.tagId} className="flex flex-wrap items-center gap-2">
-										<Input
+									<li key={tag.tagId} className="flex items-center gap-2">
+										<input
 											type="color"
 											aria-label={`Colour of ${tag.name}`}
 											value={editColor}
 											onChange={(event) => setEditColor(event.target.value)}
-											className="size-11 min-h-11 shrink-0 cursor-pointer p-1"
+											className="h-8 w-10 cursor-pointer rounded border bg-transparent p-0.5"
 										/>
 										<Input
 											aria-label={`Rename ${tag.name}`}
@@ -170,7 +170,7 @@ export function ManageTagsDialog() {
 									</li>
 								) : (
 									<li key={tag.tagId} className="flex items-center justify-between gap-2">
-										<span className="flex flex-wrap items-center gap-2 text-sm">
+										<span className="flex items-center gap-2 text-sm">
 											<span
 												className="size-2.5 rounded-full"
 												style={{ backgroundColor: tag.color }}
@@ -208,20 +208,20 @@ export function ManageTagsDialog() {
 					)}
 					<div className="flex flex-col gap-2 border-t pt-3">
 						<Label htmlFor="new-tag-name">New tag</Label>
-						<div className="grid grid-cols-[auto_minmax(0,1fr)] gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+						<div className="flex gap-2">
 							<Input
 								id="new-tag-name"
 								placeholder="Name"
 								value={name}
 								onChange={(event) => setName(event.target.value)}
-								className="h-8 col-span-2 sm:col-span-1"
+								className="h-8"
 							/>
-							<Input
+							<input
 								type="color"
 								aria-label="Tag color"
 								value={color}
 								onChange={(event) => setColor(event.target.value)}
-								className="size-11 min-h-11 shrink-0 cursor-pointer p-1"
+								className="h-8 w-10 cursor-pointer rounded border bg-transparent p-0.5"
 							/>
 							<Button
 								type="button"

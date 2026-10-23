@@ -16,7 +16,6 @@ import {
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { FocusSections } from "@/components/layout/focus-sections";
 import { SettingsSection, SettingsStack } from "@/components/layout/settings-section";
 import { useSaveBar } from "@/components/services/save-bar";
 import { AcmeDnsCard } from "@/components/settings/server/acme-dns-card";
@@ -39,8 +38,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { CodeEditor } from "@/components/ui/code-editor";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Field, FieldLabel } from "@/components/ui/field";
 import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -166,7 +163,7 @@ function DashboardDomainFields({
 
 	if (isLoading) {
 		return (
-			<div className="grid gap-5">
+			<div className="grid gap-4">
 				<Skeleton className="h-9 w-full" />
 				<Skeleton className="h-9 w-40" />
 			</div>
@@ -180,8 +177,8 @@ function DashboardDomainFields({
 				Encrypt email below, then save.
 			</p>
 			<div className="flex max-w-xl flex-wrap items-end gap-2">
-				<Field className="min-w-0 flex-1">
-					<FieldLabel htmlFor="dashboard-domain">Domain</FieldLabel>
+				<div className="grid min-w-64 flex-1 gap-2">
+					<Label htmlFor="dashboard-domain">Domain</Label>
 					<Input
 						id="dashboard-domain"
 						placeholder="panel.nixploy.com"
@@ -191,7 +188,7 @@ function DashboardDomainFields({
 							setDnsResult(null);
 						}}
 					/>
-				</Field>
+				</div>
 				<Button
 					type="button"
 					variant="outline"
@@ -418,388 +415,347 @@ export function ServerSettingsView() {
 				description="Domain, Traefik, host health, maintenance, and updates."
 			/>
 
-			<FocusSections
-				label="Platform settings sections"
-				items={[
-					{
-						id: "routing",
-						label: "Access and routing",
-						aliases: ["access", "proxy", "egress"],
-						detail: "Panel domain, DNS and proxy",
-					},
-					{
-						id: "operations",
-						label: "Host and maintenance",
-						aliases: ["health", "maintenance"],
-						detail: "Monitoring and cleanup",
-					},
-					{
-						id: "platform-administration",
-						label: "Administration",
-						detail: "Updates, AI and users",
-					},
-				]}
-			>
-				<div id="routing">
-					<SettingsStack>
-						{/* Access: domain + Let's Encrypt */}
-						<SettingsSection
-							id="access"
-							title="Access"
-							description="Serve this panel from your own domain with automatic HTTPS."
-						>
-							{settingsQuery.isPending ? (
-								<div className="grid gap-5">
-									<Skeleton className="h-9 w-full" />
-									<Skeleton className="h-9 w-full" />
-								</div>
-							) : (
-								<>
-									<DashboardDomainFields
-										savedDomain={settingsQuery.data?.host ?? null}
-										letsEncryptEmail={savedLetsEncrypt}
-										isLoading={false}
-										isSaving={updateMutation.isPending}
-										onSave={(host) => updateMutation.mutate({ host })}
-									/>
-									<div className="flex max-w-xl flex-wrap items-end gap-2">
-										<Field className="min-w-0 flex-1">
-											<FieldLabel htmlFor="letsencrypt-email">Let&apos;s Encrypt email</FieldLabel>
-											<Input
-												id="letsencrypt-email"
-												type="email"
-												placeholder="admin@example.com"
-												value={letsEncryptEmail}
-												onChange={(event) => accessDraft.set(event.target.value)}
-											/>
-										</Field>
-										<Button
-											type="button"
-											size="sm"
-											className="h-9"
-											disabled={
-												updateMutation.isPending || settingsQuery.isPending || !accessDraft.dirty
-											}
-											onClick={saveAccess}
-										>
-											{updateMutation.isPending && <Loader2 className="size-4 animate-spin" />}
-											Save email
-										</Button>
-									</div>
-								</>
-							)}
-						</SettingsSection>
-
-						{/* Wildcard certificates: DNS-01 provider + credentials */}
-						<AcmeDnsCard />
-						<TraefikEntrypointsCard />
-
-						{/* Proxy: Traefik dashboard + collapsed config + restart */}
-						<SettingsSection
-							id="proxy"
-							title="Proxy"
-							description="Traefik reverse proxy for the Nixploy host."
-							actions={
-								<div className="flex flex-wrap items-center gap-2">
-									<Button
-										type="button"
-										size="sm"
-										disabled={updateMutation.isPending || settingsQuery.isPending}
-										onClick={saveProxy}
-									>
-										{updateMutation.isPending && <Loader2 className="size-4 animate-spin" />}
-										Save
-									</Button>
-									<ConfirmActionDialog
-										title="Restart Traefik"
-										description="This force-updates the Traefik swarm service. Active connections may be briefly interrupted."
-										actionLabel="Restart"
-										isPending={restartMutation.isPending}
-										onConfirm={() => restartMutation.mutate()}
-										trigger={
-											<Button variant="outline" size="sm" disabled={restartMutation.isPending}>
-												{restartMutation.isPending ? (
-													<Loader2 className="size-4 animate-spin" />
-												) : (
-													<RefreshCw className="size-4" />
-												)}
-												Restart
-											</Button>
-										}
+			<SettingsStack>
+				{/* Access: domain + Let's Encrypt */}
+				<SettingsSection
+					id="access"
+					title="Access"
+					description="Serve this panel from your own domain with automatic HTTPS."
+				>
+					{settingsQuery.isPending ? (
+						<div className="grid gap-4">
+							<Skeleton className="h-9 w-full" />
+							<Skeleton className="h-9 w-full" />
+						</div>
+					) : (
+						<>
+							<DashboardDomainFields
+								savedDomain={settingsQuery.data?.host ?? null}
+								letsEncryptEmail={savedLetsEncrypt}
+								isLoading={false}
+								isSaving={updateMutation.isPending}
+								onSave={(host) => updateMutation.mutate({ host })}
+							/>
+							<div className="flex max-w-xl flex-wrap items-end gap-2">
+								<div className="grid min-w-64 flex-1 gap-2">
+									<Label htmlFor="letsencrypt-email">Let&apos;s Encrypt email</Label>
+									<Input
+										id="letsencrypt-email"
+										type="email"
+										placeholder="admin@example.com"
+										value={letsEncryptEmail}
+										onChange={(event) => accessDraft.set(event.target.value)}
 									/>
 								</div>
-							}
-						>
-							{settingsQuery.isPending ? (
-								<Skeleton className="h-9 w-full" />
-							) : (
-								<div className="flex flex-wrap items-center justify-between gap-4">
-									<div className="grid gap-0.5">
-										<Label htmlFor="traefik-dashboard">Traefik dashboard</Label>
-										<p className="text-xs text-muted-foreground">Expose the dashboard and API.</p>
-									</div>
-									<Switch
-										id="traefik-dashboard"
-										checked={traefikDashboardEnabled}
-										onCheckedChange={proxyDraft.set}
-									/>
-								</div>
-							)}
+								<Button
+									type="button"
+									size="sm"
+									className="h-9"
+									disabled={
+										updateMutation.isPending || settingsQuery.isPending || !accessDraft.dirty
+									}
+									onClick={saveAccess}
+								>
+									{updateMutation.isPending && <Loader2 className="size-4 animate-spin" />}
+									Save email
+								</Button>
+							</div>
+						</>
+					)}
+				</SettingsSection>
 
-							<Collapsible className="group">
-								<CollapsibleTrigger asChild>
-									<Button
-										type="button"
-										variant="ghost"
-										size="sm"
-										className="flex cursor-pointer list-none items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden"
-									>
-										<ChevronDown className="size-3.5 transition-transform group-data-[state=open]:rotate-180" />
-										Advanced: Traefik config
-									</Button>
-								</CollapsibleTrigger>
-								<CollapsibleContent forceMount className="data-[state=closed]:hidden">
-									<div className="mt-3 space-y-4">
-										<p className="text-sm text-muted-foreground">
-											Nixploy owns these files — edits are overwritten on the next deploy.{" "}
-											<HelpLink slug="domains" />
-										</p>
-										{traefikQuery.isPending ? (
-											<Skeleton className="h-64 w-full" />
+				{/* Wildcard certificates: DNS-01 provider + credentials */}
+				<AcmeDnsCard />
+				<TraefikEntrypointsCard />
+
+				{/* Proxy: Traefik dashboard + collapsed config + restart */}
+				<SettingsSection
+					id="proxy"
+					title="Proxy"
+					description="Traefik reverse proxy for the Nixploy host."
+					actions={
+						<div className="flex flex-wrap items-center gap-2">
+							<Button
+								type="button"
+								size="sm"
+								disabled={updateMutation.isPending || settingsQuery.isPending}
+								onClick={saveProxy}
+							>
+								{updateMutation.isPending && <Loader2 className="size-4 animate-spin" />}
+								Save
+							</Button>
+							<ConfirmActionDialog
+								title="Restart Traefik"
+								description="This force-updates the Traefik swarm service. Active connections may be briefly interrupted."
+								actionLabel="Restart"
+								isPending={restartMutation.isPending}
+								onConfirm={() => restartMutation.mutate()}
+								trigger={
+									<Button variant="outline" size="sm" disabled={restartMutation.isPending}>
+										{restartMutation.isPending ? (
+											<Loader2 className="size-4 animate-spin" />
 										) : (
-											<>
-												{traefikConfig?.staticConfig ? (
-													<CodeEditor
-														label="Traefik static configuration"
-														value={traefikConfig.staticConfig}
-														extensions={[yaml()]}
-														readOnly
-														maxHeight="20rem"
-														basicSetup={{ lineNumbers: true, foldGutter: true }}
-														lockMessage="Traefik static config is read-only. Unlock to view the full file."
-													/>
-												) : (
-													<p className="text-sm text-muted-foreground">
-														No traefik.yml on this host yet.
-													</p>
-												)}
-												{traefikConfig && traefikConfig.dynamicConfigs.length > 0 ? (
-													<ul className="text-sm text-muted-foreground">
-														{traefikConfig.dynamicConfigs.map((file) => (
-															<li key={file} className="flex items-center gap-2 py-1">
-																<FileCode2 className="size-3.5 shrink-0" />
-																<code className="font-mono text-xs">{file}</code>
-															</li>
-														))}
-													</ul>
-												) : null}
-											</>
+											<RefreshCw className="size-4" />
 										)}
-									</div>
-								</CollapsibleContent>
-							</Collapsible>
-						</SettingsSection>
+										Restart
+									</Button>
+								}
+							/>
+						</div>
+					}
+				>
+					{settingsQuery.isPending ? (
+						<Skeleton className="h-9 w-full" />
+					) : (
+						<div className="flex items-center justify-between gap-4">
+							<div className="grid gap-0.5">
+								<Label htmlFor="traefik-dashboard">Traefik dashboard</Label>
+								<p className="text-xs text-muted-foreground">Expose the dashboard and API.</p>
+							</div>
+							<Switch
+								id="traefik-dashboard"
+								checked={traefikDashboardEnabled}
+								onCheckedChange={proxyDraft.set}
+							/>
+						</div>
+					)}
 
-						{/* Outbound requests: the private-egress escape hatch */}
-						<SettingsSection
-							id="egress"
-							title="Outbound requests"
-							description="Where notifications, SMTP, registries, S3 and webhooks are allowed to connect."
-							actions={
-								<Button
-									type="button"
-									size="sm"
-									disabled={updateMutation.isPending || settingsQuery.isPending}
-									onClick={saveEgress}
-								>
-									{updateMutation.isPending && <Loader2 className="size-4 animate-spin" />}
-									Save
-								</Button>
-							}
-						>
-							{settingsQuery.isPending ? (
-								<Skeleton className="h-9 w-full" />
+					<details className="group">
+						<summary className="flex cursor-pointer list-none items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden">
+							<ChevronDown className="size-3.5 transition-transform group-open:rotate-180" />
+							Advanced: Traefik config
+						</summary>
+						<div className="mt-3 space-y-4">
+							<p className="text-sm text-muted-foreground">
+								Nixploy owns these files — edits are overwritten on the next deploy.{" "}
+								<HelpLink slug="domains" />
+							</p>
+							{traefikQuery.isPending ? (
+								<Skeleton className="h-64 w-full" />
 							) : (
 								<>
-									<div className="flex flex-wrap items-center justify-between gap-4">
-										<div className="grid gap-0.5">
-											<Label htmlFor="allow-private-egress">Allow private network targets</Label>
-											<p className="text-xs text-muted-foreground">
-												Off by default: outbound targets must resolve to a public address.
-											</p>
-										</div>
-										<Switch
-											id="allow-private-egress"
-											checked={allowPrivateEgress}
-											onCheckedChange={egressDraft.set}
+									{traefikConfig?.staticConfig ? (
+										<CodeEditor
+											value={traefikConfig.staticConfig}
+											extensions={[yaml()]}
+											readOnly
+											maxHeight="20rem"
+											basicSetup={{ lineNumbers: true, foldGutter: true }}
+											lockMessage="Traefik static config is read-only. Unlock to view the full file."
 										/>
-									</div>
-									{allowPrivateEgress ? (
-										<div className="flex items-start gap-2 rounded-md border border-warning/50 bg-warning/10 p-3 text-sm text-warning">
-											<ShieldAlert className="mt-0.5 size-4 shrink-0" />
-											<p>
-												Organization admins can now point notification, SMTP, registry and S3
-												targets at hosts on this machine&apos;s LAN. The Swarm overlay and the cloud
-												metadata endpoints stay blocked either way.
-											</p>
-										</div>
+									) : (
+										<p className="text-sm text-muted-foreground">
+											No traefik.yml on this host yet.
+										</p>
+									)}
+									{traefikConfig && traefikConfig.dynamicConfigs.length > 0 ? (
+										<ul className="text-sm text-muted-foreground">
+											{traefikConfig.dynamicConfigs.map((file) => (
+												<li key={file} className="flex items-center gap-2 py-1">
+													<FileCode2 className="size-3.5 shrink-0" />
+													<code className="font-mono text-xs">{file}</code>
+												</li>
+											))}
+										</ul>
 									) : null}
-									<p className="text-sm text-muted-foreground">
-										Turn this on only for a self-hosted MinIO, Gotify, Gitea or SMTP server on a
-										private network. <HelpLink slug="private-egress" />
-									</p>
 								</>
 							)}
-						</SettingsSection>
-					</SettingsStack>
-				</div>
-				<div id="operations">
-					<SettingsStack>
-						{/* Host health: meters + alert thresholds */}
-						<SettingsSection
-							id="health"
-							title="Host health"
-							description="Live host metrics and alert thresholds for subscribed channels."
-							actions={
-								<Button
-									type="button"
-									size="sm"
-									disabled={updateMutation.isPending || settingsQuery.isPending}
-									onClick={saveHealth}
-								>
-									{updateMutation.isPending && <Loader2 className="size-4 animate-spin" />}
-									Save thresholds
-								</Button>
-							}
-						>
-							<HostMonitoringBody />
-							{settingsQuery.isPending ? (
-								<Skeleton className="h-16 w-full" />
-							) : (
-								<div className="grid gap-3 sm:grid-cols-2">
-									<Field>
-										<FieldLabel htmlFor="cpu-alert">CPU alert %</FieldLabel>
-										<Input
-											id="cpu-alert"
-											type="number"
-											min={1}
-											max={100}
-											inputMode="numeric"
-											placeholder="Empty = off"
-											value={cpuAlertPercent}
-											onChange={(event) =>
-												healthDraft.patch({ cpuAlertPercent: event.target.value })
-											}
-										/>
-									</Field>
-									<Field>
-										<FieldLabel htmlFor="memory-alert">Memory alert %</FieldLabel>
-										<Input
-											id="memory-alert"
-											type="number"
-											min={1}
-											max={100}
-											inputMode="numeric"
-											placeholder="Empty = off"
-											value={memoryAlertPercent}
-											onChange={(event) =>
-												healthDraft.patch({ memoryAlertPercent: event.target.value })
-											}
-										/>
-									</Field>
-								</div>
-							)}
-						</SettingsSection>
+						</div>
+					</details>
+				</SettingsSection>
 
-						{/* Maintenance: cleanup cron + run now + schedules link */}
-						<SettingsSection
-							id="maintenance"
-							title="Maintenance"
-							description="Prune unused Docker images and build cache."
-							actions={
-								<div className="flex flex-wrap items-center gap-2">
-									<Button
-										type="button"
-										size="sm"
-										disabled={updateMutation.isPending || settingsQuery.isPending}
-										onClick={saveMaintenance}
-									>
-										{updateMutation.isPending && <Loader2 className="size-4 animate-spin" />}
-										Save
+				{/* Outbound requests: the private-egress escape hatch */}
+				<SettingsSection
+					id="egress"
+					title="Outbound requests"
+					description="Where notifications, SMTP, registries, S3 and webhooks are allowed to connect."
+					actions={
+						<Button
+							type="button"
+							size="sm"
+							disabled={updateMutation.isPending || settingsQuery.isPending}
+							onClick={saveEgress}
+						>
+							{updateMutation.isPending && <Loader2 className="size-4 animate-spin" />}
+							Save
+						</Button>
+					}
+				>
+					{settingsQuery.isPending ? (
+						<Skeleton className="h-9 w-full" />
+					) : (
+						<>
+							<div className="flex items-center justify-between gap-4">
+								<div className="grid gap-0.5">
+									<Label htmlFor="allow-private-egress">Allow private network targets</Label>
+									<p className="text-xs text-muted-foreground">
+										Off by default: outbound targets must resolve to a public address.
+									</p>
+								</div>
+								<Switch
+									id="allow-private-egress"
+									checked={allowPrivateEgress}
+									onCheckedChange={egressDraft.set}
+								/>
+							</div>
+							{allowPrivateEgress ? (
+								<div className="flex items-start gap-2 rounded-md border border-warning/50 bg-warning/10 p-3 text-sm text-warning">
+									<ShieldAlert className="mt-0.5 size-4 shrink-0" />
+									<p>
+										Organization admins can now point notification, SMTP, registry and S3 targets at
+										hosts on this machine&apos;s LAN. The Swarm overlay and the cloud metadata
+										endpoints stay blocked either way.
+									</p>
+								</div>
+							) : null}
+							<p className="text-sm text-muted-foreground">
+								Turn this on only for a self-hosted MinIO, Gotify, Gitea or SMTP server on a private
+								network. <HelpLink slug="private-egress" />
+							</p>
+						</>
+					)}
+				</SettingsSection>
+
+				{/* Host health: meters + alert thresholds */}
+				<SettingsSection
+					id="health"
+					title="Host health"
+					description="Live host metrics and alert thresholds for subscribed channels."
+					actions={
+						<Button
+							type="button"
+							size="sm"
+							disabled={updateMutation.isPending || settingsQuery.isPending}
+							onClick={saveHealth}
+						>
+							{updateMutation.isPending && <Loader2 className="size-4 animate-spin" />}
+							Save thresholds
+						</Button>
+					}
+				>
+					<HostMonitoringBody />
+					{settingsQuery.isPending ? (
+						<Skeleton className="h-16 w-full" />
+					) : (
+						<div className="grid gap-3 sm:grid-cols-2">
+							<div className="grid gap-2">
+								<Label htmlFor="cpu-alert">CPU alert %</Label>
+								<Input
+									id="cpu-alert"
+									type="number"
+									min={1}
+									max={100}
+									inputMode="numeric"
+									placeholder="Empty = off"
+									value={cpuAlertPercent}
+									onChange={(event) => healthDraft.patch({ cpuAlertPercent: event.target.value })}
+								/>
+							</div>
+							<div className="grid gap-2">
+								<Label htmlFor="memory-alert">Memory alert %</Label>
+								<Input
+									id="memory-alert"
+									type="number"
+									min={1}
+									max={100}
+									inputMode="numeric"
+									placeholder="Empty = off"
+									value={memoryAlertPercent}
+									onChange={(event) =>
+										healthDraft.patch({ memoryAlertPercent: event.target.value })
+									}
+								/>
+							</div>
+						</div>
+					)}
+				</SettingsSection>
+
+				{/* Maintenance: cleanup cron + run now + schedules link */}
+				<SettingsSection
+					id="maintenance"
+					title="Maintenance"
+					description="Prune unused Docker images and build cache."
+					actions={
+						<div className="flex flex-wrap items-center gap-2">
+							<Button
+								type="button"
+								size="sm"
+								disabled={updateMutation.isPending || settingsQuery.isPending}
+								onClick={saveMaintenance}
+							>
+								{updateMutation.isPending && <Loader2 className="size-4 animate-spin" />}
+								Save
+							</Button>
+							<ConfirmActionDialog
+								title="Run Docker cleanup"
+								description="Unused Docker images and build cache will be pruned on the Nixploy host. This cannot be undone."
+								actionLabel="Run cleanup"
+								isPending={cleanupMutation.isPending}
+								onConfirm={() => cleanupMutation.mutate()}
+								trigger={
+									<Button variant="outline" size="sm" disabled={cleanupMutation.isPending}>
+										{cleanupMutation.isPending ? (
+											<Loader2 className="size-4 animate-spin" />
+										) : (
+											<Trash2 className="size-4" />
+										)}
+										Cleanup now
 									</Button>
-									<ConfirmActionDialog
-										title="Run Docker cleanup"
-										description="Unused Docker images and build cache will be pruned on the Nixploy host. This cannot be undone."
-										actionLabel="Run cleanup"
-										isPending={cleanupMutation.isPending}
-										onConfirm={() => cleanupMutation.mutate()}
-										trigger={
-											<Button variant="outline" size="sm" disabled={cleanupMutation.isPending}>
-												{cleanupMutation.isPending ? (
-													<Loader2 className="size-4 animate-spin" />
-												) : (
-													<Trash2 className="size-4" />
-												)}
-												Cleanup now
-											</Button>
+								}
+							/>
+						</div>
+					}
+				>
+					{settingsQuery.isPending ? (
+						<Skeleton className="h-9 w-full" />
+					) : (
+						<>
+							<div className="flex items-center justify-between gap-4">
+								<div className="grid gap-0.5">
+									<Label htmlFor="cleanup-cron">Scheduled cleanup</Label>
+									<p className="text-xs text-muted-foreground">
+										Prune unused images on a cron schedule.
+									</p>
+								</div>
+								<Switch
+									id="cleanup-cron"
+									checked={cleanupCronEnabled}
+									onCheckedChange={(checked) =>
+										maintenanceDraft.patch({ cleanupCronEnabled: checked })
+									}
+								/>
+							</div>
+							{cleanupCronEnabled && (
+								<div className="grid gap-2">
+									<Label htmlFor="cleanup-cron-expression">Cron</Label>
+									<Input
+										id="cleanup-cron-expression"
+										placeholder="0 3 * * *"
+										value={cleanupCronExpression}
+										onChange={(event) =>
+											maintenanceDraft.patch({ cleanupCronExpression: event.target.value })
 										}
+										className="font-mono"
 									/>
 								</div>
-							}
-						>
-							{settingsQuery.isPending ? (
-								<Skeleton className="h-9 w-full" />
-							) : (
-								<>
-									<div className="flex flex-wrap items-center justify-between gap-4">
-										<div className="grid gap-0.5">
-											<Label htmlFor="cleanup-cron">Scheduled cleanup</Label>
-											<p className="text-xs text-muted-foreground">
-												Prune unused images on a cron schedule.
-											</p>
-										</div>
-										<Switch
-											id="cleanup-cron"
-											checked={cleanupCronEnabled}
-											onCheckedChange={(checked) =>
-												maintenanceDraft.patch({ cleanupCronEnabled: checked })
-											}
-										/>
-									</div>
-									{cleanupCronEnabled && (
-										<Field>
-											<FieldLabel htmlFor="cleanup-cron-expression">Cron</FieldLabel>
-											<Input
-												id="cleanup-cron-expression"
-												placeholder="0 3 * * *"
-												value={cleanupCronExpression}
-												onChange={(event) =>
-													maintenanceDraft.patch({ cleanupCronExpression: event.target.value })
-												}
-												className="font-mono"
-											/>
-										</Field>
-									)}
-									<p className="text-sm text-muted-foreground">
-										Custom host jobs →{" "}
-										<Link
-											href="/dashboard/schedules"
-											className="font-medium text-foreground underline-offset-4 hover:underline"
-										>
-											Schedules
-										</Link>
-									</p>
-								</>
 							)}
-						</SettingsSection>
-					</SettingsStack>
-				</div>
-				<div id="platform-administration" tabIndex={-1} className="space-y-6 scroll-mt-24 min-w-0">
-					<UpdatesCard />
-					<AiSettingsCard />
-					<UsersCard />
-				</div>
-			</FocusSections>
+							<p className="text-sm text-muted-foreground">
+								Custom host jobs →{" "}
+								<Link
+									href="/dashboard/schedules"
+									className="font-medium text-foreground underline-offset-4 hover:underline"
+								>
+									Schedules
+								</Link>
+							</p>
+						</>
+					)}
+				</SettingsSection>
+
+				<UpdatesCard />
+				<AiSettingsCard />
+				<UsersCard />
+			</SettingsStack>
 		</div>
 	);
 }

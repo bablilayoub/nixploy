@@ -29,7 +29,6 @@ import {
 } from "@/components/ui/select";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useMounted } from "@/hooks/use-mounted";
-import { confirmDiscardUnsavedChanges } from "@/hooks/use-unsaved-changes";
 import { cn } from "@/lib/utils";
 
 /** Who may open a settings page. Read views stay open to every member. */
@@ -163,13 +162,8 @@ export function NavSettings({ className }: { className?: string }) {
 
 	return (
 		<>
-			<div className={cn("lg:hidden", className)}>
-				<Select
-					value={current}
-					onValueChange={(href) => {
-						if (href !== current && confirmDiscardUnsavedChanges()) router.push(href);
-					}}
-				>
+			<div className={cn("md:hidden", className)}>
+				<Select value={current} onValueChange={(href) => router.push(href)}>
 					<SelectTrigger className="w-full" aria-label="Settings page">
 						<SelectValue placeholder="Settings" />
 					</SelectTrigger>
@@ -187,7 +181,7 @@ export function NavSettings({ className }: { className?: string }) {
 					</SelectContent>
 				</Select>
 			</div>
-			<SubNav orientation="vertical" groups={groups} className={cn("hidden lg:flex", className)} />
+			<SubNav orientation="vertical" groups={groups} className={cn("hidden md:flex", className)} />
 		</>
 	);
 }

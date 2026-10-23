@@ -1,34 +1,35 @@
-import { TemplateLogo } from "@/components/template-logo";
+import { NumberTicker } from "@/components/ui/number-ticker";
+import { Separator } from "@/components/ui/separator";
 import { stats } from "@/lib/landing-data";
 
-const integrations = [
-	{ name: "GitHub", logo: "github" },
-	{ name: "GitLab", logo: "gitlab" },
-	{ name: "Docker", logo: "docker" },
-	{ name: "PostgreSQL", logo: "postgresql" },
-	{ name: "Redis", logo: "redis" },
-];
+/*
+ * Four counted numbers on one rail; the count-up is @magicui/number-ticker.
+ *
+ * Two up until lg rather than md: at exactly 768 the four columns are narrow
+ * enough that "Database engines" and "MiB control plane" both wrap, and a
+ * label that wraps under a 48px figure stops reading as one unit.
+ */
 export function Stats() {
 	return (
-		<section
-			aria-label="Supported tools and platform facts"
-			className="reference-integrations container-page"
-		>
-			<p className="text-xs text-muted-foreground">Made for the tools you already use</p>
-			<ul className="mt-7 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 sm:gap-x-12">
-				{integrations.map((tool) => (
-					<li key={tool.name} className="flex items-center gap-2 text-base font-semibold">
-						<TemplateLogo name={tool.name} logo={tool.logo} />
-						{tool.name}
-					</li>
-				))}
-			</ul>
-			<p className="mt-8 text-xs text-muted-foreground">
-				{stats
-					.filter((s) => s.id !== "control-plane")
-					.map((s) => `${s.value} ${s.label.toLowerCase()}`)
-					.join(" · ")}
-			</p>
+		<section className="py-8">
+			<div className="container-page">
+				<div className="grid grid-cols-2 gap-y-10 rounded-2xl border bg-card/40 p-8 backdrop-blur lg:grid-cols-4 lg:gap-0">
+					{stats.map((stat, index) => (
+						<div key={stat.id} className="flex items-center gap-8 lg:justify-center">
+							{index > 0 ? (
+								<Separator orientation="vertical" className="hidden !h-14 lg:block" />
+							) : null}
+							<div className="lg:flex-1 lg:px-6">
+								<p className="font-display text-4xl font-semibold tracking-tight tabular-nums lg:text-5xl">
+									<NumberTicker value={stat.value} />
+								</p>
+								<p className="mt-2 text-sm font-medium">{stat.label}</p>
+								<p className="mt-0.5 text-xs text-muted-foreground">{stat.note}</p>
+							</div>
+						</div>
+					))}
+				</div>
+			</div>
 		</section>
 	);
 }

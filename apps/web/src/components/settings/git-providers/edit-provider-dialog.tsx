@@ -2,6 +2,7 @@
 
 import { Loader2, Pencil } from "lucide-react";
 import { useEffect, useState } from "react";
+
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -11,8 +12,8 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
-import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 export interface EditProviderField {
 	key: string;
@@ -100,7 +101,7 @@ export function EditProviderDialog({
 						{description ? <DialogDescription>{description}</DialogDescription> : null}
 					</DialogHeader>
 					<form
-						className="grid gap-5"
+						className="grid gap-4"
 						onSubmit={(event) => {
 							event.preventDefault();
 							void submit();
@@ -109,8 +110,8 @@ export function EditProviderDialog({
 						{fields.map((field) => {
 							const id = `edit-provider-${field.key}`;
 							return (
-								<Field key={field.key}>
-									<FieldLabel htmlFor={id}>{field.label}</FieldLabel>
+								<div key={field.key} className="grid gap-2">
+									<Label htmlFor={id}>{field.label}</Label>
 									<Input
 										id={id}
 										type={field.secret ? "password" : "text"}
@@ -128,7 +129,7 @@ export function EditProviderDialog({
 									{field.hint ? (
 										<p className="text-xs text-muted-foreground">{field.hint}</p>
 									) : null}
-								</Field>
+								</div>
 							);
 						})}
 						<DialogFooter>

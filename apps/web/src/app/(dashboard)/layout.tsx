@@ -5,7 +5,6 @@ import {
 	resolveCallerOrganizationId,
 	userHasOrganization,
 } from "@nixploy/server/modules/projects/index";
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { SsoRequiredGate } from "@/components/auth/sso-required-gate";
@@ -17,7 +16,6 @@ import { getSession } from "@/lib/auth-server";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
 	const session = await getSession();
-	const sidebarOpen = (await cookies()).get("sidebar_state")?.value !== "false";
 	if (!session) {
 		redirect("/login");
 	}
@@ -47,7 +45,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
 	return (
 		<OrgBrandingProvider>
-			<AuthenticatedLayout defaultOpen={sidebarOpen}>
+			<AuthenticatedLayout>
 				{hasOrganization ? children : <NoOrganization userName={session.user.name} />}
 			</AuthenticatedLayout>
 		</OrgBrandingProvider>

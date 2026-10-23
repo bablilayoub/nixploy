@@ -1,7 +1,6 @@
 import { Check } from "lucide-react";
 import Link from "next/link";
 
-import { Reveal } from "@/components/motion-provider";
 import { Button } from "@/components/ui/button";
 import { openCore } from "@/lib/landing-data";
 
@@ -19,12 +18,14 @@ import { openCore } from "@/lib/landing-data";
  */
 export function Platform() {
 	return (
-		<section id="open" className="reference-open-platform">
+		<section id="open" className="py-20 lg:py-28">
 			<div className="container-page grid gap-12 lg:grid-cols-12 lg:gap-16">
 				<div className="lg:col-span-5">
-					<p className="signal-kicker">Open by design</p>
-					<h2 className="mt-4 text-3xl leading-[1.15] font-medium tracking-[-0.035em] text-balance lg:text-4xl">
-						A full platform. No locked doors.
+					<p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
+						All of it
+					</p>
+					<h2 className="mt-4 text-4xl font-semibold tracking-tight text-balance lg:text-5xl">
+						There is no enterprise tier
 					</h2>
 					<p className="mt-5 text-lg text-muted-foreground">
 						Single sign-on, teams, the audit log and whitelabelling are not a plan you move up to.
@@ -32,31 +33,29 @@ export function Platform() {
 						it on.
 					</p>
 					<div className="mt-8 flex flex-wrap gap-3">
-						<Button asChild variant="outline" size="lg" className="rounded-full">
+						<Button asChild variant="outline" size="lg" className="rounded-lg">
 							<Link href="/pricing">What it costs</Link>
 						</Button>
-						<Button asChild variant="ghost" size="lg" className="rounded-full">
+						<Button asChild variant="ghost" size="lg" className="rounded-lg">
 							<Link href="/docs/teams">Roles and teams</Link>
 						</Button>
 					</div>
 				</div>
 
-				<Reveal className="lg:col-span-7">
-					<dl>
-						{openCore.map((item) => (
-							<div
-								key={item.title}
-								className="grid gap-x-6 gap-y-1 border-t py-5 last:border-b sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]"
-							>
-								<dt className="flex items-start gap-2.5 font-medium">
-									<Check className="mt-1 size-4 shrink-0 text-primary" aria-hidden />
-									{item.title}
-								</dt>
-								<dd className="text-muted-foreground sm:pt-0.5">{item.text}</dd>
-							</div>
-						))}
-					</dl>
-				</Reveal>
+				<dl className="lg:col-span-7">
+					{openCore.map((item) => (
+						<div
+							key={item.title}
+							className="grid gap-x-6 gap-y-1 border-t py-5 last:border-b sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]"
+						>
+							<dt className="flex items-start gap-2.5 font-medium">
+								<Check className="mt-1 size-4 shrink-0 text-primary" aria-hidden />
+								{item.title}
+							</dt>
+							<dd className="text-muted-foreground sm:pt-0.5">{item.text}</dd>
+						</div>
+					))}
+				</dl>
 			</div>
 		</section>
 	);

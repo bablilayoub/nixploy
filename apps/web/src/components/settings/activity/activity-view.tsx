@@ -36,12 +36,15 @@ import { useTRPC } from "@/lib/trpc";
 const PAGE_SIZE = 50;
 const ALL = "__all__";
 
-const ACTION_VARIANTS: Record<string, "default" | "destructive" | "outline" | "secondary"> = {
-	create: "default",
-	deploy: "secondary",
-	delete: "outline",
-	remove: "outline",
-	prune: "outline",
+const ACTION_VARIANTS: Record<
+	string,
+	"success" | "info" | "destructive" | "warning" | "secondary"
+> = {
+	create: "success",
+	deploy: "info",
+	delete: "destructive",
+	remove: "destructive",
+	prune: "warning",
 };
 
 function ActionBadge({ action }: { action: string }) {
@@ -128,7 +131,7 @@ export function ActivityView({ embedded = false }: { embedded?: boolean } = {}) 
 	};
 
 	return (
-		<div className="flex min-w-0 flex-col gap-7">
+		<div className="flex flex-col gap-6">
 			{embedded ? null : (
 				<PageHeader
 					title="Audit log"
@@ -141,7 +144,6 @@ export function ActivityView({ embedded = false }: { embedded?: boolean } = {}) 
 					<Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
 					<Input
 						placeholder="Search targets…"
-						aria-label="Search audit targets"
 						value={search}
 						onChange={(event) => {
 							setSearch(event.target.value);
@@ -219,15 +221,9 @@ export function ActivityView({ embedded = false }: { embedded?: boolean } = {}) 
 							{action !== ALL || targetType !== ALL || search ? (
 								<>
 									Nothing matches these filters.{" "}
-									<Button
-										variant="ghost"
-										size="sm"
-										type="button"
-										className="h-auto min-h-0 px-0 py-0 has-[>svg]:px-0 underline"
-										onClick={resetFilters}
-									>
+									<button type="button" className="underline" onClick={resetFilters}>
 										Reset filters
-									</Button>
+									</button>
 								</>
 							) : (
 								"Actions like deploys, deletions and member changes appear here."

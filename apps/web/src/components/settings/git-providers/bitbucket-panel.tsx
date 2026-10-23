@@ -20,8 +20,8 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@/components/ui/dialog";
-import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
 	Table,
@@ -121,45 +121,45 @@ export function BitbucketPanel() {
 							<DialogTitle>Add Bitbucket provider</DialogTitle>
 							<DialogDescription>Use an API token, or a username + app password.</DialogDescription>
 						</DialogHeader>
-						<div className="grid gap-5">
-							<Field>
-								<FieldLabel htmlFor="bb-name">Name</FieldLabel>
+						<div className="grid gap-4">
+							<div className="grid gap-2">
+								<Label htmlFor="bb-name">Name</Label>
 								<Input id="bb-name" value={name} onChange={(e) => setName(e.target.value)} />
-							</Field>
-							<Field>
-								<FieldLabel htmlFor="bb-workspace">Workspace name</FieldLabel>
+							</div>
+							<div className="grid gap-2">
+								<Label htmlFor="bb-workspace">Workspace name</Label>
 								<Input
 									id="bb-workspace"
 									value={workspace}
 									onChange={(e) => setWorkspace(e.target.value)}
 								/>
-							</Field>
-							<Field>
-								<FieldLabel htmlFor="bb-api-token">API token</FieldLabel>
+							</div>
+							<div className="grid gap-2">
+								<Label htmlFor="bb-api-token">API token</Label>
 								<Input
 									id="bb-api-token"
 									type="password"
 									value={apiToken}
 									onChange={(e) => setApiToken(e.target.value)}
 								/>
-							</Field>
-							<Field>
-								<FieldLabel htmlFor="bb-username">Username (for app password)</FieldLabel>
+							</div>
+							<div className="grid gap-2">
+								<Label htmlFor="bb-username">Username (for app password)</Label>
 								<Input
 									id="bb-username"
 									value={username}
 									onChange={(e) => setUsername(e.target.value)}
 								/>
-							</Field>
-							<Field>
-								<FieldLabel htmlFor="bb-app-password">App password</FieldLabel>
+							</div>
+							<div className="grid gap-2">
+								<Label htmlFor="bb-app-password">App password</Label>
 								<Input
 									id="bb-app-password"
 									type="password"
 									value={appPassword}
 									onChange={(e) => setAppPassword(e.target.value)}
 								/>
-							</Field>
+							</div>
 						</div>
 						<DialogFooter>
 							<Button

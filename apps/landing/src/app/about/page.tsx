@@ -1,29 +1,27 @@
 import type { Metadata } from "next";
 
-import { DeploymentPath } from "@/components/deployment-path";
 import { PageFrame, ProseLink } from "@/components/page-frame";
 import { site } from "@/lib/site";
 
 export const metadata: Metadata = {
 	title: "About — Nixploy",
-	description: "Why Nixploy exists and how its deployment platform is built.",
+	description: "Why Nixploy exists, what we ship, and the projects that inspired us.",
 };
 
 export default function AboutPage() {
 	return (
 		<PageFrame
+			width="prose"
 			eyebrow="About"
-			title="Good software deserves its own home."
+			title="Built for people who want their own PaaS."
 			description="An open-source, self-hosted platform for deploying applications and databases on Docker Swarm — with Traefik, Git deploys, monitoring, and a CLI that matches the UI."
 		>
-			<DeploymentPath compact />
-			<div className="legal-copy mx-auto mt-16 max-w-3xl">
+			<div className="legal-copy">
 				<h2>The short version</h2>
 				<p>
-					Nixploy brings builds, deployments and everyday operations into one workspace on Docker
-					Swarm. The platform includes AI-assisted failure explanations, GitOps via{" "}
-					<code>nixploy.yaml</code>, per-service alerts, and day-2 ops that do not require opening
-					the dashboard.
+					{site.inspiredBy} We learned from those projects, then focused on a sharper product:
+					faster rebuilds, AI-assisted failure explain, GitOps via <code>nixploy.yaml</code>,
+					per-service alerts, and day-2 ops that do not require opening the dashboard.
 				</p>
 				<h2>What we optimize for</h2>
 				<ul>

@@ -19,7 +19,6 @@ import {
 	FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
 import { authClient } from "@/lib/auth-client";
 import { describeError } from "@/lib/describe-error";
 import { safeNextPath } from "@/lib/safe-next-path";
@@ -161,17 +160,12 @@ export function LoginForm({
 	return (
 		<Card>
 			<CardHeader className="text-center">
-				<CardTitle as="h1" className="text-xl">
-					Log in to {branding.productName}
-				</CardTitle>
-				<CardDescription>Sign in to your workspace.</CardDescription>
+				<CardTitle className="text-xl">Welcome back</CardTitle>
+				<CardDescription>Sign in to your {branding.productName} instance</CardDescription>
 			</CardHeader>
-			<CardContent className="space-y-6">
+			<CardContent>
 				<Form {...form}>
-					<form
-						onSubmit={form.handleSubmit(onSubmit)}
-						className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4"
-					>
+					<form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4">
 						{formError && (
 							<div className="flex items-center gap-2 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
 								<AlertCircle className="size-4" />
@@ -201,12 +195,7 @@ export function LoginForm({
 							name="password"
 							render={({ field }) => (
 								<FormItem>
-									<div className="flex flex-wrap items-center justify-between gap-2">
-										<FormLabel>Password</FormLabel>
-										<Button variant="link" size="sm" asChild className="h-auto p-0">
-											<Link href="/forgot-password">Forgot password?</Link>
-										</Button>
-									</div>
+									<FormLabel>Password</FormLabel>
 									<FormControl>
 										<Input type="password" autoComplete="current-password" {...field} />
 									</FormControl>
@@ -217,15 +206,21 @@ export function LoginForm({
 						<Button type="submit" className="w-full" disabled={form.formState.isSubmitting}>
 							{form.formState.isSubmitting ? "Signing in…" : "Sign in"}
 						</Button>
+						<Link
+							href="/forgot-password"
+							className="text-center text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+						>
+							Forgot your password?
+						</Link>
 					</form>
 				</Form>
 
 				{(ssoProviders.length > 0 || passkeysAvailable) && (
 					<div className="mt-4 grid gap-4">
 						<div className="flex items-center gap-3">
-							<Separator className="flex-1" />
-							<span className="text-xs leading-relaxed break-words text-muted-foreground">or</span>
-							<Separator className="flex-1" />
+							<span className="h-px flex-1 bg-border" />
+							<span className="text-xs text-muted-foreground">or</span>
+							<span className="h-px flex-1 bg-border" />
 						</div>
 						{passkeysAvailable && (
 							<Button

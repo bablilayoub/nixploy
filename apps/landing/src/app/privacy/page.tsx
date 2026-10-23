@@ -12,12 +12,11 @@ export default function PrivacyPage() {
 	return (
 		<PageFrame
 			width="prose"
-			close={false}
 			eyebrow="Privacy"
 			title="Your infrastructure. Your data."
 			description="Nixploy is designed to run on servers you control."
 		>
-			<div className="legal-copy signal-policy">
+			<div className="legal-copy">
 				<h2>Self-hosted product</h2>
 				<p>
 					When you install Nixploy, applications, databases, volumes, secrets, and logs stay on your

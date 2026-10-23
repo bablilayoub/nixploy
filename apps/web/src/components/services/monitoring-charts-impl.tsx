@@ -17,8 +17,6 @@ import {
 } from "recharts";
 import { SettingsSection } from "@/components/layout/settings-section";
 import { NotRunningState, type RuntimeEmptyProps } from "@/components/services/not-running-state";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { type ChartAnnotation, snapEventsToSamples } from "@/lib/chart-annotations";
 import { formatBytes } from "@/lib/format";
 import { useTRPC } from "@/lib/trpc";
@@ -60,18 +58,18 @@ function wsUrl(params: Record<string, string | null | undefined>) {
 const tooltipStyle = {
 	backgroundColor: "var(--card)",
 	border: "1px solid var(--border)",
-	borderRadius: "8px",
+	borderRadius: "10px",
 	fontSize: "12px",
 	color: "var(--foreground)",
 } as const;
 
 const METRICS = {
-	cpu: "var(--chart-1)",
-	memory: "var(--chart-2)",
-	rx: "var(--chart-3)",
-	tx: "var(--chart-1)",
-	disk: "var(--chart-2)",
-	pids: "var(--chart-3)",
+	cpu: "#0070f3",
+	memory: "#17c964",
+	rx: "#f5a524",
+	tx: "#8b5cf6",
+	disk: "#f31260",
+	pids: "#7c8b9c",
 } as const;
 
 /** Gradient fill definition for one series (solid at top → transparent). */
@@ -105,11 +103,7 @@ function Sparkline({
 	return (
 		<div className="h-7">
 			<ResponsiveContainer width="100%" height="100%">
-				<AreaChart
-					accessibilityLayer={false}
-					data={data}
-					margin={{ top: 2, right: 0, bottom: 0, left: 0 }}
-				>
+				<AreaChart data={data} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
 					<defs>
 						<SeriesGradient id={id} color={color} />
 					</defs>
@@ -161,7 +155,7 @@ function KpiCard({
 				<span className="text-[11px] font-medium text-muted-foreground">{label}</span>
 			</div>
 			<div className="mt-2">
-				<p className="text-xl leading-snug font-semibold tracking-tight tabular-nums">{value}</p>
+				<p className="text-lg font-semibold tracking-tight tabular-nums">{value}</p>
 				{sub ? (
 					<p className="mt-0.5 text-[11px] text-muted-foreground tabular-nums">{sub}</p>
 				) : null}
@@ -170,7 +164,7 @@ function KpiCard({
 				{meter != null ? (
 					<div className="h-1 overflow-hidden rounded-full bg-secondary">
 						<div
-							className="h-full rounded-full"
+							className="h-full rounded-full transition-[width] duration-500"
 							style={{ width: `${Math.min(Math.max(meter, 0), 100)}%`, backgroundColor: color }}
 						/>
 					</div>
@@ -208,116 +202,109 @@ function MetricChart({
 		}, 0),
 	}));
 	return (
-		<Card className="min-w-0">
-			<CardContent className="space-y-3">
-				<div className="flex items-center justify-between">
-					<p className="text-sm font-medium">{title}</p>
-					{latest ? (
-						<span className="rounded-md bg-secondary px-2 py-0.5 font-mono text-xs tabular-nums">
-							{latest}
-						</span>
-					) : null}
-				</div>
-				<div className="h-44">
-					<ResponsiveContainer width="100%" height="100%">
-						<AreaChart
-							data={data}
-							margin={{ top: 4, right: 4, bottom: 0, left: 0 }}
-							syncId="service-metrics"
-							aria-label={`${title} over time`}
-						>
-							<defs>
-								{series.map((item) => (
-									<SeriesGradient key={item.key} id={item.gradientId} color={item.color} />
-								))}
-							</defs>
-							<CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-							<XAxis
-								dataKey="time"
-								stroke="var(--muted-foreground)"
-								tick={{ fill: "var(--chart-axis)" }}
-								fontSize={11}
-								fontFamily="var(--font-geist-mono), ui-monospace, monospace"
-								tickLine={false}
-								axisLine={false}
-								minTickGap={40}
-							/>
-							<YAxis
-								stroke="var(--muted-foreground)"
-								tick={{ fill: "var(--chart-axis)" }}
-								fontSize={11}
-								fontFamily="var(--font-geist-mono), ui-monospace, monospace"
-								tickLine={false}
-								axisLine={false}
-								width={52}
-								tickFormatter={(value: number) => formatValue(value)}
-							/>
-							<Tooltip
-								contentStyle={tooltipStyle}
-								labelStyle={{ color: "var(--muted-foreground)" }}
-								formatter={(value, name) => [
-									formatValue(typeof value === "number" ? value : Number(value)),
-									String(name),
-								]}
-							/>
+		<div className="space-y-3 rounded-lg border border-border p-4">
+			<div className="flex items-center justify-between">
+				<p className="text-sm font-medium">{title}</p>
+				{latest ? (
+					<span className="rounded-md bg-secondary px-2 py-0.5 font-mono text-xs tabular-nums">
+						{latest}
+					</span>
+				) : null}
+			</div>
+			<div className="h-44">
+				<ResponsiveContainer width="100%" height="100%">
+					<AreaChart
+						data={data}
+						margin={{ top: 4, right: 4, bottom: 0, left: 0 }}
+						syncId="service-metrics"
+					>
+						<defs>
 							{series.map((item) => (
-								<Area
-									key={item.key}
-									type="monotone"
-									dataKey={item.key}
-									name={item.label}
-									stroke={item.color}
-									strokeDasharray={item.key === "txRate" ? "5 4" : undefined}
-									fill={`url(#${item.gradientId})`}
-									strokeWidth={1.5}
-									isAnimationActive={false}
-								/>
+								<SeriesGradient key={item.key} id={item.gradientId} color={item.color} />
 							))}
-							{annotations.map((annotation) => (
-								<ReferenceLine
-									key={annotation.id}
-									x={annotation.x}
-									stroke={annotation.color}
-									strokeDasharray="2 3"
-									strokeOpacity={0.85}
-									// `insideTop`, not `top`: the chart leaves 4px of margin above
-									// the plot area and a label placed there is clipped away.
-									label={{
-										value: annotation.mark,
-										position: "insideTop",
-										fill: annotation.color,
-										fontSize: 11,
-									}}
-								/>
-							))}
-							{peaks.map(
-								(peak) =>
-									peak.value > 0 && (
-										<ReferenceLine
-											key={peak.key}
-											y={peak.value}
-											stroke={peak.color}
-											strokeDasharray="4 4"
-											strokeOpacity={0.4}
-										/>
-									),
-							)}
-						</AreaChart>
-					</ResponsiveContainer>
-				</div>
-				<div className="flex items-center gap-4">
-					{series.map((item) => (
-						<span
-							key={item.key}
-							className="flex items-center gap-1.5 text-xs text-muted-foreground"
-						>
-							<span className="size-2 rounded-full" style={{ backgroundColor: item.color }} />
-							{item.label}
-						</span>
-					))}
-				</div>
-			</CardContent>
-		</Card>
+						</defs>
+						<CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+						<XAxis
+							dataKey="time"
+							stroke="var(--muted-foreground)"
+							tick={{ fill: "var(--chart-axis)" }}
+							fontSize={11}
+							fontFamily="var(--font-jetbrains-mono), ui-monospace, monospace"
+							tickLine={false}
+							axisLine={false}
+							minTickGap={40}
+						/>
+						<YAxis
+							stroke="var(--muted-foreground)"
+							tick={{ fill: "var(--chart-axis)" }}
+							fontSize={11}
+							fontFamily="var(--font-jetbrains-mono), ui-monospace, monospace"
+							tickLine={false}
+							axisLine={false}
+							width={52}
+							tickFormatter={(value: number) => formatValue(value)}
+						/>
+						<Tooltip
+							contentStyle={tooltipStyle}
+							labelStyle={{ color: "var(--muted-foreground)" }}
+							formatter={(value, name) => [
+								formatValue(typeof value === "number" ? value : Number(value)),
+								String(name),
+							]}
+						/>
+						{series.map((item) => (
+							<Area
+								key={item.key}
+								type="monotone"
+								dataKey={item.key}
+								name={item.label}
+								stroke={item.color}
+								fill={`url(#${item.gradientId})`}
+								strokeWidth={1.5}
+								isAnimationActive={false}
+							/>
+						))}
+						{annotations.map((annotation) => (
+							<ReferenceLine
+								key={annotation.id}
+								x={annotation.x}
+								stroke={annotation.color}
+								strokeDasharray="2 3"
+								strokeOpacity={0.85}
+								// `insideTop`, not `top`: the chart leaves 4px of margin above
+								// the plot area and a label placed there is clipped away.
+								label={{
+									value: annotation.mark,
+									position: "insideTop",
+									fill: annotation.color,
+									fontSize: 11,
+								}}
+							/>
+						))}
+						{peaks.map(
+							(peak) =>
+								peak.value > 0 && (
+									<ReferenceLine
+										key={peak.key}
+										y={peak.value}
+										stroke={peak.color}
+										strokeDasharray="4 4"
+										strokeOpacity={0.4}
+									/>
+								),
+						)}
+					</AreaChart>
+				</ResponsiveContainer>
+			</div>
+			<div className="flex items-center gap-4">
+				{series.map((item) => (
+					<span key={item.key} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+						<span className="size-2 rounded-full" style={{ backgroundColor: item.color }} />
+						{item.label}
+					</span>
+				))}
+			</div>
+		</div>
 	);
 }
 
@@ -564,9 +551,7 @@ export function MonitoringCharts({
 				)}
 				<div className="ml-auto flex items-center gap-1">
 					{RANGES.map((option) => (
-						<Button
-							variant="ghost"
-							size="sm"
+						<button
 							key={String(option.value)}
 							type="button"
 							aria-pressed={range === option.value}
@@ -579,7 +564,7 @@ export function MonitoringCharts({
 							)}
 						>
 							{option.label}
-						</Button>
+						</button>
 					))}
 				</div>
 			</div>
@@ -694,12 +679,10 @@ export function MonitoringCharts({
 				/>
 			) : ((range === "live" && !connected) || (range !== "live" && historyQuery.isLoading)) &&
 				samples.length === 0 ? (
-				<Card className="min-w-0">
-					<CardContent className="flex h-40 items-center justify-center gap-2 text-sm text-muted-foreground">
-						<Activity className="size-4 animate-pulse" />
-						{range === "live" ? "Connecting to metrics stream…" : "Loading metrics history…"}
-					</CardContent>
-				</Card>
+				<div className="flex h-40 items-center justify-center gap-2 rounded-lg border border-border p-4 text-sm text-muted-foreground">
+					<Activity className="size-4 animate-pulse" />
+					{range === "live" ? "Connecting to metrics stream…" : "Loading metrics history…"}
+				</div>
 			) : (
 				<div className="grid gap-4 lg:grid-cols-2">
 					<MetricChart

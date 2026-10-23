@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
+
 import { PageFrame, ProseLink } from "@/components/page-frame";
-import { TraceTabs } from "@/components/trace-tabs";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { CodeBlock } from "@/components/ui/code-block";
@@ -85,7 +85,7 @@ const MCP_CONFIG = `{
  */
 function Transcript({ title, lines }: { title: string; lines: Line[] }) {
 	return (
-		<Card className="signal-agent-trace p-0">
+		<Card className="overflow-hidden p-0">
 			<div className="flex h-10 items-center gap-2 border-b bg-accent/40 px-4">
 				<span className="flex gap-1.5" aria-hidden>
 					<span className="size-2.5 rounded-full bg-muted-foreground/40" />
@@ -204,7 +204,7 @@ export default function AgentsPage() {
 		>
 			{/* The four facts that decide whether any of this is a good idea, in the
 			    same divided panel the features page opens with. */}
-			<ul className="grid grid-cols-2 divide-border overflow-hidden rounded-2xl border bg-card lg:grid-cols-4 lg:divide-x">
+			<ul className="grid grid-cols-2 divide-border overflow-hidden rounded-2xl border bg-card/40 lg:grid-cols-4 lg:divide-x">
 				{[
 					{ label: "MCP tools", value: `${mcpToolCount} annotated` },
 					{ label: "Auth", value: "Scoped API keys" },
@@ -212,7 +212,7 @@ export default function AgentsPage() {
 					{ label: "Trail", value: "Every mutation audited" },
 				].map((item) => (
 					<li key={item.label} className="border-b p-5 last:border-b-0 lg:border-b-0">
-						<p className="font-mono text-[11px] tracking-[0.18em] text-muted-foreground normal-case">
+						<p className="font-mono text-[11px] tracking-[0.18em] text-muted-foreground uppercase">
 							{item.label}
 						</p>
 						<p className="mt-2 font-semibold tracking-tight text-balance">{item.value}</p>
@@ -220,49 +220,30 @@ export default function AgentsPage() {
 				))}
 			</ul>
 
-			<TraceTabs
-				items={[
-					{
-						id: "deploy",
-						label: "Deploy",
-						content: (
-							<Session
-								index={1}
-								heading="From a prompt to a service."
-								summary="Inspect the project, deploy the service and attach its domain."
-								title="MCP / deployment"
-								lines={DEPLOY}
-							/>
-						),
-					},
-					{
-						id: "diagnose",
-						label: "Diagnose",
-						content: (
-							<Session
-								index={2}
-								heading="Read the evidence first."
-								summary="Events, logs and resolved variables explain the failure before the next change."
-								title="MCP / diagnosis"
-								lines={DIAGNOSE}
-							/>
-						),
-					},
-					{
-						id: "rollback",
-						label: "Roll back",
-						content: (
-							<Session
-								index={3}
-								heading="Find the way back."
-								summary="Explain a failed rollout and return to a known release."
-								title="MCP / recovery"
-								lines={ROLLBACK}
-							/>
-						),
-					},
-				]}
-			/>
+			<div className="mt-16 flex flex-col gap-14">
+				<Session
+					index={1}
+					heading="Deploy"
+					summary="One prompt. Three tool calls. A URL with a certificate."
+					title="mcp · deploy"
+					lines={DEPLOY}
+				/>
+				<Session
+					index={2}
+					heading="Diagnose"
+					summary="The events, the logs and the resolved environment, read before anything is written — and the write waits for a yes."
+					title="mcp · diagnose"
+					lines={DIAGNOSE}
+				/>
+				<Session
+					index={3}
+					heading="Roll back"
+					summary="The failure explained in its own step, the pinned images listed, the previous build serving again."
+					title="mcp · roll back"
+					lines={ROLLBACK}
+				/>
+			</div>
+
 			<section className="mt-20">
 				<h2 className="max-w-3xl text-3xl font-semibold tracking-tight text-balance lg:text-4xl">
 					Why this is safe to hand an agent

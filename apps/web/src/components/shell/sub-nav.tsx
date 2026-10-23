@@ -4,7 +4,6 @@ import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export interface SubNavItem {
@@ -21,8 +20,8 @@ export interface SubNavGroup {
 }
 
 /**
- * Stock shadcn buttons compose route navigation without replacing link behavior.
- * Pass orientation="vertical" for a side menu.
+ * Segmented sub-navigation for settings and similar tab routing.
+ * Horizontal pills by default; pass orientation="vertical" for a side menu.
  */
 export function SubNav({
 	items,
@@ -46,25 +45,44 @@ export function SubNav({
 				: pathname === item.href || pathname.startsWith(`${item.href}/`);
 			const Icon = item.icon;
 			return (
-				<Button
+				<Link
 					key={item.href}
-					asChild
-					variant={isActive ? "secondary" : "ghost"}
-					size="sm"
-					className={cn("justify-start", vertical && "w-full")}
+					href={item.href}
+					className={cn(
+						"text-sm transition-colors",
+						vertical
+							? cn(
+									"flex items-center gap-2.5 rounded-md px-2.5 py-2",
+									isActive
+										? "bg-secondary font-medium text-foreground"
+										: "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
+								)
+							: cn(
+									"inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border px-3 py-1.5",
+									isActive
+										? "border-border bg-secondary font-medium text-foreground"
+										: "border-transparent text-muted-foreground hover:bg-secondary/70 hover:text-foreground",
+								),
+					)}
 				>
-					<Link href={item.href} aria-current={isActive ? "page" : undefined}>
-						{Icon ? <Icon className="size-4 shrink-0" aria-hidden /> : null}
-						{item.label}
-					</Link>
-				</Button>
+					{Icon ? (
+						<Icon
+							className={cn(
+								"size-4 shrink-0",
+								isActive ? "text-foreground" : "text-muted-foreground",
+							)}
+							aria-hidden
+						/>
+					) : null}
+					{item.label}
+				</Link>
 			);
 		});
 
 	if (groups && groups.length > 0) {
 		return (
 			<nav
-				className={cn(vertical ? "flex flex-col gap-6" : "flex flex-col gap-3", className)}
+				className={cn(vertical ? "flex flex-col gap-5" : "flex flex-col gap-3", className)}
 				aria-label="Secondary"
 			>
 				{groups.map((group) => (
@@ -74,7 +92,7 @@ export function SubNav({
 					>
 						<span
 							className={cn(
-								"shrink-0 text-xs font-medium text-muted-foreground",
+								"shrink-0 text-[10px] font-medium uppercase tracking-wide text-muted-foreground",
 								vertical ? "px-3 pb-0.5" : "",
 							)}
 						>

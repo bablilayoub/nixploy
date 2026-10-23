@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
 import { CalendarClock, Loader2, Pencil, Play, Plus, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { SettingsSection } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
@@ -31,7 +31,6 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
-import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -52,13 +51,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
-import {
-	TableFacet,
-	TableFilterReset,
-	TableNoMatch,
-	TablePagination,
-	TableSearch,
-} from "@/components/ui/table-toolbar";
+import { TableNoMatch, TablePagination, TableSearch } from "@/components/ui/table-toolbar";
 import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useSaveMutation } from "@/hooks/use-save-mutation";
@@ -206,19 +199,6 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 			: "server"
 		: source.serviceType;
 
-	const [states, setStates] = useState<string[]>([]);
-	const matchesState = useCallback(
-		(row: ScheduleRow) =>
-			states.length === 0 ||
-			states.some((state) =>
-				state === "failed"
-					? row.lastStatus === "error"
-					: state === "enabled"
-						? row.enabled
-						: !row.enabled,
-			),
-		[states],
-	);
 	const [dialogOpen, setDialogOpen] = useState(false);
 	const [editing, setEditing] = useState<ScheduleRow | null>(null);
 	// Typed explicitly: `defaultScheduleType` is narrowed to two members by the
@@ -229,7 +209,6 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 	});
 	const [deleteTarget, setDeleteTarget] = useState<ScheduleRow | null>(null);
 	// "Run once from an image" — a job with no cron behind it.
-	const [jobOutput, setJobOutput] = useState<string | null>(null);
 	const [onceOpen, setOnceOpen] = useState(false);
 	const [onceImage, setOnceImage] = useState("");
 	const [onceCommand, setOnceCommand] = useState("");
@@ -255,17 +234,7 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 	});
 	const { isPending, isError, error, refetch } = isGlobal ? globalQuery : serviceQuery;
 	const schedules: ScheduleRow[] = (isGlobal ? globalQuery.data : serviceQuery.data) ?? [];
-	const view = useTableView({
-		rows: schedules,
-		search: searchSchedule,
-		searchFrom: 1,
-		filter: matchesState,
-		filterKey: states.join(","),
-	});
-	const clearFilters = () => {
-		setStates([]);
-		view.clear();
-	};
+	const view = useTableView({ rows: schedules, search: searchSchedule });
 	const listKey = isGlobal
 		? trpc.schedule.all.queryKey()
 		: trpc.schedule.byService.queryKey(serviceInput);
@@ -390,8 +359,11 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 		errorMessage: "Run failed",
 		onSuccess: (result) => {
 			setOnceOpen(false);
-			setJobOutput(result.output);
-			toast.success("Job finished");
+			toast.success(
+				result.output.trim()
+					? `Job finished: ${result.output.trim().split("\n").slice(-1)[0]}`
+					: "Job finished",
+			);
 		},
 	});
 
@@ -454,41 +426,7 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 		>
 			<TableCard
 				framed={isGlobal}
-				toolbar={
-					<>
-						<TableFacet
-							label="State"
-							options={[
-								{
-									value: "enabled",
-									label: "Enabled",
-									count: schedules.filter((row) => row.enabled).length,
-								},
-								{
-									value: "paused",
-									label: "Paused",
-									count: schedules.filter((row) => !row.enabled).length,
-								},
-								{
-									value: "failed",
-									label: "Last run failed",
-									count: schedules.filter((row) => row.lastStatus === "error").length,
-								},
-							]}
-							selected={states}
-							onChange={setStates}
-						/>
-						<TableFilterReset
-							show={states.length > 0 || Boolean(view.query)}
-							onClear={clearFilters}
-						/>
-						<span className="text-xs text-muted-foreground tabular-nums">
-							{schedules.filter((row) => row.enabled).length} enabled ·{" "}
-							{schedules.filter((row) => !row.enabled).length} paused
-						</span>
-						<TableSearch view={view} placeholder="Search schedules…" className="ms-auto" />
-					</>
-				}
+				toolbar={<TableSearch view={view} placeholder="Search schedules…" className="ms-auto" />}
 				footer={<TablePagination view={view} noun="schedules" />}
 			>
 				<Table>
@@ -504,9 +442,7 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 						</TableRow>
 					</TableHeader>
 					<TableBody>
-						{view.visible.length === 0 ? (
-							<TableNoMatch view={{ ...view, clear: clearFilters }} colSpan={6} />
-						) : null}
+						{view.visible.length === 0 ? <TableNoMatch view={view} colSpan={6} /> : null}
 						{view.visible.map((schedule) => (
 							<TableRow key={schedule.scheduleId}>
 								<TableCell className={isGlobal ? "font-medium" : "max-w-40 truncate font-medium"}>
@@ -545,25 +481,11 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 											title={schedule.lastError ?? undefined}
 										>
 											<StatusDot status={scheduleRunStatusDot[schedule.lastStatus] ?? "neutral"} />
-											<span className="grid gap-1">
-												<span>
-													{schedule.lastStatus === "error"
-														? "Failed"
-														: schedule.lastStatus === "success"
-															? "Succeeded"
-															: "Running"}
-												</span>
-												{schedule.lastRunAt && (
-													<span className="text-xs text-muted-foreground">
-														<DateTime value={schedule.lastRunAt} />
-													</span>
-												)}
-												{schedule.lastStatus === "error" && schedule.lastError && (
-													<span className="max-w-64 whitespace-normal break-words text-xs text-destructive">
-														{schedule.lastError}
-													</span>
-												)}
-											</span>
+											{schedule.lastRunAt ? (
+												<DateTime value={schedule.lastRunAt} />
+											) : (
+												schedule.lastStatus
+											)}
 										</span>
 									) : (
 										<span className="text-sm text-muted-foreground">Never</span>
@@ -571,7 +493,6 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 								</TableCell>
 								<TableCell>
 									<Switch
-										aria-label={`Enable schedule ${schedule.name}`}
 										checked={schedule.enabled}
 										// Double-clicks would otherwise queue enable + disable back to back.
 										disabled={
@@ -634,15 +555,15 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 	const fields = (
 		<>
 			{isGlobal && !editing && (
-				<Field>
-					<FieldLabel>Target</FieldLabel>
+				<div className="grid gap-2">
+					<Label>Target</Label>
 					<Select
 						value={form.scheduleType}
 						onValueChange={(value) =>
 							setForm({ ...form, scheduleType: value as ScheduleType, targetId: "" })
 						}
 					>
-						<SelectTrigger aria-label="Target">
+						<SelectTrigger>
 							<SelectValue />
 						</SelectTrigger>
 						<SelectContent>
@@ -657,16 +578,16 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 							Schedules on the Nixploy host itself are limited to instance administrators.
 						</p>
 					)}
-				</Field>
+				</div>
 			)}
 			{needsTarget && !editing && (
-				<Field>
-					<FieldLabel>Server</FieldLabel>
+				<div className="grid gap-2">
+					<Label>Server</Label>
 					<Select
 						value={form.targetId || undefined}
 						onValueChange={(value) => setForm({ ...form, targetId: value })}
 					>
-						<SelectTrigger aria-label="Server">
+						<SelectTrigger>
 							<SelectValue placeholder="Select server" />
 						</SelectTrigger>
 						<SelectContent>
@@ -677,19 +598,19 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 							))}
 						</SelectContent>
 					</Select>
-				</Field>
+				</div>
 			)}
-			<Field>
-				<FieldLabel htmlFor="schedule-name">Name</FieldLabel>
+			<div className="grid gap-2">
+				<Label htmlFor="schedule-name">Name</Label>
 				<Input
 					id="schedule-name"
 					placeholder={isGlobal ? undefined : "Nightly cleanup"}
 					value={form.name}
 					onChange={(event) => setForm({ ...form, name: event.target.value })}
 				/>
-			</Field>
-			<Field>
-				<FieldLabel>{isGlobal ? "Preset" : "Cron expression (UTC)"}</FieldLabel>
+			</div>
+			<div className="grid gap-2">
+				<Label>{isGlobal ? "Preset" : "Cron expression (UTC)"}</Label>
 				<Select
 					value={presetValue}
 					onValueChange={(value) => {
@@ -697,7 +618,7 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 						setForm({ ...form, cronExpression: value });
 					}}
 				>
-					<SelectTrigger aria-label="Schedule preset">
+					<SelectTrigger>
 						<SelectValue />
 					</SelectTrigger>
 					<SelectContent>
@@ -709,12 +630,11 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 						<SelectItem value="custom">Custom</SelectItem>
 					</SelectContent>
 				</Select>
-			</Field>
+			</div>
 			<div className="grid gap-2">
 				{isGlobal ? <Label htmlFor="schedule-cron">Cron (UTC)</Label> : null}
 				<Input
 					id="schedule-cron"
-					aria-label="Cron expression (UTC)"
 					className="font-mono text-sm"
 					placeholder="0 0 * * *"
 					value={form.cronExpression}
@@ -727,8 +647,8 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 				)}
 			</div>
 			{supportsImageMode ? (
-				<Field>
-					<FieldLabel htmlFor="schedule-run-mode">Runs in</FieldLabel>
+				<div className="grid gap-2">
+					<Label htmlFor="schedule-run-mode">Runs in</Label>
 					<Select
 						value={form.runMode}
 						onValueChange={(value) => setForm({ ...form, runMode: value as "exec" | "image" })}
@@ -746,11 +666,11 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 							? "A throwaway container on this service's network, with its environment variables. Works while the service is stopped."
 							: "Runs inside a container of this service — it has to be running."}
 					</p>
-				</Field>
+				</div>
 			) : null}
 			{supportsImageMode && form.runMode === "image" ? (
-				<Field>
-					<FieldLabel htmlFor="schedule-image">Image</FieldLabel>
+				<div className="grid gap-2">
+					<Label htmlFor="schedule-image">Image</Label>
 					<Input
 						id="schedule-image"
 						className="font-mono text-sm"
@@ -761,10 +681,10 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 					<p className="text-xs text-muted-foreground">
 						The image needs a shell — scratch and distroless images cannot run a job.
 					</p>
-				</Field>
+				</div>
 			) : null}
-			<Field>
-				<FieldLabel htmlFor="schedule-shell">Shell</FieldLabel>
+			<div className="grid gap-2">
+				<Label htmlFor="schedule-shell">Shell</Label>
 				<Select
 					value={form.shellType}
 					onValueChange={(value) => setForm({ ...form, shellType: value as "bash" | "sh" })}
@@ -777,9 +697,9 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 						<SelectItem value="sh">sh</SelectItem>
 					</SelectContent>
 				</Select>
-			</Field>
-			<Field>
-				<FieldLabel htmlFor="schedule-command">Command</FieldLabel>
+			</div>
+			<div className="grid gap-2">
+				<Label htmlFor="schedule-command">Command</Label>
 				<Textarea
 					id="schedule-command"
 					className="font-mono text-sm"
@@ -788,10 +708,10 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 					value={form.command}
 					onChange={(event) => setForm({ ...form, command: event.target.value })}
 				/>
-			</Field>
+			</div>
 			{!editing &&
 				(isGlobal ? (
-					<div className="flex flex-wrap items-center justify-between gap-4">
+					<div className="flex items-center justify-between gap-4">
 						<Label htmlFor="schedule-enabled">Enabled</Label>
 						<Switch
 							id="schedule-enabled"
@@ -844,8 +764,8 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 					</DialogDescription>
 				</DialogHeader>
 				<div className="grid gap-4">
-					<Field>
-						<FieldLabel htmlFor="once-image">Image</FieldLabel>
+					<div className="grid gap-2">
+						<Label htmlFor="once-image">Image</Label>
 						<Input
 							id="once-image"
 							className="font-mono text-sm"
@@ -853,9 +773,9 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 							value={onceImage}
 							onChange={(event) => setOnceImage(event.target.value)}
 						/>
-					</Field>
-					<Field>
-						<FieldLabel htmlFor="once-command">Command</FieldLabel>
+					</div>
+					<div className="grid gap-2">
+						<Label htmlFor="once-command">Command</Label>
 						<Textarea
 							id="once-command"
 							className="font-mono text-sm"
@@ -864,7 +784,7 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 							value={onceCommand}
 							onChange={(event) => setOnceCommand(event.target.value)}
 						/>
-					</Field>
+					</div>
 				</div>
 				<DialogFooter>
 					<Button variant="outline" onClick={() => setOnceOpen(false)}>
@@ -893,19 +813,6 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 	const dialogs = (
 		<>
 			{runOnceDialog}
-			<Dialog open={jobOutput !== null} onOpenChange={(open) => !open && setJobOutput(null)}>
-				<DialogContent className="sm:max-w-3xl">
-					<DialogHeader>
-						<DialogTitle>Job output</DialogTitle>
-						<DialogDescription>
-							The completed job’s output. It is also retained in the service run history.
-						</DialogDescription>
-					</DialogHeader>
-					<pre className="max-h-[60vh] overflow-auto rounded-lg border bg-background p-4 font-mono text-xs whitespace-pre-wrap break-words">
-						{jobOutput || "The job completed without output."}
-					</pre>
-				</DialogContent>
-			</Dialog>
 			<Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
 				<DialogContent>
 					<DialogHeader>
@@ -954,7 +861,7 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 					<AlertDialogFooter>
 						<AlertDialogCancel disabled={remove.isPending}>Cancel</AlertDialogCancel>
 						<AlertDialogAction
-							variant={isGlobal ? "outline" : undefined}
+							variant={isGlobal ? "destructive" : undefined}
 							disabled={remove.isPending}
 							onClick={(event) => {
 								// Keep the dialog open (with its spinner) until the mutation settles.

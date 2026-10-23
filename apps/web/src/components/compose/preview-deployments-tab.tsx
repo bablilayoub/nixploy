@@ -10,7 +10,6 @@ import { useSaveBar } from "@/components/services/save-bar";
 import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
 import { Button } from "@/components/ui/button";
 import { DisabledHint } from "@/components/ui/disabled-hint";
-import { Field, FieldLabel } from "@/components/ui/field";
 import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -106,7 +105,7 @@ function PreviewSettingsCard({ compose }: { compose: ComposeService }) {
 			title="Preview settings"
 			description="Pull-request previews, environment overrides, the cap on simultaneous previews, and how long a preview lives."
 		>
-			<div className="flex min-w-0 flex-col gap-5">
+			<div className="flex flex-col gap-4">
 				{!gitBacked && (
 					<p className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
 						This compose service has no git provider, so no pull-request webhooks reach it. Point it
@@ -146,8 +145,8 @@ function PreviewSettingsCard({ compose }: { compose: ComposeService }) {
 					/>
 				</div>
 
-				<Field>
-					<FieldLabel htmlFor="compose-preview-env">Preview environment variables</FieldLabel>
+				<div className="flex flex-col gap-2">
+					<Label htmlFor="compose-preview-env">Preview environment variables</Label>
 					<Textarea
 						id="compose-preview-env"
 						className="min-h-24 font-mono text-xs sm:max-w-lg"
@@ -160,11 +159,11 @@ function PreviewSettingsCard({ compose }: { compose: ComposeService }) {
 						Merged over the inherited project, environment and service variables when a preview
 						renders — point a preview stack at a scratch database instead of production.
 					</p>
-				</Field>
+				</div>
 
 				<div className="grid gap-4 sm:max-w-lg sm:grid-cols-2">
-					<Field>
-						<FieldLabel htmlFor="compose-preview-limit">Maximum previews</FieldLabel>
+					<div className="flex flex-col gap-2">
+						<Label htmlFor="compose-preview-limit">Maximum previews</Label>
 						<Input
 							id="compose-preview-limit"
 							inputMode="numeric"
@@ -173,9 +172,9 @@ function PreviewSettingsCard({ compose }: { compose: ComposeService }) {
 							onChange={(event) => draft.patch({ limit: event.target.value })}
 						/>
 						<p className="text-xs text-muted-foreground">0 means no limit.</p>
-					</Field>
-					<Field>
-						<FieldLabel htmlFor="compose-preview-ttl">Expire after (hours)</FieldLabel>
+					</div>
+					<div className="flex flex-col gap-2">
+						<Label htmlFor="compose-preview-ttl">Expire after (hours)</Label>
 						<Input
 							id="compose-preview-ttl"
 							inputMode="numeric"
@@ -187,7 +186,7 @@ function PreviewSettingsCard({ compose }: { compose: ComposeService }) {
 						<p className="text-xs text-muted-foreground">
 							Applied when a pull request creates the preview.
 						</p>
-					</Field>
+					</div>
 				</div>
 
 				<PreviewDatabaseFields

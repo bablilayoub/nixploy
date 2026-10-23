@@ -115,14 +115,12 @@ export function IncidentsView({ embedded = false }: { embedded?: boolean } = {})
 								<ul className="divide-y overflow-hidden rounded-lg border">
 									{rows.map((incident) => (
 										<li key={incident.incidentId}>
-											<Button
-												variant="ghost"
-												size="sm"
+											<button
 												type="button"
 												onClick={() => update("incident", incident.incidentId)}
 												aria-pressed={selectedId === incident.incidentId}
 												className={cn(
-													"flex w-full flex-col items-stretch justify-start rounded-none font-normal gap-2 px-4 py-3 text-left hover:bg-accent/50",
+													"flex w-full flex-col gap-2 px-4 py-3 text-left hover:bg-muted/50",
 													selectedId === incident.incidentId && "bg-secondary",
 												)}
 											>
@@ -143,7 +141,7 @@ export function IncidentsView({ embedded = false }: { embedded?: boolean } = {})
 													<span>{incident.serviceName ?? incident.kind}</span>
 													<DateTime value={incident.createdAt} />
 												</span>
-											</Button>
+											</button>
 										</li>
 									))}
 								</ul>
@@ -207,7 +205,6 @@ function LogSearchSection() {
 					value={query}
 					onChange={(event) => setQuery(event.target.value)}
 					placeholder="Search logs…"
-					aria-label="Search log messages"
 				/>
 			</form>
 			{submitted && results.isLoading && <Skeleton className="h-20 w-full" />}

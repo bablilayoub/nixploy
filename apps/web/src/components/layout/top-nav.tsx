@@ -1,105 +1,172 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Download } from "lucide-react";
+import { Download, Menu } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef } from "react";
+import { useState } from "react";
+import { useBranding } from "@/components/branding-provider";
 import { CommandPalette } from "@/components/command-palette";
 import { ProfileDropdown } from "@/components/layout/profile-dropdown";
 import { isSidebarNavActive, sidebarNavGroups } from "@/components/layout/sidebar-data";
 import { ModeToggle } from "@/components/mode-toggle";
-import { settingsNavItems } from "@/components/nav-settings";
 import { OrgSwitcher } from "@/components/org-switcher";
-import {
-	Breadcrumb,
-	BreadcrumbItem,
-	BreadcrumbLink,
-	BreadcrumbList,
-	BreadcrumbPage,
-	BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
+import { Logo, LogoMark } from "@/components/shell/logo";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import { useTRPC } from "@/lib/trpc";
+import { cn } from "@/lib/utils";
 
-export function TopNav() {
-	const pathname = usePathname();
-	const { state } = useSidebar();
-	const chrome = useRef<HTMLDivElement>(null);
-	useEffect(() => {
-		if (!chrome.current) return;
-		const root = document.documentElement;
-		const update = () =>
-			root.style.setProperty(
-				"--app-chrome-height",
-				`${Math.ceil(chrome.current?.getBoundingClientRect().height ?? 64)}px`,
-			);
-		update();
-		const observer = new ResizeObserver(update);
-		observer.observe(chrome.current);
-		return () => {
-			observer.disconnect();
-			root.style.removeProperty("--app-chrome-height");
-		};
-	}, []);
+const allNavItems = sidebarNavGroups.flatMap((group) => group.items);
+
+function useUpdateAvailable() {
 	const trpc = useTRPC();
-	const banner = useQuery({
+	const bannerQuery = useQuery({
 		...trpc.updates.banner.queryOptions(),
 		refetchInterval: 5 * 60_000,
 		retry: false,
 	});
-	const current = sidebarNavGroups
-		.flatMap((g) => g.items)
-		.find((item) => isSidebarNavActive(pathname, item.url));
-	const setting = settingsNavItems.find((item) => item.href === pathname);
-	return (
-		<div ref={chrome} className="sticky top-0 z-30 border-b bg-background">
-			<header className="flex min-h-16 flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
-				<div className="flex min-w-0 max-w-full items-center gap-3">
-					<SidebarTrigger aria-controls="workspace-navigation" />
-					<Separator orientation="vertical" className="data-[orientation=vertical]:h-4" />
-					<Breadcrumb>
-						<BreadcrumbList>
-							{setting ? (
-								<>
-									<BreadcrumbItem>
-										<BreadcrumbLink asChild>
-											<Link href="/dashboard/settings">Settings</Link>
-										</BreadcrumbLink>
-									</BreadcrumbItem>
-									<BreadcrumbSeparator />
-									<BreadcrumbItem>
-										<BreadcrumbPage>{setting.label}</BreadcrumbPage>
-									</BreadcrumbItem>
-								</>
-							) : (
-								<BreadcrumbItem>
-									<BreadcrumbPage>{current?.title ?? "Workspace"}</BreadcrumbPage>
-								</BreadcrumbItem>
-							)}
-						</BreadcrumbList>
-					</Breadcrumb>
+	return Boolean(bannerQuery.data?.updateAvailable) && Boolean(bannerQuery.data?.canManageUpdate);
+}
 
-					<div className={state === "collapsed" ? "hidden md:block" : "hidden"}>
-						<OrgSwitcher />
-					</div>
+function NavLink({
+	href,
+	label,
+	active,
+	onNavigate,
+	badge,
+}: {
+	href: string;
+	label: string;
+	active: boolean;
+	onNavigate?: () => void;
+	badge?: boolean;
+}) {
+	return (
+		<Link
+			href={href}
+			aria-current={active ? "page" : undefined}
+			onClick={onNavigate}
+			className={cn(
+				"relative inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+				active
+					? "bg-muted font-medium text-foreground"
+					: "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+			)}
+		>
+			{label}
+			{badge ? (
+				<span className="relative flex size-1.5">
+					<span className="absolute inline-flex size-full animate-ping rounded-full bg-success opacity-75" />
+					<span className="relative inline-flex size-1.5 rounded-full bg-success" />
+				</span>
+			) : null}
+		</Link>
+	);
+}
+
+/** Vercel-style sticky top navigation — brand, links, search, account. */
+export function TopNav() {
+	const pathname = usePathname();
+	const { can } = useCapabilities({ strict: true });
+	const navItems = allNavItems.filter((item) => !item.capability || can(item.capability));
+	const branding = useBranding();
+	const [mobileOpen, setMobileOpen] = useState(false);
+	const updateAvailable = useUpdateAvailable();
+
+	return (
+		<header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-md">
+			<div className="mx-auto flex h-14 w-full max-w-[1400px] items-center gap-3 px-4 sm:px-6">
+				<div className="flex min-w-0 items-center gap-2">
+					<Link href="/dashboard" className="hidden shrink-0 sm:inline-flex">
+						<Logo />
+					</Link>
+					<Link
+						href="/dashboard"
+						className="inline-flex shrink-0 sm:hidden"
+						aria-label={branding.productName}
+					>
+						<LogoMark className="size-7" />
+					</Link>
+					<Separator orientation="vertical" className="hidden h-4 sm:block" />
+					<OrgSwitcher />
 				</div>
-				<div className="ml-auto flex max-w-full items-center gap-1 sm:gap-2">
-					{banner.data?.updateAvailable && banner.data.canManageUpdate && (
-						<Button asChild variant="outline" size="sm" className="hidden xl:inline-flex">
-							<Link href="/dashboard/settings/server#platform-administration">
-								<Download aria-hidden="true" />
-								Update available
+
+				<nav className="ms-1 hidden items-center gap-0.5 xl:flex">
+					{navItems.map((item) => (
+						<NavLink
+							key={item.url}
+							href={item.url}
+							label={item.title}
+							active={isSidebarNavActive(pathname, item.url)}
+							badge={item.url === "/dashboard/settings" ? updateAvailable : false}
+						/>
+					))}
+				</nav>
+
+				<div className="ms-auto flex items-center gap-1.5">
+					{updateAvailable ? (
+						<Button
+							asChild
+							variant="outline"
+							size="sm"
+							className="hidden h-8 gap-1.5 lg:inline-flex"
+						>
+							<Link href="/dashboard/settings/server">
+								<Download className="size-3.5" />
+								Update
 							</Link>
 						</Button>
-					)}
+					) : null}
 					<CommandPalette />
 					<ModeToggle />
 					<ProfileDropdown />
+
+					<Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+						<SheetTrigger asChild>
+							<Button variant="ghost" size="icon" className="xl:hidden" aria-label="Open menu">
+								<Menu className="size-5" />
+							</Button>
+						</SheetTrigger>
+						<SheetContent side="left" className="w-72 p-0">
+							<SheetHeader className="border-b px-4 py-3 text-start">
+								<SheetTitle className="flex items-center gap-2">
+									<LogoMark className="size-5" />
+									{branding.productName}
+								</SheetTitle>
+							</SheetHeader>
+							<nav className="flex flex-col gap-1 p-3">
+								{navItems.map((item) => {
+									const Icon = item.icon;
+									const active = isSidebarNavActive(pathname, item.url);
+									return (
+										<Link
+											key={item.url}
+											href={item.url}
+											aria-current={active ? "page" : undefined}
+											onClick={() => setMobileOpen(false)}
+											className={cn(
+												"flex min-h-11 items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+												active
+													? "bg-muted font-medium text-foreground"
+													: "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+											)}
+										>
+											<Icon className="size-4 shrink-0" />
+											{item.title}
+											{item.url === "/dashboard/settings" && updateAvailable ? (
+												<span className="ms-auto size-1.5 rounded-full bg-success" />
+											) : null}
+										</Link>
+									);
+								})}
+							</nav>
+						</SheetContent>
+					</Sheet>
 				</div>
-			</header>
-		</div>
+			</div>
+		</header>
 	);
 }

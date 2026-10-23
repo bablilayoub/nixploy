@@ -1,13 +1,5 @@
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import {
-	Empty,
-	EmptyContent,
-	EmptyDescription,
-	EmptyHeader,
-	EmptyMedia,
-	EmptyTitle,
-} from "@/components/ui/empty";
 
 export function EmptyState({
 	icon: Icon,
@@ -21,17 +13,11 @@ export function EmptyState({
 	action?: ReactNode;
 }) {
 	return (
-		<Empty className="min-h-48 border-0 bg-transparent">
-			<EmptyHeader>
-				{Icon && (
-					<EmptyMedia variant="icon">
-						<Icon aria-hidden="true" />
-					</EmptyMedia>
-				)}
-				<EmptyTitle>{title}</EmptyTitle>
-				{description && <EmptyDescription>{description}</EmptyDescription>}
-			</EmptyHeader>
-			{action && <EmptyContent>{action}</EmptyContent>}
-		</Empty>
+		<div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border px-6 py-12 text-center">
+			{Icon && <Icon className="mb-1 size-8 text-muted-foreground" />}
+			<h3 className="text-sm font-medium">{title}</h3>
+			{description && <p className="max-w-sm text-sm text-muted-foreground">{description}</p>}
+			{action && <div className="mt-2">{action}</div>}
+		</div>
 	);
 }

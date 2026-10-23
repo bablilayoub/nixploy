@@ -107,12 +107,11 @@ export function VolumesTab({ serverId }: DockerTabProps) {
 	const view = useTableView({ rows: volumes, search: searchVolume });
 
 	if (volumesQuery.isLoading) return <Skeleton className="h-64 w-full" />;
-	if (volumesQuery.isError)
-		return <DockerError error={volumesQuery.error} onRetry={() => void volumesQuery.refetch()} />;
+	if (volumesQuery.isError) return <DockerError error={volumesQuery.error} />;
 
 	return (
-		<div className="space-y-4 pt-3">
-			<div className="flex flex-wrap items-center justify-between gap-3">
+		<div className="space-y-3 pt-4">
+			<div className="flex items-center justify-between">
 				<p className="text-sm text-muted-foreground">{volumes.length} volumes</p>
 				<div className="flex items-center gap-2">
 					<TableSearch view={view} placeholder="Search volumes…" />
@@ -215,7 +214,7 @@ export function VolumesTab({ serverId }: DockerTabProps) {
 					<AlertDialogFooter>
 						<AlertDialogCancel>Cancel</AlertDialogCancel>
 						<AlertDialogAction
-							variant="outline"
+							variant="destructive"
 							disabled={removeMutation.isPending}
 							onClick={() => {
 								if (removing) removeMutation.mutate({ serverId, name: removing.Name });
@@ -244,7 +243,7 @@ export function VolumesTab({ serverId }: DockerTabProps) {
 					<AlertDialogFooter>
 						<AlertDialogCancel>Cancel</AlertDialogCancel>
 						<AlertDialogAction
-							variant="outline"
+							variant="destructive"
 							disabled={pruneMutation.isPending}
 							onClick={() => pruneMutation.mutate({ serverId })}
 						>
@@ -385,29 +384,25 @@ function VolumeBrowserSheet({
 
 				<div className="flex min-h-0 flex-1 flex-col gap-3 px-4 pb-4">
 					<nav className="flex flex-wrap items-center gap-0.5 text-xs" aria-label="Breadcrumb">
-						<Button
-							variant="ghost"
-							size="sm"
+						<button
 							type="button"
-							className="h-auto rounded px-1.5 py-0.5 font-mono hover:bg-secondary"
+							className="rounded px-1.5 py-0.5 font-mono hover:bg-secondary"
 							onClick={() => setPath("/data")}
 						>
 							/
-						</Button>
+						</button>
 						{crumbs.map((crumb, index) => {
 							const target = `/data/${crumbs.slice(0, index + 1).join("/")}`;
 							return (
 								<span key={target} className="flex items-center gap-0.5">
 									<ChevronRight className="size-3 text-muted-foreground" />
-									<Button
-										variant="ghost"
-										size="sm"
+									<button
 										type="button"
-										className="h-auto rounded px-1.5 py-0.5 font-mono hover:bg-secondary"
+										className="rounded px-1.5 py-0.5 font-mono hover:bg-secondary"
 										onClick={() => setPath(target)}
 									>
 										{crumb}
-									</Button>
+									</button>
 								</span>
 							);
 						})}
@@ -450,7 +445,6 @@ function VolumeBrowserSheet({
 								empty={null}
 							>
 								<CodeEditor
-									label="Volume file contents"
 									className="min-h-0 flex-1 overflow-auto rounded-lg border"
 									value={draft}
 									onChange={setDraft}
@@ -511,16 +505,14 @@ function VolumeBrowserSheet({
 								<ul className="min-h-0 flex-1 divide-y overflow-y-auto rounded-lg border">
 									{path !== "/data" && (
 										<li>
-											<Button
-												variant="ghost"
-												size="sm"
+											<button
 												type="button"
-												className="justify-start rounded-none flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-secondary/50"
+												className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-secondary/50"
 												onClick={() => setPath(parentPath(path))}
 											>
 												<Folder className="size-4 text-muted-foreground" />
 												<span className="font-mono">..</span>
-											</Button>
+											</button>
 										</li>
 									)}
 									{entries.map((entry) => {
@@ -528,11 +520,9 @@ function VolumeBrowserSheet({
 										const full = joinPath(path, entry.name);
 										return (
 											<li key={entry.name} className="flex items-center gap-2 pr-2">
-												<Button
-													variant="ghost"
-													size="sm"
+												<button
 													type="button"
-													className="justify-start rounded-none flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left text-sm hover:bg-secondary/50 disabled:cursor-default disabled:opacity-60"
+													className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left text-sm hover:bg-secondary/50 disabled:cursor-default disabled:opacity-60"
 													disabled={entry.type === "other"}
 													onClick={() => {
 														if (entry.type === "directory") {
@@ -550,7 +540,7 @@ function VolumeBrowserSheet({
 															{formatSize(entry.size)}
 														</span>
 													)}
-												</Button>
+												</button>
 												<Button
 													variant="ghost"
 													size="icon-sm"
@@ -588,7 +578,7 @@ function VolumeBrowserSheet({
 					<AlertDialogFooter>
 						<AlertDialogCancel disabled={remove.isPending}>Cancel</AlertDialogCancel>
 						<AlertDialogAction
-							variant="outline"
+							variant="destructive"
 							disabled={remove.isPending}
 							onClick={(event) => {
 								event.preventDefault();

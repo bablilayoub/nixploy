@@ -103,16 +103,16 @@ export function SwarmTab({ serverId }: DockerTabProps) {
 		return <Skeleton className="h-64 w-full" />;
 	}
 	if (servicesQuery.isError && !isSwarmInactiveError(servicesQuery.error)) {
-		return <DockerError error={servicesQuery.error} onRetry={() => void servicesQuery.refetch()} />;
+		return <DockerError error={servicesQuery.error} />;
 	}
 	if (nodesQuery.isError && !isSwarmInactiveError(nodesQuery.error)) {
-		return <DockerError error={nodesQuery.error} onRetry={() => void nodesQuery.refetch()} />;
+		return <DockerError error={nodesQuery.error} />;
 	}
 
 	// The router answers `[]` for both lists on a worker or standalone engine.
 	if (nodes.length === 0 && services.length === 0) {
 		return (
-			<div className="pt-3">
+			<div className="pt-4">
 				<EmptyState
 					icon={Boxes}
 					title="Swarm mode is inactive on this server"
@@ -131,7 +131,7 @@ export function SwarmTab({ serverId }: DockerTabProps) {
 	return (
 		<div className="space-y-6 pt-4">
 			<div className="space-y-3">
-				<div className="flex flex-wrap items-center justify-between gap-3">
+				<div className="flex items-center justify-between">
 					<h3 className="text-sm font-medium">Nodes</h3>
 					<Button variant="outline" size="sm" onClick={invalidate}>
 						<RefreshCw className="size-3.5" />

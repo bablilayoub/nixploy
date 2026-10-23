@@ -17,8 +17,8 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 import { DisabledHint } from "@/components/ui/disabled-hint";
-import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
 	Select,
 	SelectContent,
@@ -192,8 +192,8 @@ export function ServiceActionsCard({
 	};
 
 	const environmentPicker = (value: string, onChange: (next: string) => void, id: string) => (
-		<Field className="space-y-1.5">
-			<FieldLabel htmlFor={id}>Target environment</FieldLabel>
+		<div className="space-y-1.5">
+			<Label htmlFor={id}>Target environment</Label>
 			<Select value={value} onValueChange={onChange}>
 				<SelectTrigger id={id} className="w-full">
 					<SelectValue placeholder="Select an environment" />
@@ -213,7 +213,7 @@ export function ServiceActionsCard({
 					)}
 				</SelectContent>
 			</Select>
-		</Field>
+		</div>
 	);
 
 	return (
@@ -267,15 +267,15 @@ export function ServiceActionsCard({
 							void handleDuplicate();
 						}}
 					>
-						<Field className="space-y-1.5">
-							<FieldLabel htmlFor="duplicate-name">Name</FieldLabel>
+						<div className="space-y-1.5">
+							<Label htmlFor="duplicate-name">Name</Label>
 							<Input
 								id="duplicate-name"
 								value={name}
 								onChange={(event) => setName(event.target.value)}
 								autoComplete="off"
 							/>
-						</Field>
+						</div>
 						{environmentPicker(duplicateTarget, setDuplicateTarget, "duplicate-environment")}
 						<DialogFooter>
 							<Button

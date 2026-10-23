@@ -19,25 +19,17 @@ import { PageHeader } from "@/components/shell/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Field, FieldLabel } from "@/components/ui/field";
 import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { describeError, toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
-import { cn } from "@/lib/utils";
 import { MigrationReview } from "./migration-review";
 
-const MATCH_SOURCE_PROJECT = "__match_source_project__";
+const selectClass =
+	"h-10 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50";
 const MAX_DUMP = 512 * 1024 * 1024;
 
 export function MigrationsView() {
@@ -80,14 +72,6 @@ export function MigrationsView() {
 	const makePlan = useMutation({ ...trpc.import.plan.mutationOptions(), gcTime: 0 });
 	const apply = useMutation({ ...trpc.import.runApply.mutationOptions(), gcTime: 0 });
 	const projects = useQuery({ ...trpc.project.all.queryOptions(), enabled: can("gitops.manage") });
-	const [sourceOpen, setSourceOpen] = useState(true);
-	useEffect(() => {
-		setSourceOpen(!inventory);
-		if (inventory) document.getElementById("migration-selection")?.focus();
-	}, [inventory]);
-	useEffect(() => {
-		if (plan) document.getElementById("migration-review")?.focus();
-	}, [plan]);
 	const busy = uploading || inspect.isPending || makePlan.isPending || apply.isPending;
 	useTrackedActivity({
 		id: "migration-import",
@@ -286,245 +270,158 @@ export function MigrationsView() {
 					</>
 				}
 			/>
-			<ol
-				aria-label="Migration progress"
-				className="grid gap-1 rounded-xl border bg-card p-2 sm:grid-cols-3"
-			>
-				{[
-					{
-						title: "Connect source",
-						detail: "Read configuration",
-						complete: Boolean(inventory),
-						current: !inventory,
-					},
-					{
-						title: "Choose and review",
-						detail: "Select services and target",
-						complete: Boolean(plan),
-						current: Boolean(inventory) && !plan,
-					},
-					{
-						title: "Import configuration",
-						detail: result ? "Import finished" : "Confirm the reviewed plan",
-						complete: Boolean(result),
-						current: Boolean(plan),
-					},
-				].map((step, index) => (
-					<li
-						key={step.title}
-						aria-current={step.current ? "step" : undefined}
-						className={cn(
-							"flex min-w-0 items-start gap-3 rounded-lg px-4 py-3",
-							step.current && "bg-secondary",
-						)}
-					>
-						<span
-							aria-hidden="true"
-							className="flex size-6 shrink-0 items-center justify-center rounded-full border text-xs tabular-nums"
-						>
-							{step.complete ? "✓" : index + 1}
-						</span>
-						<span className="min-w-0 [overflow-wrap:anywhere]">
-							<span className="block text-sm font-medium">{step.title}</span>
-							<span className="mt-1 block text-xs text-muted-foreground">{step.detail}</span>
-						</span>
-					</li>
-				))}
-			</ol>
-			<div className="grid gap-5 border-y py-5 sm:grid-cols-2">
-				<div className="flex gap-3">
-					<LockKeyhole
-						aria-hidden="true"
-						className="mt-0.5 size-4 shrink-0 text-muted-foreground"
-					/>
-					<div>
-						<p className="text-sm font-medium">Configuration import</p>
-						<p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-							Copies service settings and readable environment values. Restore database data,
-							persistent files and encrypted source secrets separately.
-						</p>
-					</div>
-				</div>
-				<div>
-					<p className="text-sm font-medium">Your source stays in place</p>
-					<p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-						Review the plan before importing. Deploy imported services when you are ready. The
-						source API key stays in this page’s memory and is cleared when you leave or finish.
-					</p>
-				</div>
+			<div className="flex items-start gap-3 rounded-lg border bg-muted/30 p-4 text-sm">
+				<LockKeyhole className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+				<p className="text-muted-foreground">
+					Dokploy and Coolify live APIs are supported; database dumps are supported for Dokploy.
+					Imports copy configuration and readable environment values. Database data, persistent
+					files and encrypted source secrets need separate restoration. Source API keys stay in this
+					page's memory and are cleared when you change the source, finish or leave.
+				</p>
 			</div>
-			<div>
-				{inventory && (
-					<div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card px-5 py-4">
-						<div>
-							<p className="text-sm font-medium">Source connected</p>
-							<p className="mt-1 break-all text-xs text-muted-foreground">
-								{IMPORT_SOURCE_LABELS[provider]} ·{" "}
-								{mode === "live" ? url : (dump?.filename ?? "Database dump")}
-							</p>
-						</div>
+			<Card>
+				<CardHeader>
+					<CardTitle>1. Connect your source</CardTitle>
+					<CardDescription>
+						Use a source API key with read access. Coolify also needs API access enabled and
+						read:sensitive to copy environment values and raw Compose content. Dokploy supports
+						PostgreSQL dump uploads.
+					</CardDescription>
+				</CardHeader>
+				<CardContent className="space-y-5">
+					<div className="max-w-sm space-y-2">
+						<Label htmlFor="migration-provider">Source panel</Label>
+						<select
+							id="migration-provider"
+							className={selectClass}
+							value={provider}
+							disabled={apply.isPending}
+							onChange={(event) => {
+								clearSource();
+								setProvider(event.target.value as ImportSource);
+								setMode("live");
+							}}
+						>
+							{IMPORT_SOURCES.map((value) => (
+								<option key={value} value={value}>
+									{IMPORT_SOURCE_LABELS[value]}
+								</option>
+							))}
+						</select>
+					</div>
+					<fieldset disabled={busy} className="flex flex-wrap gap-2">
+						<legend className="sr-only">Source connection</legend>
 						<Button
-							variant="outline"
-							size="sm"
-							onClick={() => setSourceOpen(!sourceOpen)}
-							aria-expanded={sourceOpen}
-							aria-controls="migration-source-form"
+							type="button"
+							variant={mode === "live" ? "default" : "outline"}
+							aria-pressed={mode === "live"}
+							onClick={() => {
+								clearSource();
+								setMode("live");
+							}}
 						>
-							{sourceOpen ? "Hide connection" : "Change connection"}
+							<PlugZap className="size-4" />
+							Live API
 						</Button>
-					</div>
-				)}
-				<div id="migration-source-form" hidden={!sourceOpen}>
-					<Card>
-						<CardHeader>
-							<CardTitle>1. Connect your source</CardTitle>
-							<CardDescription>
-								Use a source API key with read access. Coolify also needs API access enabled and
-								read:sensitive to copy environment values and raw Compose content. Dokploy supports
-								PostgreSQL dump uploads.
-							</CardDescription>
-						</CardHeader>
-						<CardContent className="space-y-5">
-							<Field className="max-w-sm space-y-2">
-								<FieldLabel htmlFor="migration-provider">Source panel</FieldLabel>
-								<Select
-									value={provider}
+						<Button
+							type="button"
+							variant={mode === "dump" ? "default" : "outline"}
+							disabled={provider !== "dokploy"}
+							aria-pressed={mode === "dump"}
+							onClick={() => {
+								clearSource();
+								setMode("dump");
+							}}
+						>
+							<FileUp className="size-4" />
+							Upload dump
+						</Button>
+					</fieldset>
+					{mode === "live" ? (
+						<div className="grid gap-4 sm:grid-cols-2">
+							<div className="space-y-2">
+								<Label htmlFor="migration-url">Source panel URL</Label>
+								<Input
+									id="migration-url"
+									type="url"
+									placeholder="https://panel.example.com"
+									value={url}
 									disabled={apply.isPending}
-									onValueChange={(value) => {
+									onChange={(event) => {
 										clearSource();
-										setProvider(value as ImportSource);
-										setMode("live");
+										setUrl(event.target.value);
 									}}
-								>
-									<SelectTrigger id="migration-provider" className="w-full">
-										<SelectValue />
-									</SelectTrigger>
-									<SelectContent>
-										{IMPORT_SOURCES.map((value) => (
-											<SelectItem key={value} value={value}>
-												{IMPORT_SOURCE_LABELS[value]}
-											</SelectItem>
-										))}
-									</SelectContent>
-								</Select>
-							</Field>
-							<fieldset disabled={busy} className="flex flex-wrap gap-2">
-								<legend className="sr-only">Source connection</legend>
-								<Button
-									type="button"
-									variant={mode === "live" ? "default" : "outline"}
-									aria-pressed={mode === "live"}
-									onClick={() => {
+									autoComplete="off"
+								/>
+								<p className="text-xs text-muted-foreground">
+									Private addresses require the instance's private-egress setting.
+								</p>
+							</div>
+							<div className="space-y-2">
+								<Label htmlFor="migration-key">Source API key</Label>
+								<Input
+									id="migration-key"
+									type="password"
+									value={apiKey}
+									disabled={apply.isPending}
+									onChange={(event) => {
 										clearSource();
-										setMode("live");
+										setApiKey(event.target.value);
 									}}
-								>
-									<PlugZap className="size-4" />
-									Live API
-								</Button>
-								<Button
-									type="button"
-									variant={mode === "dump" ? "default" : "outline"}
-									disabled={provider !== "dokploy"}
-									aria-pressed={mode === "dump"}
-									onClick={() => {
-										clearSource();
-										setMode("dump");
-									}}
-								>
-									<FileUp className="size-4" />
-									Upload dump
-								</Button>
-							</fieldset>
-							{mode === "live" ? (
-								<div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
-									<Field className="min-w-0 space-y-2">
-										<FieldLabel htmlFor="migration-url">Source panel URL</FieldLabel>
-										<Input
-											id="migration-url"
-											type="url"
-											placeholder="https://panel.example.com"
-											value={url}
-											disabled={apply.isPending}
-											onChange={(event) => {
-												clearSource();
-												setUrl(event.target.value);
-											}}
-											autoComplete="off"
-										/>
-										<p className="text-xs text-muted-foreground">
-											Private addresses require the instance's private-egress setting.
-										</p>
-									</Field>
-									<Field className="min-w-0 space-y-2">
-										<FieldLabel htmlFor="migration-key">Source API key</FieldLabel>
-										<Input
-											id="migration-key"
-											type="password"
-											value={apiKey}
-											disabled={apply.isPending}
-											onChange={(event) => {
-												clearSource();
-												setApiKey(event.target.value);
-											}}
-											autoComplete="off"
-										/>
-										<p className="text-xs text-muted-foreground">
-											Sent in request bodies; never saved in the browser or reports.
-										</p>
-									</Field>
-								</div>
-							) : (
-								<Field className="min-w-0 space-y-2">
-									<FieldLabel htmlFor="migration-file">PostgreSQL dump</FieldLabel>
-									<Input
-										id="migration-file"
-										ref={uploadInput}
-										type="file"
-										accept=".sql,.dump,.backup,.gz"
-										disabled={busy}
-										onChange={(event) => {
-											clearSource();
-											const next = event.target.files?.[0] ?? null;
-											if (next && next.size > MAX_DUMP) {
-												setFile(null);
-												setError("The dump exceeds 512 MiB.");
-											} else setFile(next);
-										}}
-									/>
-									<p className="text-xs text-muted-foreground">
-										SQL or pg_dump custom format, optionally gzip, up to 512 MiB. Uploaded dumps are
-										organization-scoped and expire after 24 hours.
-									</p>
-									{dump && (
-										<p className="text-xs text-muted-foreground">
-											Uploaded {dump.filename}. Expires {new Date(dump.expiresAt).toLocaleString()}.
-											reupload after expiry.
-										</p>
-									)}
-								</Field>
+									autoComplete="off"
+								/>
+								<p className="text-xs text-muted-foreground">
+									Sent in request bodies; never saved in the browser or reports.
+								</p>
+							</div>
+						</div>
+					) : (
+						<div className="space-y-2">
+							<Label htmlFor="migration-file">PostgreSQL dump</Label>
+							<Input
+								id="migration-file"
+								ref={uploadInput}
+								type="file"
+								accept=".sql,.dump,.backup,.gz"
+								disabled={busy}
+								onChange={(event) => {
+									clearSource();
+									const next = event.target.files?.[0] ?? null;
+									if (next && next.size > MAX_DUMP) {
+										setFile(null);
+										setError("The dump exceeds 512 MiB.");
+									} else setFile(next);
+								}}
+							/>
+							<p className="text-xs text-muted-foreground">
+								SQL or pg_dump custom format, optionally gzip, up to 512 MiB. Uploaded dumps are
+								organization-scoped and expire after 24 hours.
+							</p>
+							{dump && (
+								<p className="text-xs text-muted-foreground">
+									Uploaded {dump.filename}. Expires {new Date(dump.expiresAt).toLocaleString()}.
+									reupload after expiry.
+								</p>
 							)}
-							<Button
-								disabled={
-									busy || (mode === "live" ? !url.trim() || !apiKey.trim() : !file && !dump)
-								}
-								onClick={() => void inspectSource()}
-							>
-								{inspect.isPending || uploading ? (
-									<Loader2 className="size-4 animate-spin" />
-								) : (
-									<ArrowRight className="size-4" />
-								)}
-								{uploading
-									? "Uploading dump…"
-									: inspect.isPending
-										? "Inspecting source…"
-										: "Inspect source"}
-							</Button>
-						</CardContent>
-					</Card>
-				</div>
-			</div>
+						</div>
+					)}
+					<Button
+						disabled={busy || (mode === "live" ? !url.trim() || !apiKey.trim() : !file && !dump)}
+						onClick={() => void inspectSource()}
+					>
+						{inspect.isPending || uploading ? (
+							<Loader2 className="size-4 animate-spin" />
+						) : (
+							<ArrowRight className="size-4" />
+						)}
+						{uploading
+							? "Uploading dump…"
+							: inspect.isPending
+								? "Inspecting source…"
+								: "Inspect source"}
+					</Button>
+				</CardContent>
+			</Card>
 			{error && (
 				<div
 					role="alert"
@@ -534,11 +431,7 @@ export function MigrationsView() {
 				</div>
 			)}
 			{inventory && (
-				<Card
-					id="migration-selection"
-					tabIndex={-1}
-					className="scroll-mt-8 focus-visible:outline-2 focus-visible:outline-ring"
-				>
+				<Card>
 					<CardHeader>
 						<CardTitle>2. Choose configuration and target</CardTitle>
 						<CardDescription className="break-all">
@@ -553,54 +446,56 @@ export function MigrationsView() {
 							</p>
 						) : (
 							<>
-								<div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
-									<Field className="min-w-0 space-y-2">
-										<FieldLabel htmlFor="migration-project">Source project</FieldLabel>
-										<Select
+								<div className="grid gap-4 sm:grid-cols-2">
+									<div className="space-y-2">
+										<Label htmlFor="migration-project">Source project</Label>
+										<select
+											id="migration-project"
+											className={selectClass}
 											value={sourceProjectId}
 											disabled={apply.isPending}
-											onValueChange={(value) => {
-												const next = inventory.projects.find((row) => row.projectId === value);
+											onChange={(event) => {
+												const next = inventory.projects.find(
+													(row) => row.projectId === event.target.value,
+												);
 												if (next) selectEnvironment(next, next.environments[0]?.name ?? "");
 											}}
 										>
-											<SelectTrigger id="migration-project" className="w-full">
-												<SelectValue placeholder="Choose a project" />
-											</SelectTrigger>
-											<SelectContent>
-												{inventory.projects.map((row) => (
-													<SelectItem key={row.projectId} value={row.projectId}>
-														{row.name}
-													</SelectItem>
-												))}
-											</SelectContent>
-										</Select>
-									</Field>
-									<Field className="min-w-0 space-y-2">
-										<FieldLabel htmlFor="migration-environment">Source environment</FieldLabel>
-										<Select
+											<option value="" disabled>
+												Choose a project
+											</option>
+											{inventory.projects.map((row) => (
+												<option key={row.projectId} value={row.projectId}>
+													{row.name}
+												</option>
+											))}
+										</select>
+									</div>
+									<div className="space-y-2">
+										<Label htmlFor="migration-environment">Source environment</Label>
+										<select
+											id="migration-environment"
+											className={selectClass}
 											value={sourceEnvironment}
 											disabled={apply.isPending || !currentProject?.environments.length}
-											onValueChange={(value) => {
-												if (currentProject) selectEnvironment(currentProject, value);
+											onChange={(event) => {
+												if (currentProject) selectEnvironment(currentProject, event.target.value);
 											}}
 										>
-											<SelectTrigger id="migration-environment" className="w-full">
-												<SelectValue placeholder="Choose an environment" />
-											</SelectTrigger>
-											<SelectContent>
-												{currentProject?.environments.map((row) => (
-													<SelectItem key={row.name} value={row.name}>
-														{row.name}
-													</SelectItem>
-												))}
-											</SelectContent>
-										</Select>
-									</Field>
+											<option value="" disabled>
+												Choose an environment
+											</option>
+											{currentProject?.environments.map((row) => (
+												<option key={row.name} value={row.name}>
+													{row.name}
+												</option>
+											))}
+										</select>
+									</div>
 								</div>
 								{currentEnvironment && (
-									<section className="min-w-0 space-y-2">
-										<div className="flex flex-wrap items-center justify-between gap-3">
+									<section className="space-y-2">
+										<div className="flex items-center justify-between gap-3">
 											<h3 className="text-sm font-medium">
 												Services{" "}
 												<span className="text-muted-foreground tabular-nums">
@@ -632,7 +527,7 @@ export function MigrationsView() {
 										) : (
 											<div className="grid max-h-64 gap-px overflow-auto rounded-md border bg-border sm:grid-cols-2">
 												{currentEnvironment.services.map((row) => (
-													<Label
+													<label
 														htmlFor={`migration-service-${row.id}`}
 														key={row.id}
 														className="flex min-w-0 cursor-pointer items-center gap-3 bg-card px-3 py-3 text-sm"
@@ -654,7 +549,7 @@ export function MigrationsView() {
 															{row.name}
 															<span className="ms-2 text-xs text-muted-foreground">{row.kind}</span>
 														</span>
-													</Label>
+													</label>
 												))}
 											</div>
 										)}
@@ -673,39 +568,32 @@ export function MigrationsView() {
 										onRetry={() => void projects.refetch()}
 									/>
 								) : (
-									<div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
-										<Field className="min-w-0 space-y-2">
-											<FieldLabel htmlFor="migration-target">Target project</FieldLabel>
-											<Select
-												value={projectId || MATCH_SOURCE_PROJECT}
+									<div className="grid gap-4 sm:grid-cols-2">
+										<div className="space-y-2">
+											<Label htmlFor="migration-target">Target project</Label>
+											<select
+												id="migration-target"
+												className={selectClass}
+												value={projectId}
 												disabled={apply.isPending || projects.isPending}
-												onValueChange={(value) => {
+												onChange={(event) => {
 													clearReview();
-													setProjectId(value === MATCH_SOURCE_PROJECT ? "" : value);
+													setProjectId(event.target.value);
 												}}
 											>
-												<SelectTrigger id="migration-target" className="w-full">
-													<SelectValue />
-												</SelectTrigger>
-												<SelectContent>
-													<SelectItem value={MATCH_SOURCE_PROJECT}>
-														Match source project name, or create it
-													</SelectItem>
-													{projects.data?.map((row) => (
-														<SelectItem key={row.projectId} value={row.projectId}>
-															{row.name}
-														</SelectItem>
-													))}
-												</SelectContent>
-											</Select>
+												<option value="">Match source project name, or create it</option>
+												{projects.data?.map((row) => (
+													<option key={row.projectId} value={row.projectId}>
+														{row.name}
+													</option>
+												))}
+											</select>
 											<p className="text-xs text-muted-foreground">
 												Only projects visible to your organization and teams are listed.
 											</p>
-										</Field>
-										<Field className="min-w-0 space-y-2">
-											<FieldLabel htmlFor="migration-target-environment">
-												Target environment name
-											</FieldLabel>
+										</div>
+										<div className="space-y-2">
+											<Label htmlFor="migration-target-environment">Target environment name</Label>
 											<Input
 												id="migration-target-environment"
 												value={environmentName}
@@ -719,11 +607,11 @@ export function MigrationsView() {
 											<p className="text-xs text-muted-foreground">
 												An existing name is updated; a missing environment is created.
 											</p>
-										</Field>
+										</div>
 									</div>
 								)}
 								{provider === "dokploy" && (
-									<Label htmlFor="migration-keep-names" className="flex items-start gap-3 text-sm">
+									<label htmlFor="migration-keep-names" className="flex items-start gap-3 text-sm">
 										<Checkbox
 											id="migration-keep-names"
 											checked={keepAppNames}
@@ -741,7 +629,7 @@ export function MigrationsView() {
 												does not move containers or volumes.
 											</span>
 										</span>
-									</Label>
+									</label>
 								)}
 								<Button
 									disabled={
@@ -769,26 +657,20 @@ export function MigrationsView() {
 				</Card>
 			)}
 			{plan && (
-				<div
-					id="migration-review"
-					tabIndex={-1}
-					className="scroll-mt-8 focus-visible:outline-2 focus-visible:outline-ring"
-				>
-					<MigrationReview
-						key={plan.reviewToken}
-						plan={plan}
-						result={result}
-						pending={apply.isPending}
-						can={can}
-						onApply={() => void runApply()}
-						onReplan={() => {
-							clearReview();
-							if (mode === "live")
-								setError("Re-enter the source API key above, inspect and generate a fresh plan.");
-							else void review();
-						}}
-					/>
-				</div>
+				<MigrationReview
+					key={plan.reviewToken}
+					plan={plan}
+					result={result}
+					pending={apply.isPending}
+					can={can}
+					onApply={() => void runApply()}
+					onReplan={() => {
+						clearReview();
+						if (mode === "live")
+							setError("Re-enter the source API key above, inspect and generate a fresh plan.");
+						else void review();
+					}}
+				/>
 			)}
 		</div>
 	);

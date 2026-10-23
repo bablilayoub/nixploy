@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { FocusSections } from "@/components/layout/focus-sections";
 import { SettingsStack } from "@/components/layout/settings-section";
 import { ApiKeysCard } from "@/components/settings/profile/api-keys-card";
 import { McpSetupCard } from "@/components/settings/profile/mcp-setup-card";
@@ -17,33 +16,15 @@ export default function ProfileSettingsPage() {
 	return (
 		<div className="flex flex-col gap-8">
 			<PageHeader title="Profile" description="Manage your account, security and API access." />
-			<FocusSections
-				items={[
-					{ id: "account", label: "Account" },
-					{ id: "security", label: "Sign-in and security" },
-					{ id: "developer-access", label: "Developer access" },
-				]}
-			>
-				<section id="account" tabIndex={-1} className="space-y-6 scroll-mt-24 min-w-0">
-					<SettingsStack>
-						<ProfileCard />
-					</SettingsStack>
-				</section>
-				<section id="security" tabIndex={-1} className="space-y-6 scroll-mt-24 min-w-0">
-					<SettingsStack>
-						<ChangePasswordCard />
-						<PasskeysCard />
-						<TwoFactorCard />
-						<SessionsCard />
-					</SettingsStack>
-				</section>
-				<section id="developer-access" tabIndex={-1} className="space-y-6 scroll-mt-24 min-w-0">
-					<SettingsStack>
-						<ApiKeysCard />
-						<McpSetupCard />
-					</SettingsStack>
-				</section>
-			</FocusSections>
+			<SettingsStack>
+				<ProfileCard />
+				<ChangePasswordCard />
+				<PasskeysCard />
+				<TwoFactorCard />
+				<SessionsCard />
+				<ApiKeysCard />
+				<McpSetupCard />
+			</SettingsStack>
 		</div>
 	);
 }

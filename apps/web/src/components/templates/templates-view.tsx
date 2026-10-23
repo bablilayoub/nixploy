@@ -43,7 +43,7 @@ export type TemplateSummary = inferRouterOutputs<AppRouter>["template"]["all"][n
  * templates, so a three-column grid left almost every section with one
  * stranded card on a row of its own.
  */
-const GRID_CLASS = "grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-3";
+const GRID_CLASS = "grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
 
 /** A page of cards, and a page of rows. Both land just under one screenful. */
 const GRID_PAGE_SIZE = 24;
@@ -229,17 +229,17 @@ export function TemplatesWorkbench({
 	const rail = <TemplateFilterRail view={view} filters={filters} sourceNames={sourceNames} />;
 
 	return (
-		<div className="flex min-w-0 flex-col gap-7">
+		<div className="flex flex-col gap-6">
 			<PageHeader
 				title="Templates"
 				description="One-click deploys for popular self-hosted apps."
 				actions={
-					<div className="flex min-w-0 flex-wrap items-center gap-2">
+					<div className="flex items-center gap-2">
 						<Select
 							value={filters.sort}
 							onValueChange={(value) => filters.set({ sort: value as TemplateSort })}
 						>
-							<SelectTrigger className="h-9 w-full sm:w-44" aria-label="Sort templates">
+							<SelectTrigger className="h-9 w-44" aria-label="Sort templates">
 								<SelectValue />
 							</SelectTrigger>
 							<SelectContent align="end">
@@ -280,7 +280,7 @@ export function TemplatesWorkbench({
 				{/* The rail is navigation, so it stays put while the results scroll —
 				    and scrolls inside itself when a source brings more categories
 				    than fit, rather than making the page taller than the results. */}
-				<aside className="hidden w-44 shrink-0 lg:sticky lg:top-24 lg:block lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto lg:pe-1">
+				<aside className="hidden w-56 shrink-0 lg:sticky lg:top-4 lg:block lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto lg:pe-1">
 					{rail}
 				</aside>
 
@@ -300,16 +300,14 @@ export function TemplatesWorkbench({
 								className="h-9 w-full ps-8 pe-8"
 							/>
 							{draftQuery ? (
-								<Button
-									variant="ghost"
-									size="sm"
+								<button
 									type="button"
 									onClick={() => setDraftQuery("")}
 									aria-label="Clear search"
-									className="absolute end-0 top-1/2 size-9 min-h-9 -translate-y-1/2 rounded-sm p-0 has-[>svg]:px-0 text-muted-foreground transition-colors hover:text-foreground"
+									className="absolute end-2 top-1/2 -translate-y-1/2 rounded-sm text-muted-foreground transition-colors hover:text-foreground"
 								>
 									<X className="size-3.5" />
-								</Button>
+								</button>
 							) : null}
 						</div>
 
@@ -343,17 +341,15 @@ export function TemplatesWorkbench({
 					{activeChips.length > 0 ? (
 						<div className="flex flex-wrap items-center gap-1.5">
 							{activeChips.map((chip) => (
-								<Button
-									variant="ghost"
-									size="sm"
+								<button
 									key={chip.key}
 									type="button"
 									onClick={chip.clear}
-									className="h-auto min-h-7 flex items-center gap-1 rounded-md border bg-secondary/60 px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+									className="flex items-center gap-1 rounded-md border bg-secondary/60 px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
 								>
 									{chip.label}
 									<X className="size-3" />
-								</Button>
+								</button>
 							))}
 							<Button variant="ghost" size="xs" onClick={filters.clear}>
 								Clear all
@@ -424,7 +420,7 @@ export function TemplatesWorkbench({
 
 						{view.pageCount > 1 ? (
 							<Pagination
-								className="pt-3"
+								className="pt-4"
 								page={view.page}
 								pageCount={view.pageCount}
 								from={view.from}
@@ -499,7 +495,7 @@ function CardGrid({
 					{/* The rule carries the eye from the label across to the row it
 					    labels, which is what separates the sections — not the gap. */}
 					<div className="flex items-center gap-3">
-						<h2 className="text-sm font-medium normal-case tracking-normal text-muted-foreground">
+						<h2 className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
 							{section.category}
 						</h2>
 						<span className="text-[11px] tabular-nums text-muted-foreground/60">

@@ -21,7 +21,6 @@ import { LogViewer } from "@/components/services/log-viewer";
 import { DeploymentStatusBadge } from "@/components/services/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { DateTime } from "@/components/ui/date-time";
 import {
 	Dialog,
@@ -31,20 +30,22 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+	Table,
+	TableBody,
+	TableCell,
+	TableHead,
+	TableHeader,
+	TableRow,
+} from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
 import { TableFacet, TableFilterReset } from "@/components/ui/table-toolbar";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useLiveEventsConnected } from "@/hooks/use-live-events";
 import { describeTriggeredBy, firstLine, TRIGGER_LABELS } from "@/hooks/use-running-deployments";
 import { useSaveMutation } from "@/hooks/use-save-mutation";
-import { describeError, toastError } from "@/lib/describe-error";
+import { toastError } from "@/lib/describe-error";
 import { formatDuration } from "@/lib/format";
 import { deploymentStatusLabel } from "@/lib/status";
 import { useTRPC } from "@/lib/trpc";
@@ -136,7 +137,6 @@ export function DeploymentHistory({
 	const searchParams = useSearchParams();
 	const { can } = useCapabilities();
 	const [logDeployment, setLogDeployment] = useState<DeploymentRow | null>(null);
-	const logTrigger = useRef<HTMLElement | null>(null);
 	const [explainResult, setExplainResult] = useState<ExplainResult | null>(null);
 	const requestedDeploymentId = initialOpenDeploymentId ?? searchParams.get("deployment");
 	// Opened once per requested id; a closed drawer must not pop back open on refetch.
@@ -363,21 +363,6 @@ export function DeploymentHistory({
 						<Skeleton key={row} className="h-10 w-full" />
 					))}
 				</div>
-			) : deploymentsQuery.isError ? (
-				<div
-					role="alert"
-					className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-destructive/30 p-5"
-				>
-					<div>
-						<p className="text-sm font-medium">Couldn’t load deployment history</p>
-						<p className="mt-1 text-sm text-muted-foreground">
-							{describeError(deploymentsQuery.error, "Try loading the history again.")}
-						</p>
-					</div>
-					<Button variant="outline" onClick={() => deploymentsQuery.refetch()}>
-						Try again
-					</Button>
-				</div>
 			) : deployments.length === 0 ? (
 				// A filtered-to-nothing list is not an empty history: the first says
 				// to drop the filter, the second says to deploy something.
@@ -387,7 +372,7 @@ export function DeploymentHistory({
 					description={
 						statuses.length > 0
 							? "This service has deployments, just none in the selected states."
-							: "Use Deploy above to create the first deployment."
+							: "Hit Deploy to ship the first one."
 					}
 					action={
 						statuses.length > 0 ? (
@@ -399,7 +384,6 @@ export function DeploymentHistory({
 				/>
 			) : (
 				<TableCard
-					framed={false}
 					toolbar={
 						<>
 							<TableFacet
@@ -415,184 +399,168 @@ export function DeploymentHistory({
 						</>
 					}
 				>
-					<Card>
-						<ol className="divide-y overflow-hidden" aria-label="Deployment timeline">
+					<Table>
+						<TableHeader>
+							<TableRow>
+								<TableHead>Title</TableHead>
+								<TableHead>Status</TableHead>
+								<TableHead className="hidden md:table-cell">Created</TableHead>
+								<TableHead className="hidden md:table-cell">Duration</TableHead>
+								<TableHead className="text-right">Actions</TableHead>
+							</TableRow>
+						</TableHeader>
+						<TableBody>
 							{deployments.map((deployment) => (
-								<li key={deployment.deploymentId} className="px-4 py-5 sm:px-5">
-									<article className="flex min-w-0 flex-col gap-3 lg:grid lg:grid-cols-[minmax(0,1fr)_auto] lg:[&>:first-child]:col-start-2 lg:[&>:first-child]:row-start-1 lg:[&>:nth-child(2)]:col-start-1 lg:[&>:nth-child(2)]:row-span-2 lg:[&>:nth-child(2)]:row-start-1 lg:[&>:nth-child(3)]:col-start-2 min-w-0">
-										<div className="flex flex-wrap items-center gap-3 lg:flex-col lg:items-end lg:gap-2">
-											<DeploymentStatusBadge
-												status={deployment.status}
-												queuePosition={deployment.queuePosition}
-											/>
-											<span className="text-xs tabular-nums text-muted-foreground">
-												<DateTime value={deployment.createdAt} /> ·{" "}
-												{formatDuration(deployment.startedAt, deployment.finishedAt)}
-											</span>
-										</div>
-										<div className="text-sm font-medium">
-											<span className="flex flex-wrap items-center gap-1.5">
-												{deployment.title}
-												{deployment.trigger && (
-													<Badge
-														variant="outline"
-														className="font-normal text-muted-foreground"
-														title={describeTriggeredBy(deployment) ?? undefined}
-													>
-														{TRIGGER_LABELS[deployment.trigger] ?? deployment.trigger}
-													</Badge>
+								<TableRow key={deployment.deploymentId}>
+									<TableCell className="font-medium">
+										<span className="flex flex-wrap items-center gap-1.5">
+											{deployment.title}
+											{deployment.trigger && (
+												<Badge
+													variant="outline"
+													className="font-normal text-muted-foreground"
+													title={describeTriggeredBy(deployment) ?? undefined}
+												>
+													{TRIGGER_LABELS[deployment.trigger] ?? deployment.trigger}
+												</Badge>
+											)}
+										</span>
+										{deployment.commitSha && (
+											<span className="mt-0.5 flex max-w-[55vw] items-center gap-1.5 text-xs font-normal text-muted-foreground sm:max-w-md">
+												{(() => {
+													const sha = deployment.commitSha;
+													const href = commitUrl?.(sha) ?? null;
+													return href ? (
+														<a
+															href={href}
+															target="_blank"
+															rel="noreferrer"
+															className="shrink-0 font-mono text-foreground underline-offset-2 hover:underline"
+															title={sha}
+														>
+															{shortSha(sha)}
+														</a>
+													) : (
+														<span className="shrink-0 font-mono text-foreground" title={sha}>
+															{shortSha(sha)}
+														</span>
+													);
+												})()}
+												{firstLine(deployment.commitMessage) && (
+													<span className="truncate" title={deployment.commitMessage ?? undefined}>
+														{firstLine(deployment.commitMessage)}
+													</span>
+												)}
+												{deployment.commitAuthor && (
+													<span className="shrink-0">· {deployment.commitAuthor}</span>
 												)}
 											</span>
-											{deployment.commitSha && (
-												<span className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5 text-xs font-normal text-muted-foreground ">
-													{(() => {
-														const sha = deployment.commitSha;
-														const href = commitUrl?.(sha) ?? null;
-														return href ? (
-															<a
-																href={href}
-																target="_blank"
-																rel="noreferrer"
-																className="shrink-0 font-mono text-foreground underline-offset-2 hover:underline"
-																title={sha}
-															>
-																{shortSha(sha)}
-															</a>
-														) : (
-															<span className="shrink-0 font-mono text-foreground" title={sha}>
-																{shortSha(sha)}
-															</span>
-														);
-													})()}
-													{firstLine(deployment.commitMessage) && (
-														<span
-															className="break-words"
-															title={deployment.commitMessage ?? undefined}
-														>
-															{firstLine(deployment.commitMessage)}
-														</span>
-													)}
-													{deployment.commitAuthor && (
-														<span className="shrink-0">· {deployment.commitAuthor}</span>
-													)}
-												</span>
-											)}
-											{!deployment.commitSha && describeTriggeredBy(deployment) && (
-												<span className="block text-xs font-normal text-muted-foreground">
-													{describeTriggeredBy(deployment)}
-												</span>
-											)}
-											{deployment.errorMessage && (
-												<span className="mt-3 block rounded-md border border-destructive/20 bg-destructive/5 p-3 text-xs leading-relaxed font-normal text-destructive ">
-													{deployment.errorMessage}
-												</span>
-											)}
-										</div>
-										<div className="flex flex-wrap items-center gap-2 lg:justify-end">
+										)}
+										{!deployment.commitSha && describeTriggeredBy(deployment) && (
+											<span className="block text-xs font-normal text-muted-foreground">
+												{describeTriggeredBy(deployment)}
+											</span>
+										)}
+										{deployment.errorMessage && (
+											<span className="block max-w-[55vw] truncate text-xs font-normal text-destructive sm:max-w-md">
+												{deployment.errorMessage}
+											</span>
+										)}
+										{/* Phones drop the Created and Duration columns; the same facts fold
+										    under the title so the row still answers "when" and "how long". */}
+										<span className="mt-0.5 block text-xs font-normal text-muted-foreground md:hidden">
+											<DateTime value={deployment.createdAt} /> ·{" "}
+											{formatDuration(deployment.startedAt, deployment.finishedAt)}
+										</span>
+									</TableCell>
+									<TableCell>
+										<DeploymentStatusBadge
+											status={deployment.status}
+											queuePosition={deployment.queuePosition}
+										/>
+									</TableCell>
+									<TableCell className="hidden text-muted-foreground md:table-cell">
+										<DateTime value={deployment.createdAt} />
+									</TableCell>
+									<TableCell className="hidden text-muted-foreground md:table-cell">
+										{formatDuration(deployment.startedAt, deployment.finishedAt)}
+									</TableCell>
+									<TableCell className="text-right">
+										<div className="flex justify-end gap-1">
 											<Button
 												variant="ghost"
 												size="sm"
-												onClick={(event) => {
-													logTrigger.current = event.currentTarget;
-													setLogDeployment(deployment);
-												}}
+												onClick={() => setLogDeployment(deployment)}
 											>
 												<ScrollText className="size-4" />
 												Logs
 											</Button>
-											{(deployment.status === "error" ||
-												(kind === "application" &&
-													!isActive(deployment.status) &&
-													Boolean(deployment.commitSha)) ||
-												(canCancel && isActive(deployment.status))) && (
-												<DropdownMenu>
-													<DropdownMenuTrigger asChild>
-														<Button variant="ghost" size="sm">
-															More actions
-															<ChevronDown className="size-3.5" />
-														</Button>
-													</DropdownMenuTrigger>
-													<DropdownMenuContent align="start">
-														{deployment.status === "error" && (
-															<DropdownMenuItem asChild>
-																<Button
-																	variant="ghost"
-																	size="sm"
-																	disabled={explain.isPending || !canExplain}
-																	title={canExplain ? undefined : capabilityHint("ai.use")}
-																	onClick={() =>
-																		explain.mutate({ deploymentId: deployment.deploymentId })
-																	}
-																>
-																	{explain.isPending &&
-																	explain.variables?.deploymentId === deployment.deploymentId ? (
-																		<Loader2 className="size-4 animate-spin" />
-																	) : (
-																		<Bot className="size-4" />
-																	)}
-																	Explain
-																</Button>
-															</DropdownMenuItem>
-														)}
-														{/* The list already excludes preview rows (queries.ts filters
+											{deployment.status === "error" && (
+												<Button
+													variant="ghost"
+													size="sm"
+													disabled={explain.isPending || !canExplain}
+													title={canExplain ? undefined : capabilityHint("ai.use")}
+													onClick={() => explain.mutate({ deploymentId: deployment.deploymentId })}
+												>
+													{explain.isPending &&
+													explain.variables?.deploymentId === deployment.deploymentId ? (
+														<Loader2 className="size-4 animate-spin" />
+													) : (
+														<Bot className="size-4" />
+													)}
+													Explain
+												</Button>
+											)}
+											{/* The list already excludes preview rows (queries.ts filters
 											    isPreview), so a row with a sha is always rebuildable. */}
-														{kind === "application" &&
-															!isActive(deployment.status) &&
-															deployment.commitSha && (
-																<DropdownMenuItem asChild>
-																	<Button
-																		variant="ghost"
-																		size="sm"
-																		disabled={redeployCommit.isPending || !canDeploy}
-																		title={
-																			canDeploy
-																				? `Build ${shortSha(deployment.commitSha)} again`
-																				: capabilityHint("service.deploy")
-																		}
-																		onClick={() =>
-																			redeployCommit.mutate({
-																				deploymentId: deployment.deploymentId,
-																			})
-																		}
-																	>
-																		{redeployCommit.isPending &&
-																		redeployCommit.variables?.deploymentId ===
-																			deployment.deploymentId ? (
-																			<Loader2 className="size-4 animate-spin" />
-																		) : (
-																			<History className="size-4" />
-																		)}
-																		Redeploy this commit
-																	</Button>
-																</DropdownMenuItem>
-															)}
-														{canCancel && isActive(deployment.status) && (
-															<DropdownMenuItem asChild>
-																<Button
-																	variant="ghost"
-																	size="sm"
-																	onClick={() =>
-																		cancel.mutate({
-																			deploymentId: deployment.deploymentId,
-																		})
-																	}
-																	disabled={cancel.isPending || !canDeploy}
-																	title={canDeploy ? undefined : capabilityHint("service.deploy")}
-																>
-																	<Ban className="size-4" />
-																	Cancel
-																</Button>
-															</DropdownMenuItem>
+											{kind === "application" &&
+												!isActive(deployment.status) &&
+												deployment.commitSha && (
+													<Button
+														variant="ghost"
+														size="sm"
+														disabled={redeployCommit.isPending || !canDeploy}
+														title={
+															canDeploy
+																? `Build ${shortSha(deployment.commitSha)} again`
+																: capabilityHint("service.deploy")
+														}
+														onClick={() =>
+															redeployCommit.mutate({ deploymentId: deployment.deploymentId })
+														}
+													>
+														{redeployCommit.isPending &&
+														redeployCommit.variables?.deploymentId === deployment.deploymentId ? (
+															<Loader2 className="size-4 animate-spin" />
+														) : (
+															<History className="size-4" />
 														)}
-													</DropdownMenuContent>
-												</DropdownMenu>
+														Redeploy this commit
+													</Button>
+												)}
+											{canCancel && isActive(deployment.status) && (
+												<Button
+													variant="ghost"
+													size="sm"
+													onClick={() =>
+														cancel.mutate({
+															deploymentId: deployment.deploymentId,
+														})
+													}
+													disabled={cancel.isPending || !canDeploy}
+													title={canDeploy ? undefined : capabilityHint("service.deploy")}
+												>
+													<Ban className="size-4" />
+													Cancel
+												</Button>
 											)}
 										</div>
-									</article>
-								</li>
+									</TableCell>
+								</TableRow>
 							))}
-						</ol>
-					</Card>
+						</TableBody>
+					</Table>
 				</TableCard>
 			)}
 
@@ -611,15 +579,7 @@ export function DeploymentHistory({
 			)}
 
 			<Dialog open={logDeployment !== null} onOpenChange={(open) => !open && closeLogs()}>
-				<DialogContent
-					onCloseAutoFocus={(event) => {
-						if (logTrigger.current?.isConnected) {
-							event.preventDefault();
-							logTrigger.current.focus();
-						}
-					}}
-					className="flex max-h-[85vh] w-[calc(100%-2rem)] flex-col sm:max-w-5xl"
-				>
+				<DialogContent className="flex max-h-[85vh] w-[calc(100%-2rem)] flex-col sm:max-w-5xl">
 					<DialogHeader>
 						<DialogTitle>{openLogDeployment?.title ?? "Deployment logs"}</DialogTitle>
 						<DialogDescription>

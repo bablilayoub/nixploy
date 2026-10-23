@@ -5,6 +5,7 @@ import type { inferRouterOutputs } from "@trpc/server";
 import { AlertTriangle, LayoutGrid, Loader2, Plus, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { useTrackedActivity } from "@/components/layout/activity-tray";
+import { SettingsSection } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
 import { PageHeader } from "@/components/shell";
 import {
@@ -28,9 +29,9 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@/components/ui/dialog";
-import { Field, FieldLabel } from "@/components/ui/field";
 import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
 	Select,
 	SelectContent,
@@ -167,10 +168,20 @@ export function TemplateSourcesView() {
 	});
 
 	return (
-		<div className="flex min-w-0 flex-col gap-7">
+		<div className="flex flex-col gap-6">
 			<PageHeader
 				title="Templates"
 				description="Bring your own template catalogs alongside the built-in ones."
+			/>
+			<SettingsSection
+				wide
+				title={
+					<span className="flex items-center gap-2">
+						<LayoutGrid className="size-4 text-muted-foreground" />
+						Template sources
+					</span>
+				}
+				description="Add your own index, Dokploy blueprints, or a Coolify catalog. Every sync validates Compose and checks image availability."
 				actions={
 					<Dialog open={open} onOpenChange={setOpen}>
 						<DialogTrigger asChild>
@@ -181,7 +192,7 @@ export function TemplateSourcesView() {
 						</DialogTrigger>
 						<DialogContent>
 							<form
-								className="grid gap-5"
+								className="grid gap-4"
 								onSubmit={(event) => {
 									event.preventDefault();
 									if (!canManage || createMutation.isPending) return;
@@ -203,9 +214,9 @@ export function TemplateSourcesView() {
 										<HelpLink slug="templates" />
 									</DialogDescription>
 								</DialogHeader>
-								<div className="grid gap-5">
-									<Field>
-										<FieldLabel htmlFor="source-name">Name</FieldLabel>
+								<div className="grid gap-4">
+									<div className="grid gap-2">
+										<Label htmlFor="source-name">Name</Label>
 										<Input
 											id="source-name"
 											name="name"
@@ -215,9 +226,9 @@ export function TemplateSourcesView() {
 											value={name}
 											onChange={(event) => setName(event.target.value)}
 										/>
-									</Field>
-									<Field>
-										<FieldLabel htmlFor="source-kind">Kind</FieldLabel>
+									</div>
+									<div className="grid gap-2">
+										<Label htmlFor="source-kind">Kind</Label>
 										<Select
 											value={kind}
 											onValueChange={(value) => {
@@ -240,9 +251,9 @@ export function TemplateSourcesView() {
 												<SelectItem value="coolify">Coolify catalog</SelectItem>
 											</SelectContent>
 										</Select>
-									</Field>
-									<Field>
-										<FieldLabel htmlFor="source-url">URL</FieldLabel>
+									</div>
+									<div className="grid gap-2">
+										<Label htmlFor="source-url">URL</Label>
 										<Input
 											id="source-url"
 											name="url"
@@ -270,17 +281,17 @@ export function TemplateSourcesView() {
 														? "Coolify's generated templates/service-templates.json format. Supports one public service target, ordinary named volumes and documented random generators. Secrets are created separately for each installation. Unsupported entries appear in the sync report."
 														: "A JSON array of templates, or an object with a templates array."}
 										</p>
-									</Field>
+									</div>
 									{kind === "git" || kind === "blueprints" ? (
-										<Field>
-											<FieldLabel htmlFor="source-branch">Branch (optional)</FieldLabel>
+										<div className="grid gap-2">
+											<Label htmlFor="source-branch">Branch (optional)</Label>
 											<Input
 												id="source-branch"
 												placeholder="Default branch"
 												value={branch}
 												onChange={(event) => setBranch(event.target.value)}
 											/>
-										</Field>
+										</div>
 									) : null}
 								</div>
 								<DialogFooter>
@@ -293,8 +304,7 @@ export function TemplateSourcesView() {
 						</DialogContent>
 					</Dialog>
 				}
-			/>
-			<div className="min-w-0">
+			>
 				<QueryState
 					isPending={isPending}
 					isError={isError}
@@ -412,7 +422,7 @@ export function TemplateSourcesView() {
 						</TableBody>
 					</Table>
 				</QueryState>
-			</div>
+			</SettingsSection>
 
 			<Dialog open={report !== null} onOpenChange={(next) => !next && setReport(null)}>
 				<DialogContent className="sm:max-w-2xl">
@@ -487,7 +497,7 @@ export function TemplateSourcesView() {
 					<AlertDialogFooter>
 						<AlertDialogCancel disabled={deleteMutation.isPending}>Cancel</AlertDialogCancel>
 						<AlertDialogAction
-							variant="outline"
+							variant="destructive"
 							disabled={deleteMutation.isPending}
 							onClick={(event) => {
 								event.preventDefault();

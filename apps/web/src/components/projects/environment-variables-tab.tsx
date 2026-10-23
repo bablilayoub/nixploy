@@ -9,7 +9,6 @@ import { QueryState } from "@/components/query-state";
 import { ConfigurationRelease } from "@/components/services/configuration-release";
 import { EnvEditor } from "@/components/services/env-editor";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useSaveMutation } from "@/hooks/use-save-mutation";
@@ -92,9 +91,7 @@ export function EnvironmentVariablesTab({
 				description="Inherited by every project, environment and service; lower levels override on key conflicts."
 				actions={
 					<Button asChild variant="outline" size="sm">
-						<Link href="/dashboard/settings/organization#organization-variables">
-							Edit in organization settings
-						</Link>
+						<Link href="/dashboard/settings/organization">Edit in organization settings</Link>
 					</Button>
 				}
 			>
@@ -176,11 +173,9 @@ export function EnvironmentVariablesTab({
 						isEmpty={false}
 						empty={null}
 					>
-						<Card>
-							<pre className="max-h-96 overflow-auto p-4 font-mono text-[13px] whitespace-pre-wrap text-foreground">
-								{resolvedQuery.data?.env || "# No variables defined"}
-							</pre>
-						</Card>
+						<pre className="max-h-96 overflow-auto rounded-lg border border-border bg-card p-4 font-mono text-[13px] whitespace-pre-wrap text-foreground">
+							{resolvedQuery.data?.env || "# No variables defined"}
+						</pre>
 					</QueryState>
 				</SettingsSection>
 			)}

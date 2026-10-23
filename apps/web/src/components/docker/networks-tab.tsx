@@ -66,11 +66,10 @@ export function NetworksTab({ serverId }: DockerTabProps) {
 	const view = useTableView({ rows: networks, search: searchNetwork });
 
 	if (networksQuery.isLoading) return <Skeleton className="h-64 w-full" />;
-	if (networksQuery.isError)
-		return <DockerError error={networksQuery.error} onRetry={() => void networksQuery.refetch()} />;
+	if (networksQuery.isError) return <DockerError error={networksQuery.error} />;
 
 	return (
-		<div className="space-y-4 pt-3">
+		<div className="space-y-3 pt-4">
 			<div className="flex flex-wrap items-center justify-between gap-2">
 				<p className="text-sm text-muted-foreground">{networks.length} networks</p>
 				<div className="flex items-center gap-2">
@@ -151,7 +150,7 @@ export function NetworksTab({ serverId }: DockerTabProps) {
 					<AlertDialogFooter>
 						<AlertDialogCancel>Cancel</AlertDialogCancel>
 						<AlertDialogAction
-							variant="outline"
+							variant="destructive"
 							disabled={removeMutation.isPending}
 							onClick={() => {
 								if (removing) removeMutation.mutate({ serverId, name: removing.Name });

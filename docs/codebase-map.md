@@ -273,18 +273,6 @@ repository supplies only structure, copy and data:
   and `src/components/sections/*` are the structure; they compose the vendored
   parts. `src/lib/utils.ts` is the shadcn `cn` (clsx + tailwind-merge).
 
-The platform shell composes `components/ui/sidebar.tsx` through
-`components/layout/app-sidebar.tsx` and `authenticated-layout.tsx`. It uses a
-240px desktop sidebar and the library Sheet below1024px, with existing command,
-organization, activity and account controls. Project inventory uses shadcn Table;
-shared settings sections use Card header/content/footer. The public website
-composes NavigationMenu, Tabs, Input and existing Magic UI BlurFade/Marquee/Bento
-primitives; `src/app/site.css` owns its shared page-family geometry. Actual panel
-images are mapped in `src/lib/product-captures.ts` with content-addressed URLs.
-The latest user-provided Mobbin reference controls centered display hierarchy,
-pill actions, soft image panels, the gallery and both light/dark palettes; see
-`.ui-craft/mobbin-reference.md`.
-
 **Edits made to vendored components, and why** (each is commented in place):
 the navbar ships `sticky top-20` (overridden to `top-0` from the composition);
 its mobile toggle is a bare SVG with an onClick, so the composition uses a real

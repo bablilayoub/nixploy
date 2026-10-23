@@ -8,16 +8,8 @@ import type { ReactNode } from "react";
 
 import { ServiceUrlBar } from "@/components/services/service-url";
 import { DeploymentStatusBadge, ServiceStatusBadge } from "@/components/services/status-badge";
-import {
-	Breadcrumb,
-	BreadcrumbItem,
-	BreadcrumbLink,
-	BreadcrumbList,
-	BreadcrumbPage,
-	BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
+import { PageHeader } from "@/components/shell";
 import { Button } from "@/components/ui/button";
-import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DateTime } from "@/components/ui/date-time";
 import { DisabledHint } from "@/components/ui/disabled-hint";
 import {
@@ -31,7 +23,8 @@ import { useTRPC } from "@/lib/trpc";
 
 /**
  * One lifecycle button (Deploy / Redeploy / Start / Stop / Reload). `primary`
- * actions stay visible; related lifecycle operations share the labelled Actions menu.
+ * actions stay visible at every width; the rest collapse into the overflow
+ * menu below `sm`.
  */
 export interface ServiceAction {
 	key: string;
@@ -93,7 +86,10 @@ function useServiceBreadcrumb({
 function ActionButton({ action }: { action: ServiceAction }) {
 	const Icon = action.icon;
 	return (
-		<DisabledHint hint={action.hint}>
+		<DisabledHint
+			hint={action.hint}
+			className={action.primary ? undefined : "hidden sm:inline-flex"}
+		>
 			<Button
 				variant={action.variant ?? (action.primary ? "default" : "outline")}
 				disabled={action.disabled}
@@ -192,136 +188,123 @@ export function ServicePageHeader({
 	const anyPending = list.some((action) => action.pending);
 
 	return (
-		<div className="flex min-w-0 flex-col gap-5">
-			<Breadcrumb>
-				<BreadcrumbList>
-					<BreadcrumbItem>
-						<BreadcrumbLink asChild>
-							<Link href="/dashboard">Projects</Link>
-						</BreadcrumbLink>
-					</BreadcrumbItem>
-					<BreadcrumbSeparator />
-					<BreadcrumbItem>
-						<BreadcrumbLink asChild>
-							<Link href={`/dashboard/projects/${projectId}`}>{crumbs.project ?? "Project"}</Link>
-						</BreadcrumbLink>
-					</BreadcrumbItem>
-					{crumbs.environment && (
+		<PageHeader
+			breadcrumb={
+				<nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1.5">
+					<Link
+						href="/dashboard"
+						className="rounded-sm transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+					>
+						Projects
+					</Link>
+					<span aria-hidden>/</span>
+					<Link
+						href={`/dashboard/projects/${projectId}`}
+						className="rounded-sm transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+					>
+						{crumbs.project ?? "Project"}
+					</Link>
+					{crumbs.environment ? (
 						<>
-							<BreadcrumbSeparator />
-							<BreadcrumbItem>
-								<BreadcrumbLink asChild>
-									<Link
-										href={`/dashboard/projects/${projectId}?env=${encodeURIComponent(crumbs.environment)}`}
-									>
-										{crumbs.environment}
-									</Link>
-								</BreadcrumbLink>
-							</BreadcrumbItem>
+							<span aria-hidden>/</span>
+							<Link
+								href={`/dashboard/projects/${projectId}?env=${encodeURIComponent(crumbs.environment)}`}
+								className="rounded-sm transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+							>
+								{crumbs.environment}
+							</Link>
 						</>
+					) : null}
+					<span aria-hidden>/</span>
+					<span className="text-foreground">{name}</span>
+				</nav>
+			}
+			title={
+				<span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+					<span className="min-w-0 wrap-anywhere">{name}</span>
+					{inFlight ? (
+						<DeploymentStatusBadge
+							status={inFlight.status as "queued" | "running"}
+							queuePosition={inFlight.queuePosition}
+						/>
+					) : (
+						<ServiceStatusBadge status={status} />
 					)}
-					<BreadcrumbSeparator />
-					<BreadcrumbItem>
-						<BreadcrumbPage>{name}</BreadcrumbPage>
-					</BreadcrumbItem>
-				</BreadcrumbList>
-			</Breadcrumb>
-			<Card>
-				<CardHeader className="flex flex-col gap-4 sm:grid">
-					<CardTitle as="h1" className="min-w-0 max-w-full text-2xl tracking-tight">
-						<span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
-							<span className="min-w-0 break-words">{name}</span>
-							{inFlight ? (
-								<DeploymentStatusBadge
-									status={inFlight.status as "queued" | "running"}
-									queuePosition={inFlight.queuePosition}
-								/>
-							) : (
-								<ServiceStatusBadge status={status} />
-							)}
+				</span>
+			}
+			description={
+				<span className="flex flex-col gap-1">
+					{subtitle ? <span className="truncate">{subtitle}</span> : null}
+					{(domainsQuery.data?.length ?? 0) > 0 ? (
+						<ServiceUrlBar domains={domainsQuery.data ?? []} onShowAll={showDomainsTab} />
+					) : null}
+					{lastDeploy?.finishedAt && !lastError ? (
+						<span className="flex items-center gap-1.5">
+							Deployed <DateTime value={lastDeploy.finishedAt} />
+							{describeTriggeredBy(lastDeploy) ? ` ${describeTriggeredBy(lastDeploy)}` : null}
 						</span>
-					</CardTitle>
-					<CardAction className="max-w-full self-start sm:self-auto">
-						<div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-							{list.length > 0 || before ? (
-								<>
-									{before}
-									{list
-										.filter((action) => action.primary)
-										.map((action) => (
-											<ActionButton key={action.key} action={action} />
-										))}
-									{overflow.length > 0 ? (
-										<DropdownMenu>
-											<DropdownMenuTrigger asChild>
-												<Button
-													variant="outline"
-													size="default"
-													aria-label="More actions"
-													disabled={anyPending}
-												>
-													<MoreVertical className="size-4" />
-													Actions
-												</Button>
-											</DropdownMenuTrigger>
-											<DropdownMenuContent align="end">
-												{overflow.map((action) => (
-													<DropdownMenuItem
-														key={action.key}
-														disabled={action.disabled}
-														title={action.hint}
-														onClick={action.onClick}
-													>
-														<action.icon className="size-4" />
-														{action.label}
-													</DropdownMenuItem>
-												))}
-											</DropdownMenuContent>
-										</DropdownMenu>
-									) : null}
-								</>
+					) : null}
+					{notice && !lastError ? (
+						<span className="flex items-center gap-1.5">
+							<Info className="size-3.5 shrink-0" />
+							<span className="min-w-0">{notice}</span>
+						</span>
+					) : null}
+					{lastError ? (
+						<span className="flex flex-wrap items-center gap-1.5 text-destructive">
+							<span className="min-w-0 wrap-anywhere">Last deployment failed: {lastError}</span>
+							{onViewLogs ? (
+								<button
+									type="button"
+									className="inline-flex shrink-0 items-center gap-1 rounded-sm underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+									onClick={onViewLogs}
+								>
+									<ScrollText className="size-3.5" />
+									View logs
+								</button>
 							) : null}
-						</div>
-					</CardAction>
-				</CardHeader>
-				<CardContent className="text-sm text-muted-foreground">
-					<span className="flex flex-col gap-2">
-						{subtitle ? <span className="break-words">{subtitle}</span> : null}
-						{(domainsQuery.data?.length ?? 0) > 0 ? (
-							<ServiceUrlBar domains={domainsQuery.data ?? []} onShowAll={showDomainsTab} />
-						) : null}
-						{lastDeploy?.finishedAt && !lastError ? (
-							<span className="flex flex-wrap items-center gap-1.5">
-								Deployed <DateTime value={lastDeploy.finishedAt} />
-								{describeTriggeredBy(lastDeploy) ? ` ${describeTriggeredBy(lastDeploy)}` : null}
-							</span>
-						) : null}
-						{notice && !lastError ? (
-							<span className="flex flex-wrap items-center gap-1.5">
-								<Info className="size-3.5 shrink-0" />
-								<span className="min-w-0">{notice}</span>
-							</span>
-						) : null}
-						{lastError ? (
-							<span className="flex flex-wrap items-center gap-1.5 text-destructive">
-								<span className="min-w-0 break-words">Last deployment failed: {lastError}</span>
-								{onViewLogs ? (
+						</span>
+					) : null}
+				</span>
+			}
+			actions={
+				list.length > 0 || before ? (
+					<>
+						{before}
+						{list.map((action) => (
+							<ActionButton key={action.key} action={action} />
+						))}
+						{overflow.length > 0 ? (
+							<DropdownMenu>
+								<DropdownMenuTrigger asChild>
 									<Button
-										variant="ghost"
-										size="sm"
-										type="button"
-										className="h-auto min-h-0 px-0 py-0 has-[>svg]:px-0 inline-flex shrink-0 items-center gap-1 rounded-sm underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-										onClick={onViewLogs}
+										variant="outline"
+										size="icon"
+										className="sm:hidden"
+										aria-label="More actions"
+										disabled={anyPending}
 									>
-										<ScrollText className="size-3.5" />
-										View logs
+										<MoreVertical className="size-4" />
 									</Button>
-								) : null}
-							</span>
+								</DropdownMenuTrigger>
+								<DropdownMenuContent align="end">
+									{overflow.map((action) => (
+										<DropdownMenuItem
+											key={action.key}
+											disabled={action.disabled}
+											title={action.hint}
+											onClick={action.onClick}
+										>
+											<action.icon className="size-4" />
+											{action.label}
+										</DropdownMenuItem>
+									))}
+								</DropdownMenuContent>
+							</DropdownMenu>
 						) : null}
-					</span>
-				</CardContent>
-			</Card>
-		</div>
+					</>
+				) : null
+			}
+		/>
 	);
 }

@@ -2,13 +2,12 @@
 
 import type { ConfigurationScope } from "@nixploy/server/modules/configuration-release/index";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useId, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
 	Dialog,
 	DialogContent,
@@ -18,7 +17,6 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useRunningDeployments } from "@/hooks/use-running-deployments";
@@ -97,7 +95,7 @@ export function ConfigurationRelease({ scope }: { scope: ConfigurationScope }) {
 					<DialogTitle>
 						{apply.isSuccess ? "Configuration release queued" : "Review variable changes"}
 					</DialogTitle>
-					<DialogDescription className="rounded-lg border bg-muted px-4 py-3 text-xs leading-relaxed">
+					<DialogDescription>
 						Organization → project → environment → service. Lower levels win, including empty
 						values. Values stay hidden in this review.
 					</DialogDescription>
@@ -118,7 +116,7 @@ export function ConfigurationRelease({ scope }: { scope: ConfigurationScope }) {
 								Each job uses the encrypted variables approved in this review. Later edits need
 								another deployment.
 							</p>
-							<ul className="divide-y divide-border rounded-lg border border-border bg-card">
+							<ul className="divide-y divide-border rounded-lg border border-border">
 								{apply.data.deployments.map((job) => {
 									const target = targets.find(
 										(target) => target.id === job.id && target.kind === job.kind,
@@ -164,15 +162,12 @@ export function ConfigurationRelease({ scope }: { scope: ConfigurationScope }) {
 									No applications or Compose stacks in this scope. Managed databases are excluded.
 								</p>
 							) : (
-								<ul className="divide-y divide-border rounded-lg border border-border bg-card">
+								<ul className="divide-y divide-border rounded-lg border border-border">
 									{targets.map((target) => {
 										const key = `${target.kind}:${target.id}`;
 										return (
-											<li
-												key={key}
-												className="p-4 transition-colors has-[[data-state=checked]]:bg-accent/50"
-											>
-												<Label
+											<li key={key} className="p-3">
+												<label
 													htmlFor={`${controlPrefix}-${key}`}
 													className="flex min-h-11 cursor-pointer items-start gap-3"
 												>
@@ -211,52 +206,39 @@ export function ConfigurationRelease({ scope }: { scope: ConfigurationScope }) {
 															</span>
 														)}
 													</span>
-												</Label>
+												</label>
 												{target.changes &&
 													(target.changes.length > 0 || (target.buildChanges?.length ?? 0) > 0) && (
-														<Collapsible className="ml-7 text-xs">
-															<CollapsibleTrigger asChild>
-																<Button
-																	type="button"
-																	variant="ghost"
-																	size="sm"
-																	className="group cursor-pointer py-2 text-muted-foreground"
-																>
-																	Variable names and origins
-																	<ChevronDown
-																		aria-hidden="true"
-																		className="size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-180"
-																	/>
-																</Button>
-															</CollapsibleTrigger>
-															<CollapsibleContent forceMount className="data-[state=closed]:hidden">
-																<ul className="space-y-2 pb-2">
-																	{target.changes.map((change) => (
-																		<li
-																			key={change.key}
-																			className="flex flex-wrap items-baseline gap-x-3 gap-y-1"
-																		>
-																			<code className="break-all">{change.key}</code>
-																			<span className="text-muted-foreground">
-																				{change.change}
-																				{change.origin ? ` · ${change.origin}` : ""}
-																			</span>
-																		</li>
-																	))}
-																	{target.buildChanges?.map((change) => (
-																		<li
-																			key={`build-${change.key}`}
-																			className="flex flex-wrap items-baseline gap-x-3 gap-y-1"
-																		>
-																			<code className="break-all">{change.key}</code>
-																			<span className="text-muted-foreground">
-																				{change.change} · build argument
-																			</span>
-																		</li>
-																	))}
-																</ul>
-															</CollapsibleContent>
-														</Collapsible>
+														<details className="ml-7 text-xs">
+															<summary className="cursor-pointer py-2 text-muted-foreground">
+																Variable names and origins
+															</summary>
+															<ul className="space-y-2 pb-2">
+																{target.changes.map((change) => (
+																	<li
+																		key={change.key}
+																		className="flex flex-wrap items-baseline gap-x-3 gap-y-1"
+																	>
+																		<code className="break-all">{change.key}</code>
+																		<span className="text-muted-foreground">
+																			{change.change}
+																			{change.origin ? ` · ${change.origin}` : ""}
+																		</span>
+																	</li>
+																))}
+																{target.buildChanges?.map((change) => (
+																	<li
+																		key={`build-${change.key}`}
+																		className="flex flex-wrap items-baseline gap-x-3 gap-y-1"
+																	>
+																		<code className="break-all">{change.key}</code>
+																		<span className="text-muted-foreground">
+																			{change.change} · build argument
+																		</span>
+																	</li>
+																))}
+															</ul>
+														</details>
 													)}
 											</li>
 										);

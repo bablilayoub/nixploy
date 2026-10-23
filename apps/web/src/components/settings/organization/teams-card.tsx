@@ -18,7 +18,6 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
-import { Field, FieldLabel } from "@/components/ui/field";
 import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -85,10 +84,10 @@ function PickList({
 	return (
 		<div className="max-h-56 space-y-1 overflow-y-auto rounded-md border p-2">
 			{items.map((item) => (
-				<Label
+				<label
 					key={item.id}
 					htmlFor={`${name}-${item.id}`}
-					className="flex cursor-pointer items-center gap-3 rounded-sm px-2 py-1.5 hover:bg-accent/50"
+					className="flex cursor-pointer items-center gap-3 rounded-sm px-2 py-1.5 hover:bg-muted/50"
 				>
 					<Checkbox
 						id={`${name}-${item.id}`}
@@ -101,7 +100,7 @@ function PickList({
 							<span className="truncate text-xs text-muted-foreground">{item.hint}</span>
 						) : null}
 					</span>
-				</Label>
+				</label>
 			))}
 		</div>
 	);
@@ -372,24 +371,24 @@ export function TeamsCard() {
 						</DialogDescription>
 					</DialogHeader>
 					<div className="space-y-4">
-						<Field className="space-y-2">
-							<FieldLabel htmlFor="team-name">Name</FieldLabel>
+						<div className="space-y-2">
+							<Label htmlFor="team-name">Name</Label>
 							<Input
 								id="team-name"
 								value={name}
 								onChange={(event) => setName(event.target.value)}
 								placeholder="Platform"
 							/>
-						</Field>
-						<Field className="space-y-2">
-							<FieldLabel htmlFor="team-description">Description</FieldLabel>
+						</div>
+						<div className="space-y-2">
+							<Label htmlFor="team-description">Description</Label>
 							<Input
 								id="team-description"
 								value={description}
 								onChange={(event) => setDescription(event.target.value)}
 								placeholder="Optional"
 							/>
-						</Field>
+						</div>
 					</div>
 					<DialogFooter>
 						<Button variant="outline" onClick={() => setCreateOpen(false)}>
@@ -500,14 +499,14 @@ function EditTeamDialog({
 					</DialogDescription>
 				</DialogHeader>
 				<div className="space-y-4">
-					<Field className="space-y-2">
-						<FieldLabel htmlFor="edit-team-name">Name</FieldLabel>
+					<div className="space-y-2">
+						<Label htmlFor="edit-team-name">Name</Label>
 						<Input
 							id="edit-team-name"
 							value={name}
 							onChange={(event) => setName(event.target.value)}
 						/>
-					</Field>
+					</div>
 					<div className="grid gap-4 sm:grid-cols-2">
 						<div className="space-y-2">
 							<Label className="flex items-center gap-2">

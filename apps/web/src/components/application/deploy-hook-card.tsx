@@ -40,10 +40,7 @@ export function DeployHookCard({ appName }: { appName: string }) {
 				<>
 					Trigger a redeploy from any CI system that can send a POST with a header. Authenticate
 					with an API key (
-					<Link
-						href="/dashboard/settings/profile#developer-access"
-						className="underline underline-offset-2"
-					>
+					<Link href="/dashboard/settings/profile" className="underline underline-offset-2">
 						Settings → Profile → API keys
 					</Link>
 					) whose owner has the "Deploy & redeploy" permission in this organization.

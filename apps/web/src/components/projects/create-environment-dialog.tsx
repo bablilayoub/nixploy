@@ -12,8 +12,8 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@/components/ui/dialog";
-import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { useTRPC } from "@/lib/trpc";
@@ -69,8 +69,8 @@ export function CreateEnvironmentDialog({
 					}}
 					className="flex flex-col gap-4"
 				>
-					<Field>
-						<FieldLabel htmlFor="environment-name">Name</FieldLabel>
+					<div className="flex flex-col gap-2">
+						<Label htmlFor="environment-name">Name</Label>
 						<Input
 							id="environment-name"
 							placeholder="staging"
@@ -78,9 +78,9 @@ export function CreateEnvironmentDialog({
 							onChange={(event) => setName(event.target.value)}
 							autoFocus
 						/>
-					</Field>
-					<Field>
-						<FieldLabel htmlFor="environment-description">Description</FieldLabel>
+					</div>
+					<div className="flex flex-col gap-2">
+						<Label htmlFor="environment-description">Description</Label>
 						<Textarea
 							id="environment-description"
 							placeholder="Optional description"
@@ -88,7 +88,7 @@ export function CreateEnvironmentDialog({
 							onChange={(event) => setDescription(event.target.value)}
 							rows={3}
 						/>
-					</Field>
+					</div>
 					<DialogFooter>
 						<Button type="submit" disabled={!name.trim() || createEnvironment.isPending}>
 							{createEnvironment.isPending ? "Creating..." : "Create"}

@@ -3,6 +3,7 @@
 import { cva, type VariantProps } from "class-variance-authority";
 import { Tabs as TabsPrimitive } from "radix-ui";
 import type * as React from "react";
+
 import { cn } from "@/lib/utils";
 
 function Tabs({
@@ -22,7 +23,10 @@ function Tabs({
 }
 
 const tabsListVariants = cva(
-	"group/tabs-list inline-flex w-fit max-w-full overflow-x-auto items-center justify-center-safe rounded-lg p-[3px] text-muted-foreground group-data-[orientation=horizontal]/tabs:h-9 group-data-[orientation=vertical]/tabs:h-fit group-data-[orientation=vertical]/tabs:flex-col data-[variant=line]:rounded-none",
+	// `max-w-full` + a hidden scrollbar keeps a long tab row inside the page on
+	// phones instead of widening it; `scroll-shadow-x` is the cue that there is
+	// more past the edge.
+	"no-scrollbar scroll-shadow-x group/tabs-list inline-flex w-fit max-w-full items-center justify-center overflow-x-auto rounded-lg p-[3px] text-muted-foreground group-data-[orientation=horizontal]/tabs:h-9 group-data-[orientation=vertical]/tabs:h-fit group-data-[orientation=vertical]/tabs:flex-col data-[variant=line]:rounded-none",
 	{
 		variants: {
 			variant: {
@@ -72,7 +76,7 @@ function TabsContent({ className, ...props }: React.ComponentProps<typeof TabsPr
 		<TabsPrimitive.Content
 			data-slot="tabs-content"
 			className={cn(
-				"min-w-0 flex-1 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+				"min-w-0 flex-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground",
 				className,
 			)}
 			{...props}

@@ -4,7 +4,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
 	Loader2,
 	Lock,
-	MoreHorizontal,
 	Play,
 	RefreshCw,
 	ScrollText,
@@ -14,7 +13,6 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { CopyButton } from "@/components/services/copy-button";
 import { LogViewer } from "@/components/services/log-viewer";
 import { ServiceTerminal } from "@/components/services/terminal";
 import {
@@ -36,13 +34,6 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuSeparator,
-	DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
 	Table,
@@ -84,7 +75,7 @@ const searchContainer = (row: ContainerRow) => [row.Names, row.Image, row.State,
 
 function StateBadge({ state }: { state: string }) {
 	const variant =
-		state === "running" ? "default" : state === "restarting" ? "outline" : "secondary";
+		state === "running" ? "success" : state === "restarting" ? "warning" : "secondary";
 	return (
 		<Badge variant={variant} className="capitalize">
 			{state}
@@ -95,7 +86,6 @@ function StateBadge({ state }: { state: string }) {
 export function ContainersTab({ serverId }: DockerTabProps) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
-	const [inspecting, setInspecting] = useState<ContainerRow | null>(null);
 	const [logsOf, setLogsOf] = useState<ContainerRow | null>(null);
 	const [terminalOf, setTerminalOf] = useState<ContainerRow | null>(null);
 	const [removing, setRemoving] = useState<ContainerRow | null>(null);
@@ -139,13 +129,11 @@ export function ContainersTab({ serverId }: DockerTabProps) {
 		return <Skeleton className="h-64 w-full" />;
 	}
 	if (containersQuery.isError) {
-		return (
-			<DockerError error={containersQuery.error} onRetry={() => void containersQuery.refetch()} />
-		);
+		return <DockerError error={containersQuery.error} />;
 	}
 
 	return (
-		<div className="space-y-4 pt-3">
+		<div className="space-y-3 pt-4">
 			<div className="flex flex-wrap items-center justify-between gap-2">
 				<p className="text-sm text-muted-foreground">
 					{containers.length} container{containers.length === 1 ? "" : "s"}
@@ -163,147 +151,143 @@ export function ContainersTab({ serverId }: DockerTabProps) {
 				<Table>
 					<TableHeader>
 						<TableRow>
-							<TableHead>Container</TableHead>
+							<TableHead>Name</TableHead>
+							<TableHead>Image</TableHead>
 							<TableHead>State</TableHead>
+							<TableHead>Status</TableHead>
 							<TableHead>Ports</TableHead>
-							<TableHead className="text-right">Actions</TableHead>
+							<TableHead className="w-56 text-right">Actions</TableHead>
 						</TableRow>
 					</TableHeader>
 					<TableBody>
-						{view.visible.length === 0 && <TableNoMatch view={view} colSpan={4} />}
+						{view.visible.length === 0 ? <TableNoMatch view={view} colSpan={6} /> : null}
 						{view.visible.map((container) => (
 							<TableRow key={container.ID}>
-								<TableCell className="max-w-80">
-									<Button
-										variant="ghost"
-										size="sm"
-										type="button"
-										onClick={() => setInspecting(container)}
-										className="h-auto min-h-0 px-0 py-0 block max-w-full truncate text-left font-mono text-xs font-medium underline-offset-4 hover:underline"
-										title={container.Names}
-										aria-label={`Inspect container ${container.Names}`}
-									>
-										{container.Names}
-									</Button>
-									<p
-										className="mt-1.5 max-w-80 truncate font-mono text-xs text-muted-foreground"
-										title={container.Image}
-									>
-										{container.Image}
-									</p>
-									{container.protected && (
-										<Badge variant="outline" className="mt-2 text-muted-foreground">
-											<Lock className="size-3" />
-											Protected
-										</Badge>
-									)}
+								<TableCell className="max-w-72">
+									{/* Swarm task names run past 60 characters; unconstrained the cell
+									    pushed the rest of the row off the table. */}
+									<span className="flex min-w-0 items-center gap-1.5">
+										<span
+											className="truncate font-mono text-xs font-medium"
+											title={container.Names}
+										>
+											{container.Names}
+										</span>
+										{container.protected && (
+											<Badge variant="outline" className="shrink-0 text-muted-foreground">
+												<Lock className="mr-1 size-3" />
+												protected
+											</Badge>
+										)}
+									</span>
+								</TableCell>
+								<TableCell className="max-w-48 truncate font-mono text-xs text-muted-foreground">
+									{container.Image}
 								</TableCell>
 								<TableCell>
 									<StateBadge state={container.State} />
-									<p className="mt-1.5 text-xs text-muted-foreground">{container.Status}</p>
 								</TableCell>
-								<TableCell className="max-w-56 whitespace-normal break-all font-mono text-xs text-muted-foreground">
-									{container.Ports || "No published ports"}
+								<TableCell className="text-xs text-muted-foreground">{container.Status}</TableCell>
+								<TableCell className="max-w-40 truncate font-mono text-xs text-muted-foreground">
+									{container.Ports || "—"}
 								</TableCell>
-								<TableCell>
-									<div className="flex items-center justify-end gap-1">
-										{container.State === "running" && (
-											<Button
-												variant="ghost"
-												size="sm"
-												onClick={() => setLogsOf(container)}
-												aria-label={`View logs for ${container.Names}`}
-											>
-												<ScrollText className="size-4" />
-												Logs
-											</Button>
-										)}
-										<DropdownMenu>
-											<DropdownMenuTrigger asChild>
+								<TableCell className="text-right">
+									<div className="flex justify-end gap-1">
+										{container.State === "running" ? (
+											<>
+												{!container.protected && (
+													<>
+														<Button
+															variant="ghost"
+															size="icon-sm"
+															aria-label={`Stop ${container.Names}`}
+															title="Stop"
+															disabled={actionMutation.isPending}
+															onClick={() =>
+																actionMutation.mutate({
+																	serverId,
+																	containerId: container.ID,
+																	action: "stop",
+																})
+															}
+														>
+															<Square className="size-3.5" />
+														</Button>
+														<Button
+															variant="ghost"
+															size="icon-sm"
+															aria-label={`Restart ${container.Names}`}
+															title="Restart"
+															disabled={actionMutation.isPending}
+															onClick={() =>
+																actionMutation.mutate({
+																	serverId,
+																	containerId: container.ID,
+																	action: "restart",
+																})
+															}
+														>
+															<RefreshCw className="size-3.5" />
+														</Button>
+													</>
+												)}
 												<Button
 													variant="ghost"
 													size="icon-sm"
-													aria-label={`Actions for ${container.Names}`}
+													aria-label={`View logs for ${container.Names}`}
+													title="Logs"
+													onClick={() => setLogsOf(container)}
 												>
-													<MoreHorizontal className="size-4" />
+													<ScrollText className="size-3.5" />
 												</Button>
-											</DropdownMenuTrigger>
-											<DropdownMenuContent align="end">
-												<DropdownMenuItem onSelect={() => setInspecting(container)}>
-													Inspect container
-												</DropdownMenuItem>
-												{container.State === "running" && (
-													<DropdownMenuItem onSelect={() => setTerminalOf(container)}>
-														<TerminalIcon className="size-4" />
-														Open terminal
-													</DropdownMenuItem>
-												)}
-												{!container.protected && (
-													<>
-														<DropdownMenuSeparator />
-														{container.State === "running" ? (
-															<>
-																<DropdownMenuItem
-																	disabled={actionMutation.isPending}
-																	onSelect={() =>
-																		actionMutation.mutate({
-																			serverId,
-																			containerId: container.ID,
-																			action: "restart",
-																		})
-																	}
-																>
-																	<RefreshCw className="size-4" />
-																	Restart
-																</DropdownMenuItem>
-																<DropdownMenuItem
-																	disabled={actionMutation.isPending}
-																	onSelect={() =>
-																		actionMutation.mutate({
-																			serverId,
-																			containerId: container.ID,
-																			action: "stop",
-																		})
-																	}
-																>
-																	<Square className="size-4" />
-																	Stop
-																</DropdownMenuItem>
-															</>
-														) : (
-															<DropdownMenuItem
-																disabled={actionMutation.isPending}
-																onSelect={() =>
-																	actionMutation.mutate({
-																		serverId,
-																		containerId: container.ID,
-																		action: "start",
-																	})
-																}
-															>
-																<Play className="size-4" />
-																Start
-															</DropdownMenuItem>
-														)}
-														<DropdownMenuSeparator />
-														<DropdownMenuItem
-															variant="default"
-															onSelect={() => setRemoving(container)}
-														>
-															<Trash2 className="size-4" />
-															Remove container
-														</DropdownMenuItem>
-													</>
-												)}
-											</DropdownMenuContent>
-										</DropdownMenu>
+												<Button
+													variant="ghost"
+													size="icon-sm"
+													aria-label={`Open terminal for ${container.Names}`}
+													title="Terminal"
+													onClick={() => setTerminalOf(container)}
+												>
+													<TerminalIcon className="size-3.5" />
+												</Button>
+											</>
+										) : (
+											!container.protected && (
+												<Button
+													variant="ghost"
+													size="icon-sm"
+													aria-label={`Start ${container.Names}`}
+													title="Start"
+													disabled={actionMutation.isPending}
+													onClick={() =>
+														actionMutation.mutate({
+															serverId,
+															containerId: container.ID,
+															action: "start",
+														})
+													}
+												>
+													<Play className="size-3.5" />
+												</Button>
+											)
+										)}
+										{!container.protected && (
+											<Button
+												variant="ghost"
+												size="icon-sm"
+												aria-label={`Remove ${container.Names}`}
+												title="Remove"
+												onClick={() => setRemoving(container)}
+											>
+												<Trash2 className="size-3.5 text-destructive" />
+											</Button>
+										)}
 									</div>
 								</TableCell>
 							</TableRow>
 						))}
 						{containers.length === 0 && (
 							<TableRow>
-								<TableCell colSpan={4} className="py-10 text-center text-sm text-muted-foreground">
+								<TableCell colSpan={6} className="py-10 text-center text-sm text-muted-foreground">
 									No containers on this server.
 								</TableCell>
 							</TableRow>
@@ -311,36 +295,6 @@ export function ContainersTab({ serverId }: DockerTabProps) {
 					</TableBody>
 				</Table>
 			</TableCard>
-
-			<Dialog open={inspecting !== null} onOpenChange={(open) => !open && setInspecting(null)}>
-				<DialogContent className="sm:max-w-xl">
-					<DialogHeader>
-						<DialogTitle>Container details</DialogTitle>
-						<DialogDescription>
-							Identity and runtime information reported by Docker.
-						</DialogDescription>
-					</DialogHeader>
-					{inspecting && (
-						<dl className="grid gap-5">
-							{[
-								{ label: "Name", value: inspecting.Names },
-								{ label: "Container ID", value: inspecting.ID },
-								{ label: "Image", value: inspecting.Image },
-								{ label: "Published ports", value: inspecting.Ports || "None" },
-								{ label: "Created", value: inspecting.CreatedAt },
-							].map((field) => (
-								<div key={field.label}>
-									<dt className="mb-1 text-xs text-muted-foreground">{field.label}</dt>
-									<dd className="flex items-start justify-between gap-3">
-										<span className="min-w-0 break-all font-mono text-sm">{field.value}</span>
-										<CopyButton value={field.value} label={`Copy ${field.label.toLowerCase()}`} />
-									</dd>
-								</div>
-							))}
-						</dl>
-					)}
-				</DialogContent>
-			</Dialog>
 
 			<Dialog open={logsOf !== null} onOpenChange={(open) => !open && setLogsOf(null)}>
 				<DialogContent className="sm:max-w-3xl">
@@ -375,7 +329,7 @@ export function ContainersTab({ serverId }: DockerTabProps) {
 					<AlertDialogFooter>
 						<AlertDialogCancel>Cancel</AlertDialogCancel>
 						<AlertDialogAction
-							variant="outline"
+							variant="destructive"
 							disabled={actionMutation.isPending}
 							onClick={() => {
 								if (removing) {

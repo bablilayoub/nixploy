@@ -1,47 +1,29 @@
-import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
-/** Native data-table composition: controls, framed rows, then pagination. */
+/**
+ * Tasks-page table chrome from shadcn-admin:
+ * optional toolbar above, then optionally a bordered frame around the table,
+ * optional footer (pagination) below — never a padded card with bg.
+ */
 export function TableCard({
 	className,
 	children,
 	toolbar,
 	footer,
+	/** When false, skip the rounded border frame (use inside SettingsSection). */
 	framed = true,
-	toolbarFramed = false,
 }: {
 	className?: string;
 	children: React.ReactNode;
 	toolbar?: React.ReactNode;
 	footer?: React.ReactNode;
 	framed?: boolean;
-	toolbarFramed?: boolean;
 }) {
-	// Keep all container types stable across loading transitions: toolbar dialogs
-	// can own unsaved form state while their table's first query is in flight.
 	return (
-		<div className={cn("min-w-0 space-y-4", className)}>
-			{toolbar && (
-				<div
-					className={cn(
-						"flex min-w-0 flex-wrap items-center gap-2",
-						toolbarFramed && "justify-between",
-					)}
-				>
-					{toolbar}
-				</div>
-			)}
-			<Card
-				className={cn(
-					"min-w-0 gap-0 overflow-hidden py-0",
-					!framed && "border-0 bg-transparent shadow-none",
-				)}
-			>
-				<CardContent className="relative overflow-x-auto px-0">{children}</CardContent>
-			</Card>
-			{footer && (
-				<div className="flex min-w-0 flex-wrap items-center justify-between gap-3">{footer}</div>
-			)}
+		<div className={cn("flex flex-col gap-4", className)}>
+			{toolbar ? <div className="flex flex-wrap items-center gap-2">{toolbar}</div> : null}
+			{framed ? <div className="overflow-x-auto rounded-md border">{children}</div> : children}
+			{footer}
 		</div>
 	);
 }

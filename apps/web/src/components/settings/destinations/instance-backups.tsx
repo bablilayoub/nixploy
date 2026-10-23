@@ -18,8 +18,6 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
-import { Field, FieldLabel } from "@/components/ui/field";
-import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -160,13 +158,7 @@ export function InstanceBackups() {
 			<SettingsSection
 				wide
 				title="Instance backups"
-				description={
-					<>
-						Scheduled copies of the platform database and configuration, including routing and
-						certificates. Restore them manually with the{" "}
-						<HelpLink slug="backups" label="backup guide" />.
-					</>
-				}
+				description="Scheduled dumps of this Nixploy instance itself — the platform database plus the config directory (Traefik configs, certificates). Restore is manual, see docs/instance-backup.md."
 				actions={
 					<Button
 						size="sm"
@@ -241,7 +233,6 @@ export function InstanceBackups() {
 									<TableCell className="font-mono text-xs">{backup.prefix}</TableCell>
 									<TableCell>
 										<Switch
-											aria-label={`Enable instance backup ${backup.prefix}`}
 											checked={backup.enabled}
 											disabled={!canManage || updateMutation.isPending}
 											title={manageHint}
@@ -394,8 +385,8 @@ function InstanceBackupFormDialog({
 					</DialogDescription>
 				</DialogHeader>
 				<div className="space-y-4">
-					<Field className="space-y-1.5">
-						<FieldLabel htmlFor="instance-backup-schedule">Schedule (cron)</FieldLabel>
+					<div className="space-y-1.5">
+						<Label htmlFor="instance-backup-schedule">Schedule (cron)</Label>
 						<Input
 							id="instance-backup-schedule"
 							value={form.schedule}
@@ -407,14 +398,14 @@ function InstanceBackupFormDialog({
 							Examples: <code>0 3 * * *</code> daily at 3:00, <code>0 */6 * * *</code> every 6
 							hours.
 						</p>
-					</Field>
-					<Field className="space-y-1.5">
-						<FieldLabel>Destination</FieldLabel>
+					</div>
+					<div className="space-y-1.5">
+						<Label>Destination</Label>
 						<Select
 							value={form.destinationId}
 							onValueChange={(destinationId) => setForm({ ...form, destinationId })}
 						>
-							<SelectTrigger aria-label="Destination" className="w-full">
+							<SelectTrigger className="w-full">
 								<SelectValue placeholder="Select an S3 destination" />
 							</SelectTrigger>
 							<SelectContent>
@@ -425,19 +416,19 @@ function InstanceBackupFormDialog({
 								))}
 							</SelectContent>
 						</Select>
-					</Field>
-					<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-						<Field className="space-y-1.5">
-							<FieldLabel htmlFor="instance-backup-prefix">Prefix</FieldLabel>
+					</div>
+					<div className="grid grid-cols-2 gap-4">
+						<div className="space-y-1.5">
+							<Label htmlFor="instance-backup-prefix">Prefix</Label>
 							<Input
 								id="instance-backup-prefix"
 								value={form.prefix}
 								onChange={(e) => setForm({ ...form, prefix: e.target.value })}
 								className="font-mono"
 							/>
-						</Field>
-						<Field className="space-y-1.5">
-							<FieldLabel htmlFor="instance-backup-keep">Keep latest count (optional)</FieldLabel>
+						</div>
+						<div className="space-y-1.5">
+							<Label htmlFor="instance-backup-keep">Keep latest count (optional)</Label>
 							<Input
 								id="instance-backup-keep"
 								type="number"
@@ -449,7 +440,7 @@ function InstanceBackupFormDialog({
 							{!keepValid && (
 								<p className="text-sm text-destructive">Enter a whole number of at least 1.</p>
 							)}
-						</Field>
+						</div>
 					</div>
 					<div className="flex items-center gap-2">
 						<Switch

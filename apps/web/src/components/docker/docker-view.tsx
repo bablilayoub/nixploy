@@ -4,7 +4,7 @@ import { type QueryClient, useQueries, useQuery } from "@tanstack/react-query";
 import { Container, ShieldAlert } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { UnderlineTabsList, UnderlineTabsTrigger } from "@/components/application/underline-tabs";
+
 import { PageHeader } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,7 +15,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useMounted } from "@/hooks/use-mounted";
 import { useSyncedTab } from "@/hooks/use-synced-tab";
@@ -130,7 +130,7 @@ export function DockerView() {
 			value={effectiveServerId ?? LOCAL}
 			onValueChange={(value) => setServerId(value === LOCAL ? null : value)}
 		>
-			<SelectTrigger aria-label="Docker host" className="w-52">
+			<SelectTrigger className="w-52">
 				<SelectValue />
 			</SelectTrigger>
 			<SelectContent>
@@ -169,31 +169,28 @@ export function DockerView() {
 	} else {
 		body = (
 			<Tabs value={dockerTab} onValueChange={selectDockerTab} activationMode="manual">
-				<UnderlineTabsList
-					aria-label="Docker resources"
-					className="h-auto w-full justify-start overflow-x-auto"
-				>
-					<UnderlineTabsTrigger value="containers">
+				<TabsList variant="line" className="w-full justify-start overflow-x-auto border-b">
+					<TabsTrigger value="containers">
 						Containers
 						<TabCount value={listCounts.containers} />
-					</UnderlineTabsTrigger>
-					<UnderlineTabsTrigger value="images">
+					</TabsTrigger>
+					<TabsTrigger value="images">
 						Images
 						<TabCount value={listCounts.images} />
-					</UnderlineTabsTrigger>
+					</TabsTrigger>
 					{/* Nodes/services are cluster-wide: docker.nodes and swarmServices
 					    reject everyone but the instance admin, even with a serverId. */}
-					{isInstanceAdmin && <UnderlineTabsTrigger value="swarm">Swarm</UnderlineTabsTrigger>}
-					<UnderlineTabsTrigger value="networks">
+					{isInstanceAdmin && <TabsTrigger value="swarm">Swarm</TabsTrigger>}
+					<TabsTrigger value="networks">
 						Networks
 						<TabCount value={listCounts.networks} />
-					</UnderlineTabsTrigger>
-					<UnderlineTabsTrigger value="volumes">
+					</TabsTrigger>
+					<TabsTrigger value="volumes">
 						Volumes
 						<TabCount value={listCounts.volumes} />
-					</UnderlineTabsTrigger>
-					<UnderlineTabsTrigger value="system">System</UnderlineTabsTrigger>
-				</UnderlineTabsList>
+					</TabsTrigger>
+					<TabsTrigger value="system">System</TabsTrigger>
+				</TabsList>
 				<TabsContent value="containers">
 					<ContainersTab serverId={effectiveServerId} />
 				</TabsContent>
@@ -219,7 +216,7 @@ export function DockerView() {
 	}
 
 	return (
-		<div className="flex min-w-0 flex-col gap-7">
+		<div className="flex flex-col gap-6">
 			<PageHeader
 				title="Docker"
 				description="Containers, images, swarm and system — full control of the daemon."
@@ -249,17 +246,14 @@ function PermissionState({
 	);
 }
 
-export function DockerError({ error, onRetry }: { error: unknown; onRetry: () => void }) {
+export function DockerError({ error }: { error: unknown }) {
 	return (
-		<div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive/25 bg-card px-5 py-10 text-center">
+		<div className="flex h-40 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border text-center">
 			<Container className="size-6 text-muted-foreground" />
 			<p className="text-sm font-medium">Docker is not reachable</p>
 			<p className="max-w-md text-xs text-muted-foreground">
 				{error instanceof Error ? error.message : "Failed to query the docker daemon."}
 			</p>
-			<Button variant="outline" size="sm" onClick={onRetry}>
-				Try again
-			</Button>
 		</div>
 	);
 }

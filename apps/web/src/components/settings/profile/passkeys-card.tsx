@@ -5,7 +5,6 @@ import { Fingerprint, Loader2, Plus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { SettingsSection } from "@/components/layout/settings-section";
-import { LoadError } from "@/components/query-state";
 import { EmptyState } from "@/components/services/empty-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
 import { Button } from "@/components/ui/button";
@@ -18,8 +17,8 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
-import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
 	Table,
@@ -130,16 +129,6 @@ export function PasskeysCard() {
 		);
 	}
 
-	if (availability.isError)
-		return (
-			<SettingsSection title="Passkeys" description="Sign-in with a passkey.">
-				<LoadError
-					message="Could not check whether passkeys are available."
-					onRetry={() => void availability.refetch()}
-				/>
-			</SettingsSection>
-		);
-
 	if (!available) {
 		return (
 			<SettingsSection
@@ -229,8 +218,8 @@ export function PasskeysCard() {
 							security key. Nothing secret leaves the device — the panel only stores a public key.
 						</DialogDescription>
 					</DialogHeader>
-					<Field className="space-y-2">
-						<FieldLabel htmlFor="passkey-name">Name</FieldLabel>
+					<div className="space-y-2">
+						<Label htmlFor="passkey-name">Name</Label>
 						<Input
 							id="passkey-name"
 							value={name}
@@ -240,7 +229,7 @@ export function PasskeysCard() {
 						<p className="text-xs text-muted-foreground">
 							So you can tell it apart later. Optional.
 						</p>
-					</Field>
+					</div>
 					<DialogFooter>
 						<Button variant="outline" onClick={() => setDialogOpen(false)}>
 							Cancel

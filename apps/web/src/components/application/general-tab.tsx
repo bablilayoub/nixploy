@@ -1,6 +1,6 @@
 "use client";
 
-import { FocusSections } from "@/components/layout/focus-sections";
+import { SettingsStack } from "@/components/layout/settings-section";
 import { useApplication } from "./application-context";
 import { BuildTypeConfig, BuildTypeInfoCard } from "./build-type-config";
 import { ResourcesForm } from "./resources-form";
@@ -15,33 +15,10 @@ export function GeneralTab() {
 	// needs it set.
 	const buildsFromSource = application.sourceType !== "docker";
 	return (
-		<FocusSections
-			rail
-			label="Application configuration sections"
-			items={[
-				{
-					id: "application-source",
-					label: "Source",
-				},
-				{
-					id: "application-build",
-					label: "Build",
-				},
-				{
-					id: "application-resources",
-					label: "Resources",
-				},
-			]}
-		>
-			<div id="application-source" tabIndex={-1} className="space-y-6 scroll-mt-24 min-w-0">
-				<SourceConfig application={application} />
-			</div>
-			<div id="application-build" tabIndex={-1} className="space-y-6 scroll-mt-24 min-w-0">
-				{buildsFromSource ? <BuildTypeConfig application={application} /> : <BuildTypeInfoCard />}
-			</div>
-			<div id="application-resources" tabIndex={-1} className="space-y-6 scroll-mt-24 min-w-0">
-				<ResourcesForm application={application} />
-			</div>
-		</FocusSections>
+		<SettingsStack>
+			<SourceConfig application={application} />
+			{buildsFromSource ? <BuildTypeConfig application={application} /> : <BuildTypeInfoCard />}
+			<ResourcesForm application={application} />
+		</SettingsStack>
 	);
 }

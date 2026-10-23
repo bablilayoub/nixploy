@@ -4,9 +4,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link2, Loader2, Zap } from "lucide-react";
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 import { toast } from "sonner";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
 	Dialog,
 	DialogContent,
@@ -15,7 +15,6 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
-import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -308,8 +307,8 @@ export const GitopsCard = forwardRef<
 							</p>
 							<ApplyErrorList errors={syncErrors} />
 						</div>
-						<div className="flex flex-wrap items-center gap-2">
-							<Input
+						<div className="flex items-center gap-2">
+							<input
 								ref={fileInputRef}
 								type="file"
 								accept=".yaml,.yml,.json"
@@ -329,20 +328,17 @@ export const GitopsCard = forwardRef<
 							>
 								Upload file
 							</Button>
-							<Label
-								htmlFor="gitops-redeploy"
-								className="text-muted-foreground flex min-h-11 items-center gap-2 text-xs font-normal"
-							>
-								<Checkbox
-									id="gitops-redeploy"
+							<label className="text-muted-foreground flex items-center gap-2 text-xs">
+								<input
+									type="checkbox"
 									checked={redeployAfter}
-									onCheckedChange={(checked) => setRedeployAfter(checked === true)}
+									onChange={(event) => setRedeployAfter(event.target.checked)}
 								/>
 								Redeploy changed services after apply
-							</Label>
+							</label>
 						</div>
-						<Field>
-							<FieldLabel htmlFor="gitops-yaml">Stack YAML</FieldLabel>
+						<div className="grid gap-2">
+							<Label htmlFor="gitops-yaml">Stack YAML</Label>
 							<Textarea
 								id="gitops-yaml"
 								value={yaml}
@@ -350,7 +346,7 @@ export const GitopsCard = forwardRef<
 								placeholder="version: 2&#10;project:&#10;  name: my-project"
 								className="min-h-48 font-mono text-xs"
 							/>
-						</Field>
+						</div>
 					</div>
 					<DialogFooter>
 						<Button variant="outline" onClick={() => closeImport(false)}>
@@ -405,7 +401,7 @@ export const GitopsCard = forwardRef<
 												item.action === "create"
 													? "default"
 													: item.action === "delete"
-														? "outline"
+														? "destructive"
 														: "secondary"
 											}
 										>

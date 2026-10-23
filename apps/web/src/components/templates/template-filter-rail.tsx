@@ -53,24 +53,28 @@ function FacetRow({
 	onClick: () => void;
 }) {
 	return (
-		<Button
-			variant={active ? "secondary" : "ghost"}
-			size="sm"
+		<button
 			type="button"
 			onClick={onClick}
 			aria-pressed={active}
-			className="w-full justify-between"
+			className={cn(
+				"flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-start text-sm transition-colors",
+				active ? "bg-secondary font-medium text-foreground" : "text-muted-foreground",
+				count === 0 && !active ? "opacity-50" : "hover:bg-accent hover:text-foreground",
+			)}
 		>
 			<span className="truncate">{label}</span>
 			<span className="shrink-0 text-xs tabular-nums text-muted-foreground/70">{count}</span>
-		</Button>
+		</button>
 	);
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
 	return (
 		<div className="flex flex-col gap-1">
-			<h3 className="px-2 text-sm font-medium text-muted-foreground">{title}</h3>
+			<h3 className="px-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
+				{title}
+			</h3>
 			{children}
 		</div>
 	);
@@ -209,15 +213,13 @@ export function TemplateFilterRail({
 						{visibleTags.map(([tag, count]) => {
 							const active = filters.tags.includes(tag);
 							return (
-								<Button
-									variant="ghost"
-									size="sm"
+								<button
 									key={tag}
 									type="button"
 									aria-pressed={active}
 									onClick={() => filters.toggle("tags", tag)}
 									className={cn(
-										"h-auto min-h-7 rounded-md border px-1.5 py-0.5 text-xs transition-colors",
+										"rounded-md border px-1.5 py-0.5 text-xs transition-colors",
 										active
 											? "border-foreground/30 bg-secondary text-foreground"
 											: "text-muted-foreground hover:border-foreground/20 hover:text-foreground",
@@ -225,7 +227,7 @@ export function TemplateFilterRail({
 								>
 									{tag}
 									<span className="ms-1 tabular-nums text-muted-foreground/60">{count}</span>
-								</Button>
+								</button>
 							);
 						})}
 					</div>

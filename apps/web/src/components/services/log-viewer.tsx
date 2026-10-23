@@ -4,6 +4,7 @@ import {
 	classifyLogLine,
 	type LogLineLevel,
 } from "@nixploy/server/modules/observability/log-levels";
+
 import {
 	AlertTriangle,
 	ChevronsDown,
@@ -18,10 +19,10 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+
 import { NotRunningState, type RuntimeEmptyProps } from "@/components/services/not-running-state";
 import { StatusDot } from "@/components/shell";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
 	DropdownMenu,
 	DropdownMenuCheckboxItem,
@@ -106,14 +107,26 @@ const LEVEL_STYLES: Record<
 	},
 };
 
-/** Stream line with stable numbering and a readable severity independent of color. */
+/**
+ * One log line: line number, a level rule, the dimmed timestamp, the text.
+ *
+ * The three-letter badge that used to sit in front of every line is gone. It
+ * repeated what the colour of the text already said, and a column of ERR / INF /
+ * DBG chips down the left made the whole block read as a table of tags rather
+ * than as output. The rule keeps errors just as findable while the text itself
+ * starts at a straight left edge.
+ *
+ * The number is the line's position in the *unfiltered* stream, so it still
+ * means something after a filter narrows the view — and gives you something to
+ * point at when someone asks which line failed.
+ */
 function LogLine({ line, number, wrap }: { line: string; number: number; wrap: boolean }) {
 	const { level, text } = classifyLine(line);
 	const style = level === "default" ? null : LEVEL_STYLES[level];
 	const timestamp = text.match(TIMESTAMP_REGEX);
 	const body = timestamp ? text.slice(timestamp[0].length) : text;
 	return (
-		<div className="group flex gap-2 py-0.5 hover:bg-accent/40">
+		<div className="group flex gap-2">
 			<span className="w-10 shrink-0 select-none pe-1 text-right text-muted-foreground/50 tabular-nums">
 				{number}
 			</span>
@@ -128,11 +141,6 @@ function LogLine({ line, number, wrap }: { line: string; number: number; wrap: b
 					style?.text ?? "text-foreground",
 				)}
 			>
-				{level !== "default" ? (
-					<span className="me-2 inline-block min-w-12 text-[11px] font-semibold normal-case">
-						{level}
-					</span>
-				) : null}
 				{timestamp && <span className="text-muted-foreground">{timestamp[1]} </span>}
 				{body || " "}
 			</span>
@@ -438,11 +446,9 @@ export function LogViewer({
 
 	if (!deploymentId && !appName && !containerId) {
 		return (
-			<Card className="min-w-0">
-				<CardContent className="flex h-64 items-center justify-center text-sm text-muted-foreground">
-					Select a service to view its logs.
-				</CardContent>
-			</Card>
+			<div className="flex h-64 items-center justify-center rounded-lg border border-border bg-card text-sm text-muted-foreground">
+				Select a service to view its logs.
+			</div>
 		);
 	}
 
@@ -458,216 +464,214 @@ export function LogViewer({
 	}
 
 	return (
-		<Card className="min-w-0">
-			<CardContent className="overflow-hidden">
-				{/*
-				 * One toolbar, not two. It used to be a status row and a filter row —
-				 * seven controls over two lines, with the follow-latest arrow sitting
-				 * one button away from the download arrow and looking identical to it.
-				 * What is left here is what a log is actually driven with: what it is
-				 * doing, a search box, a level filter, and the one question anybody
-				 * opens a failed deploy to ask. The rest lives behind the overflow.
-				 */}
-				<div className="flex flex-wrap items-center gap-2 border-b border-border bg-black/[0.02] px-3 py-2 dark:bg-white/[0.02]">
-					<div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-						<StatusDot
-							status={
-								status === "connected"
-									? "success"
-									: status === "connecting"
-										? "warning"
-										: status === "disconnected" || status === "error"
-											? "error"
-											: "neutral"
-							}
-						/>
-						<span className="truncate" role="status" aria-live="polite">
-							{status === "connected" && "Live"}
-							{status === "connecting" && (
-								<span className="inline-flex items-center gap-1.5">
-									<Loader2 className="size-3 animate-spin" /> Connecting…
-								</span>
-							)}
-							{status === "disconnected" && "Reconnecting…"}
-							{status === "finished" && "Finished"}
-							{status === "error" && (
-								<span className="text-destructive" title={errorMessage ?? undefined}>
-									{errorMessage ?? "Connection failed"}
-								</span>
-							)}
-						</span>
-					</div>
-
-					<Input
-						placeholder="Filter…"
-						aria-label="Filter logs"
-						value={filter}
-						onChange={(event) => setFilter(event.target.value)}
-						className="h-7 w-32 font-mono text-xs sm:w-44"
+		<div className="overflow-hidden rounded-lg border border-border bg-card">
+			{/*
+			 * One toolbar, not two. It used to be a status row and a filter row —
+			 * seven controls over two lines, with the follow-latest arrow sitting
+			 * one button away from the download arrow and looking identical to it.
+			 * What is left here is what a log is actually driven with: what it is
+			 * doing, a search box, a level filter, and the one question anybody
+			 * opens a failed deploy to ask. The rest lives behind the overflow.
+			 */}
+			<div className="flex flex-wrap items-center gap-2 border-b border-border bg-black/[0.02] px-3 py-2 dark:bg-white/[0.02]">
+				<div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+					<StatusDot
+						status={
+							status === "connected"
+								? "success"
+								: status === "connecting"
+									? "warning"
+									: status === "disconnected" || status === "error"
+										? "error"
+										: "neutral"
+						}
 					/>
+					<span className="truncate">
+						{status === "connected" && "Live"}
+						{status === "connecting" && (
+							<span className="inline-flex items-center gap-1.5">
+								<Loader2 className="size-3 animate-spin" /> Connecting…
+							</span>
+						)}
+						{status === "disconnected" && "Reconnecting…"}
+						{status === "finished" && "Finished"}
+						{status === "error" && (
+							<span className="text-destructive" title={errorMessage ?? undefined}>
+								{errorMessage ?? "Connection failed"}
+							</span>
+						)}
+					</span>
+				</div>
 
+				<Input
+					placeholder="Filter…"
+					aria-label="Filter logs"
+					value={filter}
+					onChange={(event) => setFilter(event.target.value)}
+					className="h-7 w-32 font-mono text-xs sm:w-44"
+				/>
+
+				<DropdownMenu>
+					<DropdownMenuTrigger asChild>
+						<Button
+							variant={hiddenLevels.size > 0 ? "secondary" : "outline"}
+							size="sm"
+							className="h-7 gap-1.5 px-2 text-xs"
+						>
+							<ListFilter className="size-3.5" />
+							{hiddenLevels.size > 0 ? `${hiddenLevels.size} hidden` : "Levels"}
+						</Button>
+					</DropdownMenuTrigger>
+					<DropdownMenuContent align="start" className="w-44">
+						<DropdownMenuLabel>Show levels</DropdownMenuLabel>
+						{(Object.keys(LEVEL_STYLES) as (keyof typeof LEVEL_STYLES)[]).map((level) => (
+							<DropdownMenuCheckboxItem
+								key={level}
+								checked={!hiddenLevels.has(level)}
+								onCheckedChange={() => toggleLevel(level)}
+								onSelect={(event) => event.preventDefault()}
+							>
+								<span className="flex-1">{LEVEL_STYLES[level].label}</span>
+								<span className="tabular-nums text-muted-foreground">{levelCounts[level]}</span>
+							</DropdownMenuCheckboxItem>
+						))}
+						{hiddenLevels.size > 0 ? (
+							<>
+								<DropdownMenuSeparator />
+								<DropdownMenuItem onSelect={() => setHiddenLevels(new Set())}>
+									Show everything
+								</DropdownMenuItem>
+							</>
+						) : null}
+					</DropdownMenuContent>
+				</DropdownMenu>
+
+				{errorCount > 0 && (
+					<Button
+						variant={errorsOnly ? "secondary" : "outline"}
+						size="sm"
+						className={cn("h-7 gap-1.5 px-2 text-xs", !errorsOnly && "text-destructive")}
+						onClick={toggleErrorsOnly}
+					>
+						<AlertTriangle className="size-3.5" />
+						{errorsOnly ? "Show all" : `${errorCount} ${errorCount === 1 ? "error" : "errors"}`}
+					</Button>
+				)}
+
+				<span className="ms-auto text-xs tabular-nums text-muted-foreground">
+					{visible.length === lines.length
+						? `${lines.length} ${lines.length === 1 ? "line" : "lines"}`
+						: `${visible.length} of ${lines.length}`}
+				</span>
+
+				<div className="flex items-center gap-1">
+					{(status === "disconnected" || status === "error") && (
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Button
+									variant="outline"
+									size="icon-sm"
+									aria-label={status === "error" ? "Retry" : "Reconnect now"}
+									onClick={reconnectNow}
+								>
+									<RefreshCw className="size-3.5" />
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent>{status === "error" ? "Retry" : "Reconnect now"}</TooltipContent>
+						</Tooltip>
+					)}
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<Button
+								variant={wrap ? "secondary" : "outline"}
+								size="icon-sm"
+								aria-label="Wrap long lines"
+								aria-pressed={wrap}
+								onClick={() => setWrap((value) => !value)}
+							>
+								<WrapText className="size-3.5" />
+							</Button>
+						</TooltipTrigger>
+						<TooltipContent>Wrap long lines</TooltipContent>
+					</Tooltip>
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<Button
+								variant={pinned ? "secondary" : "outline"}
+								size="icon-sm"
+								aria-label="Follow latest output"
+								aria-pressed={pinned}
+								onClick={scrollToBottom}
+							>
+								{/* Not an arrow-to-line: that is the download glyph, and the
+								    two sat next to each other meaning different things. */}
+								<ChevronsDown className="size-3.5" />
+							</Button>
+						</TooltipTrigger>
+						<TooltipContent>Follow latest output</TooltipContent>
+					</Tooltip>
 					<DropdownMenu>
 						<DropdownMenuTrigger asChild>
-							<Button
-								variant={hiddenLevels.size > 0 ? "secondary" : "outline"}
-								size="sm"
-								className="h-7 gap-1.5 px-2 text-xs"
-							>
-								<ListFilter className="size-3.5" />
-								{hiddenLevels.size > 0 ? `${hiddenLevels.size} hidden` : "Levels"}
+							<Button variant="outline" size="icon-sm" aria-label="More log actions">
+								<MoreHorizontal className="size-3.5" />
 							</Button>
 						</DropdownMenuTrigger>
-						<DropdownMenuContent align="start" className="w-44">
-							<DropdownMenuLabel>Show levels</DropdownMenuLabel>
-							{(Object.keys(LEVEL_STYLES) as (keyof typeof LEVEL_STYLES)[]).map((level) => (
-								<DropdownMenuCheckboxItem
-									key={level}
-									checked={!hiddenLevels.has(level)}
-									onCheckedChange={() => toggleLevel(level)}
-									onSelect={(event) => event.preventDefault()}
-								>
-									<span className="flex-1">{LEVEL_STYLES[level].label}</span>
-									<span className="tabular-nums text-muted-foreground">{levelCounts[level]}</span>
-								</DropdownMenuCheckboxItem>
-							))}
-							{hiddenLevels.size > 0 ? (
-								<>
-									<DropdownMenuSeparator />
-									<DropdownMenuItem onSelect={() => setHiddenLevels(new Set())}>
-										Show everything
-									</DropdownMenuItem>
-								</>
-							) : null}
+						<DropdownMenuContent align="end">
+							<DropdownMenuItem onSelect={() => void copyLogs()}>
+								<Copy className="size-4" />
+								Copy what is shown
+							</DropdownMenuItem>
+							<DropdownMenuItem onSelect={downloadLogs}>
+								<Download className="size-4" />
+								Download as .txt
+							</DropdownMenuItem>
+							<DropdownMenuSeparator />
+							<DropdownMenuItem
+								variant="destructive"
+								onSelect={() => {
+									setLines([]);
+									bufferRef.current = "";
+								}}
+							>
+								<Trash2 className="size-4" />
+								Clear
+							</DropdownMenuItem>
 						</DropdownMenuContent>
 					</DropdownMenu>
-
-					{errorCount > 0 && (
-						<Button
-							variant={errorsOnly ? "secondary" : "outline"}
-							size="sm"
-							className={cn("h-7 gap-1.5 px-2 text-xs", !errorsOnly && "text-destructive")}
-							onClick={toggleErrorsOnly}
-						>
-							<AlertTriangle className="size-3.5" />
-							{errorsOnly ? "Show all" : `${errorCount} ${errorCount === 1 ? "error" : "errors"}`}
-						</Button>
-					)}
-
-					<span className="ms-auto text-xs tabular-nums text-muted-foreground">
-						{visible.length === lines.length
-							? `${lines.length} ${lines.length === 1 ? "line" : "lines"}`
-							: `${visible.length} of ${lines.length}`}
-					</span>
-
-					<div className="flex items-center gap-1">
-						{(status === "disconnected" || status === "error") && (
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<Button
-										variant="outline"
-										size="icon-sm"
-										aria-label={status === "error" ? "Retry" : "Reconnect now"}
-										onClick={reconnectNow}
-									>
-										<RefreshCw className="size-3.5" />
-									</Button>
-								</TooltipTrigger>
-								<TooltipContent>{status === "error" ? "Retry" : "Reconnect now"}</TooltipContent>
-							</Tooltip>
-						)}
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<Button
-									variant={wrap ? "secondary" : "outline"}
-									size="icon-sm"
-									aria-label="Wrap long lines"
-									aria-pressed={wrap}
-									onClick={() => setWrap((value) => !value)}
-								>
-									<WrapText className="size-3.5" />
-								</Button>
-							</TooltipTrigger>
-							<TooltipContent>Wrap long lines</TooltipContent>
-						</Tooltip>
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<Button
-									variant={pinned ? "secondary" : "outline"}
-									size="icon-sm"
-									aria-label="Follow latest output"
-									aria-pressed={pinned}
-									onClick={scrollToBottom}
-								>
-									{/* Not an arrow-to-line: that is the download glyph, and the
-								    two sat next to each other meaning different things. */}
-									<ChevronsDown className="size-3.5" />
-								</Button>
-							</TooltipTrigger>
-							<TooltipContent>Follow latest output</TooltipContent>
-						</Tooltip>
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button variant="outline" size="icon-sm" aria-label="More log actions">
-									<MoreHorizontal className="size-3.5" />
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end">
-								<DropdownMenuItem onSelect={() => void copyLogs()}>
-									<Copy className="size-4" />
-									Copy what is shown
-								</DropdownMenuItem>
-								<DropdownMenuItem onSelect={downloadLogs}>
-									<Download className="size-4" />
-									Download as .txt
-								</DropdownMenuItem>
-								<DropdownMenuSeparator />
-								<DropdownMenuItem
-									variant="default"
-									onSelect={() => {
-										setLines([]);
-										bufferRef.current = "";
-									}}
-								>
-									<Trash2 className="size-4" />
-									Clear
-								</DropdownMenuItem>
-							</DropdownMenuContent>
-						</DropdownMenu>
-					</div>
 				</div>
-				<div
-					ref={containerRef}
-					onScroll={handleScroll}
-					className="h-[28rem] overflow-auto bg-card p-3 font-mono text-xs leading-5 text-foreground"
-				>
-					{visibleLines.length === 0 ? (
-						status === "error" && lines.length === 0 ? (
-							<div className="flex h-full flex-col items-center justify-center gap-2 text-center">
-								<p className="text-sm font-medium text-foreground">Could not open the log stream</p>
-								<p className="max-w-sm text-sm text-muted-foreground">
-									{errorMessage ?? "The connection was closed by the server."}
-								</p>
-								<Button variant="outline" size="sm" onClick={reconnectNow}>
-									<RefreshCw className="size-3.5" />
-									Retry
-								</Button>
-							</div>
-						) : (
-							<span className="text-muted-foreground">
-								{lines.length === 0
-									? status === "connecting"
-										? "Waiting for logs…"
-										: "No logs yet."
-									: "No lines match the current filter."}
-							</span>
-						)
+			</div>
+			<div
+				ref={containerRef}
+				onScroll={handleScroll}
+				className="h-[28rem] overflow-auto bg-card p-3 font-mono text-xs leading-5 text-foreground"
+			>
+				{visibleLines.length === 0 ? (
+					status === "error" && lines.length === 0 ? (
+						<div className="flex h-full flex-col items-center justify-center gap-2 text-center">
+							<p className="text-sm font-medium text-foreground">Could not open the log stream</p>
+							<p className="max-w-sm text-sm text-muted-foreground">
+								{errorMessage ?? "The connection was closed by the server."}
+							</p>
+							<Button variant="outline" size="sm" onClick={reconnectNow}>
+								<RefreshCw className="size-3.5" />
+								Retry
+							</Button>
+						</div>
 					) : (
-						visible.map((row) => (
-							<LogLine key={row.number} line={row.line} number={row.number} wrap={wrap} />
-						))
-					)}
-				</div>
-			</CardContent>
-		</Card>
+						<span className="text-muted-foreground">
+							{lines.length === 0
+								? status === "connecting"
+									? "Waiting for logs…"
+									: "No logs yet."
+								: "No lines match the current filter."}
+						</span>
+					)
+				) : (
+					visible.map((row) => (
+						<LogLine key={row.number} line={row.line} number={row.number} wrap={wrap} />
+					))
+				)}
+			</div>
+		</div>
 	);
 }

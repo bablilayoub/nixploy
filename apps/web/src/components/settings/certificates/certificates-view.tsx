@@ -5,6 +5,7 @@ import type { inferRouterOutputs } from "@trpc/server";
 import { format } from "date-fns";
 import { Award, Loader2, Pencil, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
+import { SettingsSection } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
 import { EmptyState } from "@/components/services/empty-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
@@ -19,7 +20,6 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@/components/ui/dialog";
-import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -137,9 +137,16 @@ export function CertificatesView() {
 	return (
 		<div className="flex flex-col gap-8">
 			<Dialog open={open} onOpenChange={setOpen}>
-				<PageHeader
-					title="Certificates"
-					description="Custom TLS certificates served by Traefik."
+				<PageHeader title="Certificates" description="Custom TLS certificates served by Traefik." />
+				<SettingsSection
+					wide
+					title={
+						<span className="flex items-center gap-2">
+							<Award className="size-4 text-muted-foreground" />
+							Certificates
+						</span>
+					}
+					description="Certificates stored on this server."
 					actions={
 						<DialogTrigger asChild>
 							<Button size="sm" disabled={!canManage} title={manageHint}>
@@ -148,8 +155,7 @@ export function CertificatesView() {
 							</Button>
 						</DialogTrigger>
 					}
-				/>
-				<div className="min-w-0">
+				>
 					<QueryState
 						isPending={isPending}
 						isError={isError}
@@ -235,24 +241,24 @@ export function CertificatesView() {
 						</Table>
 						<TablePagination view={view} noun="certificates" className="mt-3" />
 					</QueryState>
-				</div>
+				</SettingsSection>
 				<DialogContent className="max-w-2xl">
 					<DialogHeader>
 						<DialogTitle>Add certificate</DialogTitle>
 						<DialogDescription>Paste the PEM certificate chain and private key.</DialogDescription>
 					</DialogHeader>
-					<div className="grid gap-5">
-						<Field>
-							<FieldLabel htmlFor="cert-name">Name</FieldLabel>
+					<div className="grid gap-4">
+						<div className="grid gap-2">
+							<Label htmlFor="cert-name">Name</Label>
 							<Input
 								id="cert-name"
 								placeholder="e.g. wildcard-example-com"
 								value={name}
 								onChange={(e) => setName(e.target.value)}
 							/>
-						</Field>
-						<Field>
-							<FieldLabel htmlFor="cert-data">Certificate (PEM)</FieldLabel>
+						</div>
+						<div className="grid gap-2">
+							<Label htmlFor="cert-data">Certificate (PEM)</Label>
 							<Textarea
 								id="cert-data"
 								className="h-32 font-mono text-xs"
@@ -260,9 +266,9 @@ export function CertificatesView() {
 								value={certificateData}
 								onChange={(e) => setCertificateData(e.target.value)}
 							/>
-						</Field>
-						<Field>
-							<FieldLabel htmlFor="cert-key">Private key (PEM)</FieldLabel>
+						</div>
+						<div className="grid gap-2">
+							<Label htmlFor="cert-key">Private key (PEM)</Label>
 							<Textarea
 								id="cert-key"
 								className="h-32 font-mono text-xs"
@@ -270,7 +276,7 @@ export function CertificatesView() {
 								value={privateKey}
 								onChange={(e) => setPrivateKey(e.target.value)}
 							/>
-						</Field>
+						</div>
 					</div>
 					<DialogFooter>
 						<Button
@@ -311,27 +317,27 @@ export function CertificatesView() {
 								});
 							}
 						}}
-						className="grid gap-5"
+						className="grid gap-4"
 					>
-						<Field>
-							<FieldLabel htmlFor="edit-cert-name">Name</FieldLabel>
+						<div className="grid gap-2">
+							<Label htmlFor="edit-cert-name">Name</Label>
 							<Input
 								id="edit-cert-name"
 								value={editName}
 								onChange={(e) => setEditName(e.target.value)}
 							/>
-						</Field>
-						<Field>
-							<FieldLabel htmlFor="edit-cert-data">Certificate (PEM)</FieldLabel>
+						</div>
+						<div className="grid gap-2">
+							<Label htmlFor="edit-cert-data">Certificate (PEM)</Label>
 							<Textarea
 								id="edit-cert-data"
 								className="h-32 font-mono text-xs"
 								value={editCertificateData}
 								onChange={(e) => setEditCertificateData(e.target.value)}
 							/>
-						</Field>
-						<Field>
-							<FieldLabel htmlFor="edit-cert-key">Private key (PEM)</FieldLabel>
+						</div>
+						<div className="grid gap-2">
+							<Label htmlFor="edit-cert-key">Private key (PEM)</Label>
 							<Textarea
 								id="edit-cert-key"
 								className="h-32 font-mono text-xs"
@@ -339,7 +345,7 @@ export function CertificatesView() {
 								value={editPrivateKey}
 								onChange={(e) => setEditPrivateKey(e.target.value)}
 							/>
-						</Field>
+						</div>
 						<div className="flex items-center gap-2">
 							<Switch
 								id="edit-cert-expiry-alerts"

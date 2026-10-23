@@ -16,9 +16,10 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+
 import { useBranding } from "@/components/branding-provider";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
 	Form,
 	FormControl,
@@ -251,7 +252,7 @@ export function SetupForm() {
 					<Skeleton className="mx-auto h-7 w-48" />
 					<Skeleton className="mx-auto mt-2 h-4 w-64" />
 				</CardHeader>
-				<CardContent className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
+				<CardContent className="grid gap-4">
 					<Skeleton className="h-10 w-full" />
 					<Skeleton className="h-10 w-full" />
 					<Skeleton className="h-10 w-full" />
@@ -271,15 +272,13 @@ export function SetupForm() {
 				{step === "welcome" && (
 					<>
 						<CardHeader className="text-center">
-							<CardTitle as="h1" className="text-xl">
-								Welcome to {branding.productName}
-							</CardTitle>
-							<div className="text-sm text-muted-foreground">
+							<CardTitle className="text-xl">Welcome to {branding.productName}</CardTitle>
+							<CardDescription>
 								Self-hosted PaaS on this server. A short setup creates your owner account and
 								organization — public registration stays closed afterward.
-							</div>
+							</CardDescription>
 						</CardHeader>
-						<CardContent className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
+						<CardContent className="grid gap-4">
 							<ul className="grid gap-2 text-sm text-muted-foreground">
 								<li className="flex gap-2">
 									<Check className="mt-0.5 size-4 shrink-0 text-foreground" />
@@ -305,18 +304,16 @@ export function SetupForm() {
 				{step === "owner" && (
 					<>
 						<CardHeader className="text-center">
-							<CardTitle as="h1" className="text-xl">
-								Owner account
-							</CardTitle>
-							<div className="text-sm text-muted-foreground">
+							<CardTitle className="text-xl">Owner account</CardTitle>
+							<CardDescription>
 								This is the first admin. You will sign in with this email and password.
-							</div>
+							</CardDescription>
 						</CardHeader>
 						<CardContent>
 							<Form {...ownerForm}>
 								<form
 									onSubmit={ownerForm.handleSubmit(() => void goOrgFromOwner())}
-									className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4"
+									className="grid gap-4"
 								>
 									{formError && step === "owner" && <FormError message={formError} />}
 									{ownerCreated && (
@@ -416,7 +413,7 @@ export function SetupForm() {
 															{...field}
 														/>
 													</FormControl>
-													<p className="text-xs leading-relaxed break-words text-muted-foreground">
+													<p className="text-xs text-muted-foreground">
 														This instance requires the token from{" "}
 														<code className="font-mono">NIXPLOY_SETUP_TOKEN</code> (
 														<code className="font-mono">/etc/nixploy/.env</code>) to claim the first
@@ -454,18 +451,16 @@ export function SetupForm() {
 				{step === "org" && (
 					<>
 						<CardHeader className="text-center">
-							<CardTitle as="h1" className="text-xl">
-								Organization
-							</CardTitle>
-							<div className="text-sm text-muted-foreground">
+							<CardTitle className="text-xl">Organization</CardTitle>
+							<CardDescription>
 								Projects, services, and teammates live under this organization.
-							</div>
+							</CardDescription>
 						</CardHeader>
 						<CardContent>
 							<Form {...orgForm}>
 								<form
 									onSubmit={orgForm.handleSubmit(() => void goReadyFromOrg())}
-									className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4"
+									className="grid gap-4"
 								>
 									{formError && step === "org" && <FormError message={formError} />}
 									{createdOrgId && (
@@ -518,14 +513,12 @@ export function SetupForm() {
 				{step === "ready" && !complete && (
 					<>
 						<CardHeader className="text-center">
-							<CardTitle as="h1" className="text-xl">
-								Ready to create
-							</CardTitle>
-							<div className="text-sm text-muted-foreground">
+							<CardTitle className="text-xl">Ready to create</CardTitle>
+							<CardDescription>
 								Confirm the details below. This creates your owner account and organization.
-							</div>
+							</CardDescription>
 						</CardHeader>
-						<CardContent className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
+						<CardContent className="grid gap-4">
 							{formError && <FormError message={formError} />}
 							<dl className="grid gap-3 rounded-lg border bg-muted/40 p-4 text-sm">
 								<div className="grid gap-0.5">
@@ -568,14 +561,12 @@ export function SetupForm() {
 				{step === "ready" && complete && (
 					<>
 						<CardHeader className="text-center">
-							<CardTitle as="h1" className="text-xl">
-								You&apos;re in
-							</CardTitle>
-							<div className="text-sm text-muted-foreground">
+							<CardTitle className="text-xl">You&apos;re in</CardTitle>
+							<CardDescription>
 								{orgForm.getValues("orgName").trim()} is ready. Here&apos;s a sensible next path.
-							</div>
+							</CardDescription>
 						</CardHeader>
-						<CardContent className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
+						<CardContent className="grid gap-4">
 							<ul className="grid gap-3 text-sm">
 								<li className="flex gap-3">
 									<LayoutTemplate className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
@@ -612,7 +603,7 @@ export function SetupForm() {
 					</>
 				)}
 			</Card>
-			<p className="text-center text-xs leading-relaxed break-words text-muted-foreground">
+			<p className="text-center text-xs text-muted-foreground">
 				Step {Math.min(stepIndex + 1, STEPS.length)} of {STEPS.length}
 				{step !== "welcome" ? ` · ${STEP_LABELS[step]}` : null}
 			</p>

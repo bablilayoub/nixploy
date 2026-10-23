@@ -7,29 +7,26 @@ import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
-	DropdownMenuRadioGroup,
-	DropdownMenuRadioItem,
+	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
 export function ModeToggle() {
-	const { theme, setTheme } = useTheme();
+	const { setTheme } = useTheme();
 
 	return (
 		<DropdownMenu>
 			<DropdownMenuTrigger asChild>
-				<Button variant="ghost" size="icon" className="relative rounded-md">
-					<Sun className="size-[1.2rem] scale-100 rotate-0 transition-[transform,opacity] duration-150 dark:scale-0 dark:-rotate-90" />
-					<Moon className="absolute size-[1.2rem] scale-0 rotate-90 transition-[transform,opacity] duration-150 dark:scale-100 dark:rotate-0" />
+				<Button variant="ghost" size="icon" className="scale-95 rounded-full">
+					<Sun className="size-[1.2rem] scale-100 rotate-0 transition-all dark:scale-0 dark:-rotate-90" />
+					<Moon className="absolute size-[1.2rem] scale-0 rotate-90 transition-all dark:scale-100 dark:rotate-0" />
 					<span className="sr-only">Toggle theme</span>
 				</Button>
 			</DropdownMenuTrigger>
 			<DropdownMenuContent align="end">
-				<DropdownMenuRadioGroup value={theme ?? "light"} onValueChange={setTheme}>
-					<DropdownMenuRadioItem value="light">Light</DropdownMenuRadioItem>
-					<DropdownMenuRadioItem value="dark">Dark</DropdownMenuRadioItem>
-					<DropdownMenuRadioItem value="system">System</DropdownMenuRadioItem>
-				</DropdownMenuRadioGroup>
+				<DropdownMenuItem onClick={() => setTheme("light")}>Light</DropdownMenuItem>
+				<DropdownMenuItem onClick={() => setTheme("dark")}>Dark</DropdownMenuItem>
+				<DropdownMenuItem onClick={() => setTheme("system")}>System</DropdownMenuItem>
 			</DropdownMenuContent>
 		</DropdownMenu>
 	);

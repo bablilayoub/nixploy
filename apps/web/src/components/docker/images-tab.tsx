@@ -85,14 +85,12 @@ export function ImagesTab({ serverId }: DockerTabProps) {
 	const view = useTableView({ rows: images, search: searchImage });
 
 	if (imagesQuery.isLoading) return <Skeleton className="h-64 w-full" />;
-	if (imagesQuery.isError)
-		return <DockerError error={imagesQuery.error} onRetry={() => void imagesQuery.refetch()} />;
+	if (imagesQuery.isError) return <DockerError error={imagesQuery.error} />;
 
 	return (
-		<div className="space-y-4 pt-3">
+		<div className="space-y-3 pt-4">
 			<div className="flex flex-wrap items-center gap-2">
 				<Input
-					aria-label="Image reference to pull"
 					placeholder="nginx:alpine"
 					value={reference}
 					onChange={(event) => setReference(event.target.value)}

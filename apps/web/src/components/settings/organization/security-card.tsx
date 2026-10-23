@@ -75,7 +75,7 @@ export function SecurityCard() {
 
 	return (
 		<SettingsSection title="Security" description={DESCRIPTION}>
-			<div className="flex min-w-0 flex-col gap-5">
+			<div className="flex flex-col gap-4">
 				<div className="flex items-center justify-between rounded-md border p-3">
 					<div className="flex flex-col gap-1">
 						<Label htmlFor="require-two-factor">Require two-factor authentication</Label>
@@ -155,7 +155,9 @@ function RequireSsoRow({
 					Members who did not sign in through the identity provider are asked to. Instance admins
 					stay exempt, so there is always a way back in.
 				</p>
-				{blockedReason ? <p className="text-xs text-warning">{blockedReason}</p> : null}
+				{blockedReason ? (
+					<p className="text-xs text-amber-600 dark:text-amber-400">{blockedReason}</p>
+				) : null}
 			</div>
 			<Switch
 				id="require-sso"

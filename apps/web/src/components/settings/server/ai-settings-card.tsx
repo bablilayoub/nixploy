@@ -6,7 +6,6 @@ import { useState } from "react";
 import { SettingsSection } from "@/components/layout/settings-section";
 import { useSaveBar } from "@/components/services/save-bar";
 import { Button } from "@/components/ui/button";
-import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -109,7 +108,6 @@ export function AiSettingsCard() {
 					<span className="text-sm text-muted-foreground">{enabled ? "On" : "Off"}</span>
 					<Switch
 						id="ai-enabled"
-						aria-label="Enable copilot"
 						checked={enabled}
 						disabled={save.isPending}
 						onCheckedChange={(checked) => {
@@ -130,13 +128,13 @@ export function AiSettingsCard() {
 			{enabled ? (
 				<>
 					<div className="grid gap-3 sm:grid-cols-2">
-						<Field>
-							<FieldLabel htmlFor="ai-provider">Provider</FieldLabel>
+						<div className="grid gap-2">
+							<Label>Provider</Label>
 							<Select
 								value={provider}
 								onValueChange={(v) => draft.patch({ provider: v as Provider })}
 							>
-								<SelectTrigger id="ai-provider">
+								<SelectTrigger>
 									<SelectValue />
 								</SelectTrigger>
 								<SelectContent>
@@ -146,21 +144,21 @@ export function AiSettingsCard() {
 									<SelectItem value="ollama">Ollama</SelectItem>
 								</SelectContent>
 							</Select>
-						</Field>
-						<Field>
-							<FieldLabel htmlFor="ai-model">Model</FieldLabel>
+						</div>
+						<div className="grid gap-2">
+							<Label htmlFor="ai-model">Model</Label>
 							<Input
 								id="ai-model"
 								value={model}
 								onChange={(e) => draft.patch({ model: e.target.value })}
 								placeholder="gpt-4o-mini"
 							/>
-						</Field>
+						</div>
 					</div>
 
 					{(provider === "openai-compatible" || provider === "ollama") && (
-						<Field>
-							<FieldLabel htmlFor="ai-base">Base URL</FieldLabel>
+						<div className="grid gap-2">
+							<Label htmlFor="ai-base">Base URL</Label>
 							<Input
 								id="ai-base"
 								value={baseUrl}
@@ -169,16 +167,16 @@ export function AiSettingsCard() {
 									provider === "ollama" ? "http://127.0.0.1:11434/v1" : "https://api.example.com/v1"
 								}
 							/>
-						</Field>
+						</div>
 					)}
 
-					<Field>
-						<FieldLabel htmlFor="ai-key">
+					<div className="grid gap-2">
+						<Label htmlFor="ai-key">
 							API key
 							{statusQuery.data?.apiKeyConfigured ? (
 								<span className="ml-2 text-xs font-normal text-muted-foreground">(configured)</span>
 							) : null}
-						</FieldLabel>
+						</Label>
 						<Input
 							id="ai-key"
 							type="password"
@@ -187,9 +185,9 @@ export function AiSettingsCard() {
 							placeholder={statusQuery.data?.apiKeyConfigured ? "Leave blank to keep" : "sk-…"}
 							autoComplete="off"
 						/>
-					</Field>
+					</div>
 
-					<div className="flex flex-wrap items-center justify-between gap-4">
+					<div className="flex items-center justify-between gap-4">
 						<div className="grid gap-0.5">
 							<Label htmlFor="ai-auto">Auto-explain failures</Label>
 							<p className="text-xs text-muted-foreground">

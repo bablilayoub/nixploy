@@ -1,16 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import {
-	AlertTriangle,
-	Check,
-	ChevronsUpDown,
-	Cpu,
-	HardDrive,
-	MemoryStick,
-	Search,
-	ShieldCheck,
-} from "lucide-react";
+import { AlertTriangle, Cpu, HardDrive, MemoryStick, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
@@ -20,25 +11,11 @@ import { QueryState } from "@/components/query-state";
 import { MonitoringCharts } from "@/components/services/monitoring-charts";
 import { RuntimeLogHistory } from "@/components/services/runtime-log-history";
 import { ServiceStatusBadge } from "@/components/services/status-badge";
-import { SubTabsList, SubTabsTrigger } from "@/components/services/sub-tabs";
 import { PageHeader } from "@/components/shell";
 import { Button } from "@/components/ui/button";
-import {
-	Command,
-	CommandEmpty,
-	CommandGroup,
-	CommandInput,
-	CommandItem,
-	CommandList,
-} from "@/components/ui/command";
-import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useMounted } from "@/hooks/use-mounted";
-import { useSyncedTab } from "@/hooks/use-synced-tab";
 import { formatBytes } from "@/lib/format";
 import { useTRPC } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
@@ -60,15 +37,19 @@ function HostStat({
 		<div className="flex min-w-0 flex-1 flex-col gap-1.5 px-4 py-3 sm:border-r sm:border-border sm:last:border-r-0">
 			<div className="flex items-center gap-1.5 text-muted-foreground">
 				<Icon className="size-3.5 shrink-0" />
-				<span className="text-[11px] font-medium normal-case tracking-wide">{label}</span>
+				<span className="text-[11px] font-medium uppercase tracking-wide">{label}</span>
 			</div>
 			<p className="truncate text-sm font-semibold tabular-nums">{value}</p>
 			{percent != null ? (
-				<Progress
-					value={Math.min(100, Math.max(0, percent))}
-					aria-label={`${label} usage`}
-					className="h-1"
-				/>
+				<div className="h-1 overflow-hidden rounded-full bg-muted">
+					<div
+						className={cn(
+							"h-full rounded-full transition-[width] duration-500",
+							percent >= 90 ? "bg-destructive" : "bg-foreground/80",
+						)}
+						style={{ width: `${Math.min(100, Math.max(0, percent))}%` }}
+					/>
+				</div>
 			) : (
 				<div className="h-1" />
 			)}
@@ -147,7 +128,7 @@ function PlatformAlertsCard() {
 						<span
 							className={cn(
 								"mt-1 size-2 shrink-0 rounded-full",
-								alert.severity === "critical" ? "bg-destructive" : "bg-warning",
+								alert.severity === "critical" ? "bg-destructive" : "bg-amber-500",
 							)}
 						/>
 						<div className="min-w-0">
@@ -176,14 +157,7 @@ function serviceHref(row: { kind: string; serviceId: string; projectId: string }
  * title that tab already carries.
  */
 export function MonitoringView({ embedded = false }: { embedded?: boolean } = {}) {
-	const [view, selectView] = useSyncedTab(
-		"metrics",
-		(value) => ["metrics", "alerts", "logs", "configuration"].includes(value),
-		{ param: "view" },
-	);
 	const trpc = useTRPC();
-	const [search, setSearch] = useState("");
-	const [pickerOpen, setPickerOpen] = useState(false);
 	const [selectedKey, setSelectedKey] = useState<string | null>(null);
 	const { isInstanceAdmin } = useCapabilities();
 	// The session role is only known client-side; wait for mount so SSR and
@@ -191,7 +165,6 @@ export function MonitoringView({ embedded = false }: { embedded?: boolean } = {}
 	const mounted = useMounted();
 	// Host metrics without a serverId read the Nixploy host — instance admin only.
 	const showHost = mounted && isInstanceAdmin;
-	const activeView = view === "alerts" && !showHost ? "metrics" : view;
 
 	const hostQuery = useQuery({
 		...trpc.monitoring.serverStats.queryOptions({}),
@@ -204,12 +177,6 @@ export function MonitoringView({ embedded = false }: { embedded?: boolean } = {}
 	});
 
 	const fleet = fleetQuery.data ?? [];
-	const needle = search.trim().toLowerCase();
-	const matchingFleet = fleet.filter((row) =>
-		[row.name, row.kind, row.projectName, row.environmentName].some((value) =>
-			value.toLowerCase().includes(needle),
-		),
-	);
 
 	useEffect(() => {
 		if (fleet.length === 0) return;
@@ -299,242 +266,113 @@ export function MonitoringView({ embedded = false }: { embedded?: boolean } = {}
 				</QueryState>
 			) : null}
 
-			<Tabs value={activeView} onValueChange={selectView} activationMode="manual">
-				<SubTabsList aria-label="Monitoring views">
-					<SubTabsTrigger value="metrics">Live metrics</SubTabsTrigger>
-					{showHost ? <SubTabsTrigger value="alerts">Platform alerts</SubTabsTrigger> : null}
-					<SubTabsTrigger value="logs">Log history</SubTabsTrigger>
-					<SubTabsTrigger value="configuration">Prometheus</SubTabsTrigger>
-				</SubTabsList>
-				<TabsContent value="metrics">
-					<div className="grid items-start gap-6 xl:grid-cols-[minmax(15rem,17rem)_minmax(0,1fr)]">
-						<div className="xl:hidden">
-							<Popover open={pickerOpen} onOpenChange={setPickerOpen}>
-								<PopoverTrigger asChild>
-									<Button
-										variant="outline"
-										role="combobox"
-										aria-expanded={pickerOpen}
-										aria-label="Choose monitored service"
-										className="h-auto min-h-11 w-full justify-between py-3 text-start"
-									>
-										<span className="min-w-0 break-words">
-											{fleetQuery.isError
-												? "Could not load services"
-												: (selected?.name ?? "Choose a service")}
-										</span>
-										<ChevronsUpDown className="size-4 text-muted-foreground" aria-hidden />
-									</Button>
-								</PopoverTrigger>
-								<PopoverContent
-									className="w-[var(--radix-popover-trigger-width)] max-w-[calc(100vw-32px)] p-0"
-									align="start"
-								>
-									<QueryState
-										isPending={fleetQuery.isPending}
-										isError={fleetQuery.isError}
-										error={fleetQuery.error}
-										onRetry={() => fleetQuery.refetch()}
-										isEmpty={false}
-										empty={null}
-										skeleton={<Skeleton className="m-3 h-11" />}
-									>
-										<Command>
-											<CommandInput
-												placeholder="Service, project or environment…"
-												aria-label="Search monitored services"
-											/>
-											<CommandList>
-												<CommandEmpty>
-													{fleet.length ? "No services match." : "No services yet."}
-												</CommandEmpty>
-												<CommandGroup>
-													{fleet.map((row) => {
-														const key = `${row.kind}:${row.serviceId}`;
-														return (
-															<CommandItem
-																key={key}
-																value={key}
-																keywords={[
-																	row.name,
-																	row.kind,
-																	row.projectName,
-																	row.environmentName,
-																]}
-																onSelect={() => {
-																	setSelectedKey(key);
-																	setPickerOpen(false);
-																}}
-																className="items-start gap-3 py-3"
-															>
-																<Check
-																	className={cn(
-																		"mt-0.5 size-4 shrink-0",
-																		key !== selectedKey && "opacity-0",
-																	)}
-																	aria-hidden
-																/>
-																<span className="min-w-0">
-																	<span className="block break-words text-sm">{row.name}</span>
-																	<span className="mt-1 block break-words text-xs text-muted-foreground">
-																		{row.projectName} / {row.environmentName} · {row.kind}
-																	</span>
-																</span>
-															</CommandItem>
-														);
-													})}
-												</CommandGroup>
-											</CommandList>
-										</Command>
-									</QueryState>
-								</PopoverContent>
-							</Popover>
-						</div>
-						<aside
-							aria-label="Service inventory"
-							className="hidden min-w-0 overflow-hidden rounded-xl border bg-card xl:block"
-						>
-							<div className="border-b border-border px-3 py-2.5">
-								<p className="text-sm font-medium">Services</p>
-								<p className="text-xs text-muted-foreground">
-									{fleetQuery.isPending
-										? "Loading…"
-										: `${fleet.length} service${fleet.length === 1 ? "" : "s"}`}
-								</p>
-							</div>
-							<div className="relative m-3">
-								<Search
-									aria-hidden="true"
-									className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-								/>
-								<Input
-									type="search"
-									aria-label="Search monitored services"
-									placeholder="Service, project or environment…"
-									className="pl-9"
-									value={search}
-									onChange={(event) => setSearch(event.target.value)}
-								/>
-							</div>
-							<QueryState
-								isPending={fleetQuery.isPending}
-								isError={fleetQuery.isError}
-								error={fleetQuery.error}
-								onRetry={() => fleetQuery.refetch()}
-								isEmpty={fleet.length === 0}
-								empty={
-									<p className="px-3 py-8 text-center text-sm text-muted-foreground">
-										No services yet. Deploy something to see metrics.
-									</p>
-								}
-								skeleton={
-									<div className="flex flex-col gap-2 p-3">
-										<Skeleton className="h-12 w-full" />
-										<Skeleton className="h-12 w-full" />
-									</div>
-								}
-							>
-								<ul className="max-h-[min(28rem,60vh)] divide-y overflow-y-auto">
-									{matchingFleet.map((row) => {
-										const key = `${row.kind}:${row.serviceId}`;
-										const active = key === selectedKey;
-										return (
-											<li key={key}>
-												<Button
-													variant="ghost"
-													size="sm"
-													type="button"
-													onClick={() => setSelectedKey(key)}
-													aria-pressed={active}
-													className={cn(
-														"flex w-full flex-col items-stretch justify-start rounded-none font-normal gap-1 px-3 py-2.5 text-left transition-colors",
-														active ? "bg-secondary" : "hover:bg-secondary/50",
-													)}
-												>
-													<div className="flex items-start justify-between gap-2">
-														<span className="truncate text-sm font-medium">{row.name}</span>
-														<ServiceStatusBadge status={row.status} />
-													</div>
-													<div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-														<span className="truncate">
-															{row.kind} · {row.projectName}/{row.environmentName}
-														</span>
-														<span className="shrink-0 tabular-nums">
-															{row.metrics
-																? `CPU ${row.metrics.cpu.toFixed(0)}% · RAM ${row.metrics.memoryPercent.toFixed(0)}%`
-																: "Metrics unavailable"}
-														</span>
-													</div>
-												</Button>
-											</li>
-										);
-									})}
-								</ul>
-								{matchingFleet.length === 0 && fleet.length > 0 && (
-									<div className="px-4 py-8 text-center text-sm">
-										<p className="text-muted-foreground">No services match “{search}”.</p>
-										<Button variant="ghost" size="sm" onClick={() => setSearch("")}>
-											Clear search
-										</Button>
-									</div>
-								)}
-							</QueryState>
-						</aside>
+			{showHost ? <PlatformAlertsCard /> : null}
 
-						<section
-							aria-label="Selected service metrics"
-							className="min-w-0 overflow-hidden rounded-xl border bg-card"
-						>
-							{selected ? (
-								<>
-									<div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-2.5">
-										<div className="min-w-0">
-											<p className="truncate text-sm font-medium">{selected.name}</p>
-											<p className="truncate font-mono text-xs text-muted-foreground">
-												{selected.kind} · {selected.appName}
-											</p>
-										</div>
-										<Button asChild size="sm" variant="outline">
-											<Link href={`${serviceHref(selected)}?tab=monitoring`}>Open service</Link>
-										</Button>
-									</div>
-									<div className="p-4">
-										<MonitoringCharts
-											appName={selected.appName}
-											serverId={selected.serverId}
-											serviceType={selected.kind}
-											serviceId={selected.serviceId}
-										/>
-									</div>
-								</>
-							) : (
-								<p className="px-4 py-16 text-center text-sm text-muted-foreground">
-									{fleetQuery.isPending ? "Loading services…" : "Select a service to view charts."}
-								</p>
-							)}
-						</section>
+			<div className="grid items-start gap-5 lg:grid-cols-[minmax(16rem,18rem)_minmax(0,1fr)]">
+				<aside className="rounded-lg border">
+					<div className="border-b border-border px-3 py-2.5">
+						<p className="text-sm font-medium">Services</p>
+						<p className="text-xs text-muted-foreground">
+							{fleetQuery.isPending
+								? "Loading…"
+								: `${fleet.length} service${fleet.length === 1 ? "" : "s"}`}
+						</p>
 					</div>
-				</TabsContent>
-				{showHost ? (
-					<TabsContent value="alerts">
-						<PlatformAlertsCard />
-					</TabsContent>
-				) : null}
-				<TabsContent value="logs">
-					{/* Setup detail, not a thing to watch — it sat above the fleet and
-			    pushed the service list and its charts below the fold. */}
-					<SettingsSection
-						bare
-						title="Logs"
-						description="Runtime log history across every service you can see — what containers printed, kept by the worker past their lifetime."
+					<QueryState
+						isPending={fleetQuery.isPending}
+						isError={fleetQuery.isError}
+						error={fleetQuery.error}
+						onRetry={() => fleetQuery.refetch()}
+						isEmpty={fleet.length === 0}
+						empty={
+							<p className="px-3 py-8 text-center text-sm text-muted-foreground">
+								No services yet. Deploy something to see metrics.
+							</p>
+						}
+						skeleton={
+							<div className="flex flex-col gap-2 p-3">
+								<Skeleton className="h-12 w-full" />
+								<Skeleton className="h-12 w-full" />
+							</div>
+						}
 					>
-						<RuntimeLogHistory />
-					</SettingsSection>
-				</TabsContent>
-				<TabsContent value="configuration">
-					<PrometheusCard />
-				</TabsContent>
-			</Tabs>
+						<ul className="max-h-[min(28rem,60vh)] divide-y overflow-y-auto">
+							{fleet.map((row) => {
+								const key = `${row.kind}:${row.serviceId}`;
+								const active = key === selectedKey;
+								return (
+									<li key={key}>
+										<button
+											type="button"
+											onClick={() => setSelectedKey(key)}
+											className={cn(
+												"flex w-full flex-col gap-1 px-3 py-2.5 text-left transition-colors",
+												active ? "bg-secondary" : "hover:bg-secondary/50",
+											)}
+										>
+											<div className="flex items-start justify-between gap-2">
+												<span className="truncate text-sm font-medium">{row.name}</span>
+												<ServiceStatusBadge status={row.status} />
+											</div>
+											<div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+												<span className="truncate">
+													{row.kind} · {row.projectName}/{row.environmentName}
+												</span>
+												<span className="shrink-0 tabular-nums">
+													{row.metrics
+														? `${row.metrics.cpu.toFixed(0)}% · ${row.metrics.memoryPercent.toFixed(0)}%`
+														: "—"}
+												</span>
+											</div>
+										</button>
+									</li>
+								);
+							})}
+						</ul>
+					</QueryState>
+				</aside>
+
+				<section className="min-w-0 rounded-lg border">
+					{selected ? (
+						<>
+							<div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5">
+								<div className="min-w-0">
+									<p className="truncate text-sm font-medium">{selected.name}</p>
+									<p className="truncate font-mono text-xs text-muted-foreground">
+										{selected.kind} · {selected.appName}
+									</p>
+								</div>
+								<Button asChild size="sm" variant="outline">
+									<Link href={`${serviceHref(selected)}?tab=monitoring`}>Open</Link>
+								</Button>
+							</div>
+							<div className="p-4">
+								<MonitoringCharts
+									appName={selected.appName}
+									serverId={selected.serverId}
+									serviceType={selected.kind}
+									serviceId={selected.serviceId}
+								/>
+							</div>
+						</>
+					) : (
+						<p className="px-4 py-16 text-center text-sm text-muted-foreground">
+							{fleetQuery.isPending ? "Loading services…" : "Select a service to view charts."}
+						</p>
+					)}
+				</section>
+			</div>
+
+			{/* Setup detail, not a thing to watch — it sat above the fleet and
+			    pushed the service list and its charts below the fold. */}
+			<SettingsSection
+				bare
+				title="Logs"
+				description="Runtime log history across every service you can see — what containers printed, kept by the worker past their lifetime."
+			>
+				<RuntimeLogHistory />
+			</SettingsSection>
+			<PrometheusCard />
 		</div>
 	);
 }

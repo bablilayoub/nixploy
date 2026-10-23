@@ -52,8 +52,3 @@ export function describeServiceCounts(counts: ServiceCounts): string | null {
 	if (parts.length === 0) return last;
 	return `${parts.join(", ")} and ${last}`;
 }
-
-/** Legacy `done` is the same healthy service state shown by ServiceStatusBadge. */
-export function countRunningServices(counts?: { running: number; done: number }): number {
-	return (counts?.running ?? 0) + (counts?.done ?? 0);
-}

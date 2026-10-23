@@ -1,10 +1,9 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { Bell, BookOpen, KeyRound, LifeBuoy, LogOut, User } from "lucide-react";
+import { Bell, KeyRound, LogOut, User } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useBranding } from "@/components/branding-provider";
 import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
@@ -32,8 +31,7 @@ const settingsItems = [
 ];
 
 /** Compact avatar menu for the top header — shadcn-admin ProfileDropdown pattern. */
-export function ProfileDropdown({ onNavigate }: { onNavigate?: () => void }) {
-	const branding = useBranding();
+export function ProfileDropdown() {
 	const router = useRouter();
 	const queryClient = useQueryClient();
 	const { data: session, isPending } = useSession();
@@ -58,17 +56,17 @@ export function ProfileDropdown({ onNavigate }: { onNavigate?: () => void }) {
 	};
 
 	if (!mounted || isPending) {
-		return <Skeleton className="size-9 rounded-lg" />;
+		return <Skeleton className="size-8 rounded-full" />;
 	}
 
 	return (
 		<DropdownMenu modal={false}>
 			<DropdownMenuTrigger asChild>
-				<Button variant="ghost" className="relative size-9 rounded-lg" aria-label="Account menu">
+				<Button variant="ghost" className="relative size-8 rounded-full">
 					<UserAvatar user={user} className="size-8" fallbackClassName="text-xs" size={64} />
 				</Button>
 			</DropdownMenuTrigger>
-			<DropdownMenuContent className="w-64" align="end" forceMount>
+			<DropdownMenuContent className="w-56" align="end" forceMount>
 				<DropdownMenuLabel className="font-normal">
 					<div className="flex flex-col gap-1.5">
 						<p className="text-sm leading-none font-medium">{user?.name ?? "User"}</p>
@@ -79,7 +77,7 @@ export function ProfileDropdown({ onNavigate }: { onNavigate?: () => void }) {
 				<DropdownMenuGroup>
 					{settingsItems.map((item) => (
 						<DropdownMenuItem key={item.label} asChild>
-							<Link href={item.href} onClick={onNavigate}>
+							<Link href={item.href}>
 								<item.icon className="size-4" />
 								{item.label}
 							</Link>
@@ -87,22 +85,7 @@ export function ProfileDropdown({ onNavigate }: { onNavigate?: () => void }) {
 					))}
 				</DropdownMenuGroup>
 				<DropdownMenuSeparator />
-				<DropdownMenuItem asChild>
-					<a href={branding.docsUrl ?? "https://nixploy.com/docs"} target="_blank" rel="noreferrer">
-						<BookOpen aria-hidden="true" />
-						Documentation
-					</a>
-				</DropdownMenuItem>
-				{branding.supportUrl && (
-					<DropdownMenuItem asChild>
-						<a href={branding.supportUrl} target="_blank" rel="noreferrer">
-							<LifeBuoy aria-hidden="true" />
-							Support
-						</a>
-					</DropdownMenuItem>
-				)}
-				<DropdownMenuSeparator />
-				<DropdownMenuItem variant="default" onSelect={handleSignOut}>
+				<DropdownMenuItem variant="destructive" onSelect={handleSignOut}>
 					<LogOut className="size-4" />
 					Sign out
 				</DropdownMenuItem>

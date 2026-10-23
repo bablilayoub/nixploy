@@ -13,9 +13,11 @@ export function Faq() {
 		<section id="faq" className="py-20 lg:py-28">
 			<div className="container-page grid gap-10 lg:grid-cols-12 lg:gap-16">
 				<div className="lg:col-span-4">
-					<p className="signal-kicker">Before your first deploy</p>
-					<h2 className="mt-4 text-3xl leading-[1.15] font-medium tracking-[-0.035em] text-balance lg:text-4xl">
-						A few things to know.
+					<p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
+						Questions
+					</p>
+					<h2 className="mt-4 text-4xl font-semibold tracking-tight text-balance lg:text-5xl">
+						The ones people ask first
 					</h2>
 					<p className="mt-4 text-muted-foreground">
 						If yours is not here,{" "}
@@ -23,7 +25,7 @@ export function Faq() {
 							href={`${site.github}/issues`}
 							target="_blank"
 							rel="noreferrer"
-							className="text-primary underline underline-offset-4 hover:decoration-2"
+							className="text-primary underline-offset-4 hover:underline"
 						>
 							open an issue on GitHub
 						</a>

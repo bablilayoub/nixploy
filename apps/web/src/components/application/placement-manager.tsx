@@ -5,8 +5,7 @@ import { SettingsSection } from "@/components/layout/settings-section";
 import { capabilityHint } from "@/components/services/capability-hint";
 import { useSaveBar } from "@/components/services/save-bar";
 import { Button } from "@/components/ui/button";
-import { Field, FieldLabel } from "@/components/ui/field";
-import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useDraft } from "@/hooks/use-draft";
 import { useSaveMutation } from "@/hooks/use-save-mutation";
@@ -72,16 +71,16 @@ export function PlacementManager({ application }: { application: Application }) 
 			}
 		>
 			<div className="flex flex-col gap-3">
-				<Field>
-					<FieldLabel htmlFor="placement-constraints">Constraints</FieldLabel>
-					<Textarea
+				<div className="grid gap-2">
+					<Label htmlFor="placement-constraints">Constraints</Label>
+					<textarea
 						id="placement-constraints"
-						className="min-h-28 font-mono"
+						className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex min-h-28 w-full rounded-md border px-3 py-2 font-mono text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
 						value={text}
 						onChange={(event) => draft.set(event.target.value)}
 						placeholder={"node.role==worker\nnode.labels.disk==ssd"}
 					/>
-				</Field>
+				</div>
 				<Button
 					type="button"
 					disabled={save.isPending || !canWrite}

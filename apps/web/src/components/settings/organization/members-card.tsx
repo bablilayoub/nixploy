@@ -22,8 +22,8 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@/components/ui/dialog";
-import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
 	Select,
 	SelectContent,
@@ -254,9 +254,9 @@ export function MembersCard() {
 								Create a unique invite link. Share it yourself — Nixploy does not send email.
 							</DialogDescription>
 						</DialogHeader>
-						<div className="grid gap-5">
-							<Field>
-								<FieldLabel htmlFor="invite-email">Email</FieldLabel>
+						<div className="grid gap-4">
+							<div className="grid gap-2">
+								<Label htmlFor="invite-email">Email</Label>
 								<Input
 									id="invite-email"
 									type="email"
@@ -267,11 +267,11 @@ export function MembersCard() {
 								<p className="text-xs text-muted-foreground">
 									The invitee must sign up with this exact email.
 								</p>
-							</Field>
-							<Field>
-								<FieldLabel>Role</FieldLabel>
+							</div>
+							<div className="grid gap-2">
+								<Label>Role</Label>
 								<Select value={role} onValueChange={(value) => setRole(value as InvitableRole)}>
-									<SelectTrigger aria-label="Role">
+									<SelectTrigger>
 										<SelectValue />
 									</SelectTrigger>
 									<SelectContent>
@@ -282,14 +282,14 @@ export function MembersCard() {
 										))}
 									</SelectContent>
 								</Select>
-							</Field>
-							<Field>
-								<FieldLabel>Expires in</FieldLabel>
+							</div>
+							<div className="grid gap-2">
+								<Label>Expires in</Label>
 								<Select
 									value={expiryDays}
 									onValueChange={(value) => setExpiryDays(value as "1" | "7" | "30")}
 								>
-									<SelectTrigger aria-label="Expires in">
+									<SelectTrigger>
 										<SelectValue />
 									</SelectTrigger>
 									<SelectContent>
@@ -298,7 +298,7 @@ export function MembersCard() {
 										<SelectItem value="30">30 days</SelectItem>
 									</SelectContent>
 								</Select>
-							</Field>
+							</div>
 						</div>
 						<DialogFooter>
 							<Button
@@ -448,14 +448,12 @@ export function MembersCard() {
 			)}
 			{!isLoading && !isOrgPending && !loadError && invitations.length > 0 && (
 				<div className="mt-6 flex flex-col gap-3">
-					<p className="text-xs leading-relaxed font-medium text-muted-foreground">
-						Pending invitations
-					</p>
+					<p className="text-sm font-medium text-muted-foreground">Pending invitations</p>
 					<div className="divide-y rounded-lg border">
 						{invitations.map((invitation) => (
-							<div key={invitation.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+							<div key={invitation.id} className="flex items-center gap-3 px-4 py-3">
 								<Link2 className="size-4 shrink-0 text-muted-foreground" />
-								<div className="flex min-w-0 flex-1 basis-40 flex-col">
+								<div className="flex min-w-0 flex-1 flex-col">
 									<span className="truncate text-sm font-medium">{invitation.email}</span>
 									<span className="text-xs text-muted-foreground">
 										<span className="capitalize">{invitation.role}</span> · expires{" "}

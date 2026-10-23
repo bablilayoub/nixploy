@@ -5,6 +5,7 @@ import { AlertTriangle, Loader2, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+
 import { SettingsSection, SettingsStack } from "@/components/layout/settings-section";
 import { LoadError } from "@/components/query-state";
 import { capabilityHint } from "@/components/services/capability-hint";
@@ -12,7 +13,6 @@ import { DangerZone } from "@/components/services/danger-zone";
 import { DomainManager } from "@/components/services/domain-manager";
 import { PageHeader } from "@/components/shell";
 import { Button } from "@/components/ui/button";
-import { Field, FieldLabel } from "@/components/ui/field";
 import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -87,8 +87,8 @@ export function UpstreamDetail({
 
 	if (upstreamQuery.isPending) {
 		return (
-			<div className="space-y-5">
-				<Skeleton className="h-10 w-64" />
+			<div className="space-y-4">
+				<Skeleton className="h-8 w-64" />
 				<Skeleton className="h-40 w-full" />
 				<Skeleton className="h-64 w-full" />
 			</div>
@@ -197,17 +197,17 @@ export function UpstreamDetail({
 					}
 				>
 					<div className="grid gap-4 sm:grid-cols-2">
-						<Field className="space-y-1.5">
-							<FieldLabel htmlFor="upstream-name">Name</FieldLabel>
+						<div className="space-y-1.5">
+							<Label htmlFor="upstream-name">Name</Label>
 							<Input
 								id="upstream-name"
 								value={name}
 								onChange={(event) => setName(event.target.value)}
 								disabled={!canManage}
 							/>
-						</Field>
-						<Field className="space-y-1.5">
-							<FieldLabel htmlFor="upstream-url">Target URL</FieldLabel>
+						</div>
+						<div className="space-y-1.5">
+							<Label htmlFor="upstream-url">Target URL</Label>
 							<Input
 								id="upstream-url"
 								value={targetUrl}
@@ -220,10 +220,10 @@ export function UpstreamDetail({
 								An origin only — put path rewrites on the domain. Cluster-internal targets are
 								refused; LAN targets need private egress. <HelpLink slug="domains" />
 							</p>
-						</Field>
+						</div>
 					</div>
-					<Field className="space-y-1.5">
-						<FieldLabel htmlFor="upstream-description">Description</FieldLabel>
+					<div className="space-y-1.5">
+						<Label htmlFor="upstream-description">Description</Label>
 						<Textarea
 							id="upstream-description"
 							rows={2}
@@ -231,7 +231,7 @@ export function UpstreamDetail({
 							onChange={(event) => setDescription(event.target.value)}
 							disabled={!canManage}
 						/>
-					</Field>
+					</div>
 					<div className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5">
 						<div>
 							<Label htmlFor="upstream-pass-host">Pass the public Host header</Label>

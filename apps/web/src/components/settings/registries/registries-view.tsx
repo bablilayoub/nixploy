@@ -5,6 +5,7 @@ import type { inferRouterOutputs } from "@trpc/server";
 import { format } from "date-fns";
 import { Database, Loader2, Pencil, Plug, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
+import { SettingsSection } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
 import { EmptyState } from "@/components/services/empty-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
@@ -20,8 +21,8 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@/components/ui/dialog";
-import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
 	Select,
 	SelectContent,
@@ -125,10 +126,20 @@ export function RegistriesView() {
 	});
 
 	return (
-		<div className="flex min-w-0 flex-col gap-7">
+		<div className="flex flex-col gap-6">
 			<PageHeader
 				title="Registries"
 				description="Credentials for private registries (Hub, GHCR, or your own)."
+			/>
+			<SettingsSection
+				wide
+				title={
+					<span className="flex items-center gap-2">
+						<Database className="size-4 text-muted-foreground" />
+						Registries
+					</span>
+				}
+				description="Encrypted usernames and passwords. Attach on an app’s source for private images."
 				actions={
 					<Dialog open={open} onOpenChange={setOpen}>
 						<DialogTrigger asChild>
@@ -142,52 +153,52 @@ export function RegistriesView() {
 								<DialogTitle>Add registry</DialogTitle>
 								<DialogDescription>Store credentials for a Docker registry.</DialogDescription>
 							</DialogHeader>
-							<div className="grid gap-5">
-								<Field>
-									<FieldLabel htmlFor="registry-name">Name</FieldLabel>
+							<div className="grid gap-4">
+								<div className="grid gap-2">
+									<Label htmlFor="registry-name">Name</Label>
 									<Input
 										id="registry-name"
 										placeholder="e.g. Docker Hub"
 										value={registryName}
 										onChange={(e) => setRegistryName(e.target.value)}
 									/>
-								</Field>
-								<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-									<Field>
-										<FieldLabel htmlFor="registry-username">Username</FieldLabel>
+								</div>
+								<div className="grid grid-cols-2 gap-4">
+									<div className="grid gap-2">
+										<Label htmlFor="registry-username">Username</Label>
 										<Input
 											id="registry-username"
 											value={username}
 											onChange={(e) => setUsername(e.target.value)}
 										/>
-									</Field>
-									<Field>
-										<FieldLabel htmlFor="registry-password">Password</FieldLabel>
+									</div>
+									<div className="grid gap-2">
+										<Label htmlFor="registry-password">Password</Label>
 										<Input
 											id="registry-password"
 											type="password"
 											value={password}
 											onChange={(e) => setPassword(e.target.value)}
 										/>
-									</Field>
+									</div>
 								</div>
-								<Field>
-									<FieldLabel htmlFor="registry-url">Registry URL (optional)</FieldLabel>
+								<div className="grid gap-2">
+									<Label htmlFor="registry-url">Registry URL (optional)</Label>
 									<Input
 										id="registry-url"
 										placeholder="https://index.docker.io/v1"
 										value={registryUrl}
 										onChange={(e) => setRegistryUrl(e.target.value)}
 									/>
-								</Field>
-								<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-									<Field>
-										<FieldLabel>Type</FieldLabel>
+								</div>
+								<div className="grid grid-cols-2 gap-4">
+									<div className="grid gap-2">
+										<Label>Type</Label>
 										<Select
 											value={registryType}
 											onValueChange={(value) => setRegistryType(value as "cloud" | "selfHosted")}
 										>
-											<SelectTrigger aria-label="Type">
+											<SelectTrigger>
 												<SelectValue />
 											</SelectTrigger>
 											<SelectContent>
@@ -195,15 +206,15 @@ export function RegistriesView() {
 												<SelectItem value="selfHosted">Self-hosted</SelectItem>
 											</SelectContent>
 										</Select>
-									</Field>
-									<Field>
-										<FieldLabel htmlFor="registry-prefix">Image prefix (optional)</FieldLabel>
+									</div>
+									<div className="grid gap-2">
+										<Label htmlFor="registry-prefix">Image prefix (optional)</Label>
 										<Input
 											id="registry-prefix"
 											value={imagePrefix}
 											onChange={(e) => setImagePrefix(e.target.value)}
 										/>
-									</Field>
+									</div>
 								</div>
 							</div>
 							<DialogFooter>
@@ -227,8 +238,7 @@ export function RegistriesView() {
 						</DialogContent>
 					</Dialog>
 				}
-			/>
-			<div className="min-w-0">
+			>
 				<QueryState
 					isPending={isPending}
 					isError={isError}
@@ -332,7 +342,7 @@ export function RegistriesView() {
 					</Table>
 					<TablePagination view={view} noun="registries" className="mt-3" />
 				</QueryState>
-			</div>
+			</SettingsSection>
 			<Dialog open={editing !== null} onOpenChange={(isOpen) => !isOpen && setEditing(null)}>
 				<DialogContent>
 					<DialogHeader>
@@ -356,27 +366,27 @@ export function RegistriesView() {
 								});
 							}
 						}}
-						className="grid gap-5"
+						className="grid gap-4"
 					>
-						<Field>
-							<FieldLabel htmlFor="edit-registry-name">Name</FieldLabel>
+						<div className="grid gap-2">
+							<Label htmlFor="edit-registry-name">Name</Label>
 							<Input
 								id="edit-registry-name"
 								value={editName}
 								onChange={(e) => setEditName(e.target.value)}
 							/>
-						</Field>
-						<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-							<Field>
-								<FieldLabel htmlFor="edit-registry-username">Username</FieldLabel>
+						</div>
+						<div className="grid grid-cols-2 gap-4">
+							<div className="grid gap-2">
+								<Label htmlFor="edit-registry-username">Username</Label>
 								<Input
 									id="edit-registry-username"
 									value={editUsername}
 									onChange={(e) => setEditUsername(e.target.value)}
 								/>
-							</Field>
-							<Field>
-								<FieldLabel htmlFor="edit-registry-password">Password</FieldLabel>
+							</div>
+							<div className="grid gap-2">
+								<Label htmlFor="edit-registry-password">Password</Label>
 								<Input
 									id="edit-registry-password"
 									type="password"
@@ -384,25 +394,25 @@ export function RegistriesView() {
 									value={editPassword}
 									onChange={(e) => setEditPassword(e.target.value)}
 								/>
-							</Field>
+							</div>
 						</div>
-						<Field>
-							<FieldLabel htmlFor="edit-registry-url">Registry URL (optional)</FieldLabel>
+						<div className="grid gap-2">
+							<Label htmlFor="edit-registry-url">Registry URL (optional)</Label>
 							<Input
 								id="edit-registry-url"
 								placeholder="https://index.docker.io/v1"
 								value={editUrl}
 								onChange={(e) => setEditUrl(e.target.value)}
 							/>
-						</Field>
-						<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-							<Field>
-								<FieldLabel>Type</FieldLabel>
+						</div>
+						<div className="grid grid-cols-2 gap-4">
+							<div className="grid gap-2">
+								<Label>Type</Label>
 								<Select
 									value={editType}
 									onValueChange={(value) => setEditType(value as "cloud" | "selfHosted")}
 								>
-									<SelectTrigger aria-label="Type">
+									<SelectTrigger>
 										<SelectValue />
 									</SelectTrigger>
 									<SelectContent>
@@ -410,15 +420,15 @@ export function RegistriesView() {
 										<SelectItem value="selfHosted">Self-hosted</SelectItem>
 									</SelectContent>
 								</Select>
-							</Field>
-							<Field>
-								<FieldLabel htmlFor="edit-registry-prefix">Image prefix (optional)</FieldLabel>
+							</div>
+							<div className="grid gap-2">
+								<Label htmlFor="edit-registry-prefix">Image prefix (optional)</Label>
 								<Input
 									id="edit-registry-prefix"
 									value={editPrefix}
 									onChange={(e) => setEditPrefix(e.target.value)}
 								/>
-							</Field>
+							</div>
 						</div>
 						<DialogFooter>
 							<Button

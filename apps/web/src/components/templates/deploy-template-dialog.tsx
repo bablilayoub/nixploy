@@ -18,7 +18,6 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Field, FieldLabel } from "@/components/ui/field";
 import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -120,14 +119,12 @@ function StepRail({
 				const active = step.id === current;
 				return (
 					<li key={step.id} className="flex min-w-0 flex-1 items-center gap-0.5">
-						<Button
-							variant="ghost"
-							size="sm"
+						<button
 							type="button"
 							disabled={index > currentIndex}
 							onClick={() => onSelect(step.id)}
 							className={cn(
-								"h-auto justify-start flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-xs transition-colors",
+								"flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-xs transition-colors",
 								active && "bg-secondary text-foreground",
 								done && "text-foreground hover:bg-secondary/60",
 								!active && !done && "text-muted-foreground",
@@ -136,7 +133,7 @@ function StepRail({
 						>
 							<span
 								className={cn(
-									"flex size-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold",
+									"flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold",
 									active && "bg-foreground text-background",
 									done && "bg-foreground/15 text-foreground",
 									!active && !done && "bg-muted text-muted-foreground",
@@ -145,7 +142,7 @@ function StepRail({
 								{done ? <Check className="size-3" /> : index + 1}
 							</span>
 							<span className="truncate font-medium">{step.label}</span>
-						</Button>
+						</button>
 						{index < steps.length - 1 && (
 							<span className="mx-0.5 hidden h-px w-3 shrink-0 bg-border sm:block" />
 						)}
@@ -367,8 +364,8 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 								environment and its first deployment starts immediately.
 							</p>
 						</div>
-						<Field>
-							<FieldLabel>Project</FieldLabel>
+						<div className="flex flex-col gap-2">
+							<Label>Project</Label>
 							<Select
 								value={projectId}
 								onValueChange={(value) => {
@@ -376,7 +373,7 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 									setEnvironmentName("");
 								}}
 							>
-								<SelectTrigger aria-label="Project" className="w-full">
+								<SelectTrigger className="w-full">
 									<SelectValue placeholder="Select a project" />
 								</SelectTrigger>
 								<SelectContent>
@@ -387,15 +384,15 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 									))}
 								</SelectContent>
 							</Select>
-						</Field>
-						<Field>
-							<FieldLabel>Environment</FieldLabel>
+						</div>
+						<div className="flex flex-col gap-2">
+							<Label>Environment</Label>
 							<Select
 								value={environmentName}
 								onValueChange={setEnvironmentName}
 								disabled={!project}
 							>
-								<SelectTrigger aria-label="Environment" className="w-full">
+								<SelectTrigger className="w-full">
 									<SelectValue placeholder="Select an environment" />
 								</SelectTrigger>
 								<SelectContent>
@@ -406,12 +403,12 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 									))}
 								</SelectContent>
 							</Select>
-						</Field>
+						</div>
 					</div>
 				)}
 
 				{step === "configure" && (
-					<div className="flex min-w-0 flex-col gap-5">
+					<div className="flex flex-col gap-4">
 						<p className="text-sm text-muted-foreground">
 							Leave generated secrets blank to create them automatically on deploy. Override any
 							value you want to control yourself.
@@ -432,7 +429,7 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 											{entry.required ? " (required)" : ""}
 										</Label>
 										{generated && (
-											<Badge variant="outline" className="text-[11px]">
+											<Badge variant="outline" className="text-[10px]">
 												auto-generated
 											</Badge>
 										)}
@@ -518,7 +515,7 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 						)}
 
 						<div className="flex flex-col gap-3 rounded-lg border p-3">
-							<div className="flex flex-wrap items-center justify-between gap-4">
+							<div className="flex items-center justify-between gap-4">
 								<div className="flex items-start gap-3">
 									<Globe className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
 									<div className="flex flex-col gap-1">
@@ -580,7 +577,7 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 				)}
 			</div>
 
-			<SheetFooter className="flex-row flex-wrap items-center justify-between gap-2 border-t sm:space-x-0">
+			<SheetFooter className="flex-row items-center justify-between gap-2 border-t sm:space-x-0">
 				<Button
 					type="button"
 					variant="ghost"

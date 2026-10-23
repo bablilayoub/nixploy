@@ -1,97 +1,143 @@
-import { ArrowUpRight } from "lucide-react";
+import { Boxes, GitBranch, Globe, LineChart, Terminal as TerminalIcon } from "lucide-react";
 import Image from "next/image";
-import Link from "next/link";
-import { Reveal } from "@/components/motion-provider";
-import { BentoGrid } from "@/components/ui/bento-grid";
-import { Card, CardHeader, CardTitle } from "@/components/ui/card";
-import { productCaptures } from "@/lib/product-captures";
 
-const capabilities = [
-	{
-		title: "Applications",
-		key: "project",
-		href: "/docs/deploy",
-		description: "From Git, a Docker image or your own build.",
-	},
-	{
-		title: "Databases",
-		key: "workspace",
-		href: "/docs/databases",
-		description: "Five engines. One familiar workspace.",
-	},
-	{
-		title: "Deployments",
-		key: "deployments",
-		href: "/docs/deploy",
-		description: "Every commit, build and release in context.",
-	},
-	{
-		title: "Monitoring",
-		key: "monitoring",
-		href: "/docs/observability",
-		description: "The health of your services, at a glance.",
-	},
-	{
-		title: "Servers",
-		key: "servers",
-		href: "/features#infra",
-		description: "Your infrastructure, managed together.",
-	},
-	{
-		title: "Templates",
-		key: "templates",
-		href: "/templates",
-		description: "A head start for your next project.",
-	},
-] as const;
+import { BentoCard, BentoGrid } from "@/components/ui/bento-grid";
+import { Marquee } from "@/components/ui/marquee";
+import { featuredTemplateIds } from "@/lib/landing-data";
+import { findTemplate } from "@/lib/templates";
+
+/*
+ * What the product does, in @magicui/bento-grid. Each cell's artwork is
+ * another registry component or a real capture: a marquee of catalog
+ * entries and screenshots of the panel.
+ */
+const marks = featuredTemplateIds
+	.map(findTemplate)
+	.filter((entry) => entry !== undefined)
+	.slice(0, 18);
+
+const Screenshot = ({ src, alt }: { src: string; alt: string }) => (
+	<div className="absolute inset-x-6 top-6 bottom-24 overflow-hidden rounded-lg border border-white/10 opacity-70 transition-all duration-300 group-hover:opacity-90 [mask-image:linear-gradient(to_top,transparent_12%,#000_60%)]">
+		{/* `sizes` matters here: without it the optimizer serves the full 3200px
+		    capture for a cell that is at most 760px wide. */}
+		<Image
+			src={src}
+			alt={alt}
+			width={3200}
+			height={2000}
+			sizes="(min-width: 1024px) 760px, 100vw"
+			className="h-auto w-full"
+		/>
+	</div>
+);
+
+/*
+ * The CLI tile. A still, not a typing animation: the tile sits in a grid of
+ * screenshots and a widget that replays itself every time it scrolls into
+ * view pulled the eye off the rest of them. It also renders its content in
+ * the server HTML, which the animated one could not.
+ */
+const CommandStill = () => (
+	<div className="absolute inset-x-6 top-6 overflow-hidden rounded-lg border border-white/10 bg-white/[0.02] p-4 font-mono text-xs leading-6 opacity-80 transition-opacity duration-300 group-hover:opacity-100 [mask-image:linear-gradient(to_top,transparent,#000_65%)]">
+		<p className="text-foreground">$ nixploy app deploy api --ref v1.4.0 --wait</p>
+		<p className="text-muted-foreground">building dockerfile · linux/amd64</p>
+		<p className="text-muted-foreground">rollout 2/2 tasks running</p>
+		<p className="text-foreground">done in 48s · https://api.acme.dev</p>
+	</div>
+);
 
 export function Features() {
 	return (
-		<section id="features" className="reference-section container-page">
-			<div className="reference-section-heading">
-				<h2>
-					One workspace.
-					<br />
-					For everything you run.
+		<section id="features" className="py-20 lg:py-28">
+			<div className="container-page">
+				<p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
+					What it does
+				</p>
+				<h2 className="mt-4 max-w-2xl text-4xl font-semibold tracking-tight text-balance lg:text-5xl">
+					One box, the whole delivery loop
 				</h2>
-			</div>
-			<Reveal>
-				<BentoGrid className="reference-capabilities grid-cols-1 auto-rows-auto sm:grid-cols-2 lg:grid-cols-3">
-					{capabilities.map((item) => (
-						<Link
-							key={item.title}
-							href={item.href}
-							className="group min-w-0 rounded-3xl focus-visible:outline-offset-4"
-						>
-							<Card className="reference-capability-card">
-								<CardHeader className="text-center">
-									<CardTitle className="flex items-center justify-center gap-2 text-base font-semibold">
-										{item.title}
-										<ArrowUpRight
-											aria-hidden="true"
-											className="size-3.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
-										/>
-									</CardTitle>
-									<p className="text-sm text-muted-foreground">{item.description}</p>
-								</CardHeader>
-								<div className="reference-capability-image">
-									{(["light", "dark"] as const).map((theme) => (
-										<Image
-											key={theme}
-											src={productCaptures[item.key][theme]}
-											alt={`Actual Nixploy ${item.title.toLowerCase()} view, ${theme} theme`}
-											width={1440}
-											height={1000}
-											sizes="(min-width:1024px) 400px, 600px"
-											className={`h-full max-w-none object-cover object-left-top ${theme === "light" ? "dark:hidden" : "hidden dark:block"}`}
-										/>
-									))}
-								</div>
-							</Card>
-						</Link>
-					))}
+
+				<BentoGrid className="mt-12 auto-rows-[24rem]">
+					<BentoCard
+						name="Deploy a commit, not a mood"
+						className="col-span-3 lg:col-span-2"
+						Icon={GitBranch}
+						description="GitHub, GitLab, Bitbucket and Gitea, built by nixpacks, railpack, a Dockerfile or buildpacks. Every deploy pins the image it ran."
+						href="/docs/deploy"
+						cta="How deploys work"
+						background={
+							<Screenshot
+								src="/screenshots/05-deployments.png"
+								alt="Deployments with image digest, status and duration"
+							/>
+						}
+					/>
+					<BentoCard
+						name="146 one-click stacks"
+						className="col-span-3 lg:col-span-1"
+						Icon={Boxes}
+						description="Reviewed compose files with pinned images and named volumes."
+						href="/templates"
+						cta="Browse the catalog"
+						background={
+							<Marquee
+								pauseOnHover
+								vertical
+								className="absolute inset-x-0 top-0 h-[70%] [--duration:26s] [mask-image:linear-gradient(to_top,transparent_18%,#000_70%)]"
+							>
+								{marks.map((template) => (
+									<div
+										key={template.id}
+										className="mx-4 flex items-center gap-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2"
+									>
+										<span className="truncate text-sm font-medium">{template.name}</span>
+										<span className="ml-auto shrink-0 text-xs text-muted-foreground">
+											{template.category}
+										</span>
+									</div>
+								))}
+							</Marquee>
+						}
+					/>
+					<BentoCard
+						name="Domains and TLS"
+						className="col-span-3 lg:col-span-1"
+						Icon={Globe}
+						description="Traefik routes it and Let's Encrypt signs it. Link a DNS provider and the record is created for you."
+						href="/docs/domains"
+						cta="Domains and TLS"
+						background={
+							<Screenshot
+								src="/screenshots/03-project.png"
+								alt="A project's services with their status and domain"
+							/>
+						}
+					/>
+					<BentoCard
+						name="Runtime you can read"
+						className="col-span-3 lg:col-span-1"
+						Icon={LineChart}
+						description="CPU, memory, network and disk per container, with logs kept after the container is gone."
+						href="/docs/observability"
+						cta="What it records"
+						background={
+							<Screenshot
+								src="/screenshots/06-monitoring.png"
+								alt="CPU, memory, network and disk charts for a service"
+							/>
+						}
+					/>
+					<BentoCard
+						name="The same surface from a terminal"
+						className="col-span-3 lg:col-span-1"
+						Icon={TerminalIcon}
+						description="Every procedure is a REST endpoint, a CLI verb and an MCP tool."
+						href="/docs/cli"
+						cta="Read the CLI reference"
+						background={<CommandStill />}
+					/>
 				</BentoGrid>
-			</Reveal>
+			</div>
 		</section>
 	);
 }

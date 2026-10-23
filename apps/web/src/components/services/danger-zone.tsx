@@ -2,6 +2,7 @@
 
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
+
 import { SettingsSection } from "@/components/layout/settings-section";
 import {
 	AlertDialog,
@@ -16,8 +17,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { DisabledHint } from "@/components/ui/disabled-hint";
-import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 export function DangerZone({
 	title,
@@ -94,10 +95,10 @@ export function DangerZone({
 							<AlertDialogDescription>{description}</AlertDialogDescription>
 						</AlertDialogHeader>
 						{requireText ? (
-							<Field className="space-y-1.5">
-								<FieldLabel htmlFor="danger-zone-confirm">
+							<div className="space-y-1.5">
+								<Label htmlFor="danger-zone-confirm">
 									Type <span className="font-mono font-semibold">{requireText}</span> to confirm
-								</FieldLabel>
+								</Label>
 								<Input
 									id="danger-zone-confirm"
 									value={confirmation}
@@ -105,7 +106,7 @@ export function DangerZone({
 									placeholder={requireText}
 									autoComplete="off"
 								/>
-							</Field>
+							</div>
 						) : null}
 						<AlertDialogFooter>
 							<AlertDialogCancel>Cancel</AlertDialogCancel>

@@ -10,7 +10,6 @@ import { useSaveBar } from "@/components/services/save-bar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DisabledHint } from "@/components/ui/disabled-hint";
-import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -94,9 +93,9 @@ export function StatusPageCard() {
 			{probes.isPending || page.isPending ? (
 				<Skeleton className="h-24 w-full" />
 			) : (
-				<div className="flex min-w-0 flex-col gap-5">
-					<Field>
-						<FieldLabel htmlFor="status-page-title">Page title</FieldLabel>
+				<div className="flex flex-col gap-4">
+					<div className="flex flex-col gap-2">
+						<Label htmlFor="status-page-title">Page title</Label>
 						<Input
 							id="status-page-title"
 							className="sm:max-w-sm"
@@ -104,7 +103,7 @@ export function StatusPageCard() {
 							disabled={!canManage}
 							onChange={(event) => draft.patch({ title: event.target.value })}
 						/>
-					</Field>
+					</div>
 
 					<div className="flex flex-col gap-2">
 						<Label>Published probes</Label>
@@ -115,7 +114,7 @@ export function StatusPageCard() {
 						) : (
 							<div className="flex flex-col gap-2 rounded-md border p-3">
 								{(probes.data ?? []).map((probe) => (
-									<Label
+									<label
 										key={probe.uptimeProbeId}
 										className="flex items-center gap-2.5 text-sm"
 										htmlFor={`probe-${probe.uptimeProbeId}`}
@@ -128,7 +127,7 @@ export function StatusPageCard() {
 										/>
 										<span className="truncate">{probe.domain?.host ?? probe.uptimeProbeId}</span>
 										<span className="text-xs text-muted-foreground">{probe.status}</span>
-									</Label>
+									</label>
 								))}
 							</div>
 						)}

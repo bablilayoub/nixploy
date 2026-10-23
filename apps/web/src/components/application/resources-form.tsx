@@ -121,14 +121,13 @@ export function ResourcesForm({ application }: { application: Application }) {
 			title="Resources"
 			description="Replicas and CPU / memory reservations and limits."
 		>
-			<div className="flex min-w-0 flex-col gap-7">
+			<div className="flex flex-col gap-6">
 				<div className="flex flex-col gap-3">
-					<div className="flex flex-wrap items-center justify-between gap-3">
+					<div className="flex items-center justify-between">
 						<Label>Replicas</Label>
 						<span className="text-sm text-muted-foreground">{replicas}</span>
 					</div>
 					<Slider
-						aria-label="Replicas"
 						value={[replicas]}
 						onValueChange={edit("replicas")}
 						min={0}
@@ -142,14 +141,13 @@ export function ResourcesForm({ application }: { application: Application }) {
 
 				<div className="grid gap-6 sm:grid-cols-2">
 					<div className="flex flex-col gap-3">
-						<div className="flex flex-wrap items-center justify-between gap-3">
+						<div className="flex items-center justify-between">
 							<Label>Memory reservation</Label>
 							<span className="text-sm text-muted-foreground">
 								{memoryReservation === 0 ? "None" : formatMemory(memoryReservation)}
 							</span>
 						</div>
 						<Slider
-							aria-label="Memory reservation"
 							value={[memoryReservation]}
 							onValueChange={edit("memoryReservation")}
 							min={0}
@@ -161,12 +159,11 @@ export function ResourcesForm({ application }: { application: Application }) {
 						)}
 					</div>
 					<div className="flex flex-col gap-3">
-						<div className="flex flex-wrap items-center justify-between gap-3">
+						<div className="flex items-center justify-between">
 							<Label>Memory limit</Label>
 							<span className="text-sm text-muted-foreground">{formatMemory(memoryLimit)}</span>
 						</div>
 						<Slider
-							aria-label="Memory limit"
 							value={[memoryLimit]}
 							onValueChange={edit("memoryLimit")}
 							min={0}
@@ -178,14 +175,13 @@ export function ResourcesForm({ application }: { application: Application }) {
 						)}
 					</div>
 					<div className="flex flex-col gap-3">
-						<div className="flex flex-wrap items-center justify-between gap-3">
+						<div className="flex items-center justify-between">
 							<Label>CPU reservation</Label>
 							<span className="text-sm text-muted-foreground">
 								{cpuReservation === 0 ? "None" : formatCpu(cpuReservation)}
 							</span>
 						</div>
 						<Slider
-							aria-label="CPU reservation"
 							value={[cpuReservation]}
 							onValueChange={edit("cpuReservation")}
 							min={0}
@@ -197,12 +193,11 @@ export function ResourcesForm({ application }: { application: Application }) {
 						)}
 					</div>
 					<div className="flex flex-col gap-3">
-						<div className="flex flex-wrap items-center justify-between gap-3">
+						<div className="flex items-center justify-between">
 							<Label>CPU limit</Label>
 							<span className="text-sm text-muted-foreground">{formatCpu(cpuLimit)}</span>
 						</div>
 						<Slider
-							aria-label="CPU limit"
 							value={[cpuLimit]}
 							onValueChange={edit("cpuLimit")}
 							min={0}

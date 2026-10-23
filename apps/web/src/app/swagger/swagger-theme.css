@@ -1,13 +1,13 @@
 /*
  * Dashboard-aligned Swagger UI theme.
  * Intro/auth chrome lives in React; vendor info + scheme strips are hidden.
- * Fonts: Geist for interface text; Geist Mono for paths and code.
+ * Fonts: Inter (--font-inter) + JetBrains Mono (--font-jetbrains-mono).
  */
 
 .swagger-explorer {
 	--sw-radius: var(--radius);
-	--sw-font: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
-	--sw-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+	--sw-font: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+	--sw-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
 	font-family: var(--sw-font);
 	-webkit-font-smoothing: antialiased;
 }
@@ -80,10 +80,10 @@
 }
 
 .swagger-explorer .swagger-ui .servers-title {
-	font-size: 0.75rem;
+	font-size: 0.6875rem;
 	font-weight: 500;
-	letter-spacing: 0;
-	text-transform: none;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
 	color: var(--muted-foreground);
 }
 
@@ -195,15 +195,6 @@
 	background: color-mix(in srgb, var(--muted) 80%, transparent);
 }
 
-.swagger-explorer .swagger-ui .opblock-tag small {
-	min-width: 0;
-	color: var(--muted-foreground);
-}
-
-.swagger-explorer .swagger-ui .renderedMarkdown p {
-	color: inherit;
-}
-
 .swagger-explorer .swagger-ui .opblock-tag-section.is-open > .opblock-tag,
 .swagger-explorer .swagger-ui .opblock-tag[data-is-open="true"] {
 	border-bottom: 1px solid var(--border);
@@ -295,48 +286,48 @@
 	letter-spacing: 0.05em;
 	text-align: center;
 	line-height: 1.4;
-	color: var(--primary-foreground);
-	background: var(--primary);
+	color: #fff;
+	background: var(--muted-foreground);
 }
 
 .swagger-explorer .swagger-ui .opblock.opblock-get .opblock-summary-method {
-	background: var(--primary);
+	background: #2563eb;
 }
 
 .swagger-explorer .swagger-ui .opblock.opblock-post .opblock-summary-method {
-	background: var(--primary);
+	background: #16a34a;
 }
 
 .swagger-explorer .swagger-ui .opblock.opblock-put .opblock-summary-method {
-	background: var(--primary);
+	background: #d97706;
 }
 
 .swagger-explorer .swagger-ui .opblock.opblock-delete .opblock-summary-method {
-	background: var(--primary);
+	background: #dc2626;
 }
 
 .swagger-explorer .swagger-ui .opblock.opblock-patch .opblock-summary-method {
-	background: var(--primary);
+	background: #7c3aed;
 }
 
 .dark .swagger-explorer .swagger-ui .opblock.opblock-get .opblock-summary-method {
-	background: var(--primary);
+	background: #3b82f6;
 }
 
 .dark .swagger-explorer .swagger-ui .opblock.opblock-post .opblock-summary-method {
-	background: var(--primary);
+	background: #22c55e;
 }
 
 .dark .swagger-explorer .swagger-ui .opblock.opblock-put .opblock-summary-method {
-	background: var(--primary);
+	background: #f59e0b;
 }
 
 .dark .swagger-explorer .swagger-ui .opblock.opblock-delete .opblock-summary-method {
-	background: var(--primary);
+	background: #f87171;
 }
 
 .dark .swagger-explorer .swagger-ui .opblock.opblock-patch .opblock-summary-method {
-	background: var(--primary);
+	background: #a78bfa;
 }
 
 .swagger-explorer .swagger-ui .opblock .opblock-summary-path,
@@ -407,8 +398,8 @@
 	border-radius: calc(var(--sw-radius) - 2px);
 	/* Swagger paints string spans in light green — keep a dark code surface
 	   in both themes so those colors stay readable. */
-	background: var(--control);
-	color: var(--foreground);
+	background: #18181b;
+	color: #fafafa;
 }
 
 .swagger-explorer .swagger-ui pre.curl.microlight code,
@@ -417,7 +408,7 @@
 }
 
 .swagger-explorer .swagger-ui .copy-to-clipboard {
-	color: var(--muted-foreground);
+	color: #a1a1aa;
 }
 
 .swagger-explorer .swagger-ui .copy-to-clipboard button {
@@ -472,10 +463,7 @@
 }
 
 .swagger-explorer .swagger-ui .dialog-ux .modal-ux {
-	width: min(28rem, calc(100vw - 32px));
-	min-width: 0;
-	max-width: calc(100vw - 32px);
-	max-height: calc(100dvh - 32px);
+	width: min(28rem, calc(100vw - 2rem));
 	margin: 0;
 	border: 1px solid var(--border);
 	border-radius: var(--sw-radius);
@@ -487,22 +475,17 @@
 
 .swagger-explorer .swagger-ui .dialog-ux .modal-dialog-ux,
 .swagger-explorer .swagger-ui .dialog-ux .modal-ux-inner {
-	display: flex;
-	min-height: 0;
-	max-height: calc(100dvh - 32px);
-	flex-direction: column;
 	border: 0;
 	background: transparent;
 }
 
 .swagger-explorer .swagger-ui .dialog-ux .modal-ux-header {
 	display: flex;
-	flex-shrink: 0;
 	align-items: center;
 	justify-content: space-between;
-	gap: 12px;
+	gap: 0.75rem;
 	margin: 0;
-	padding: 16px 20px;
+	padding: 1rem 1.15rem;
 	border-bottom: 1px solid var(--border);
 	background: transparent;
 }
@@ -510,7 +493,7 @@
 .swagger-explorer .swagger-ui .dialog-ux .modal-ux-header h3 {
 	margin: 0;
 	padding: 0;
-	font-size: 0.875rem;
+	font-size: 0.9375rem;
 	font-weight: 600;
 	letter-spacing: -0.01em;
 	color: var(--foreground);
@@ -518,10 +501,9 @@
 
 .swagger-explorer .swagger-ui .dialog-ux .modal-ux-header .close-modal {
 	display: grid;
-	flex-shrink: 0;
 	place-items: center;
-	width: 32px;
-	height: 32px;
+	width: 1.75rem;
+	height: 1.75rem;
 	margin: 0;
 	padding: 0;
 	border: 0;
@@ -544,11 +526,8 @@
 }
 
 .swagger-explorer .swagger-ui .dialog-ux .modal-ux-content {
-	min-height: 0;
-	max-height: none;
-	overflow-y: auto;
 	margin: 0;
-	padding: 20px;
+	padding: 1rem 1.15rem 1.15rem;
 	background: transparent;
 	color: var(--foreground);
 }
@@ -674,20 +653,4 @@
 .swagger-explorer .swagger-ui .loading-container .loading::after {
 	border-color: var(--border);
 	border-top-color: var(--foreground);
-}
-
-.swagger-explorer .swagger-ui .microlight :is(span, code) {
-	color: var(--foreground);
-}
-.swagger-explorer .swagger-ui .opblock-summary-method {
-	color: var(--primary-foreground);
-}
-
-@media (pointer: coarse) {
-	.swagger-explorer .swagger-ui :is(.btn, select, input, .close-modal) {
-		min-height: 44px;
-	}
-	.swagger-explorer .swagger-ui .close-modal {
-		min-width: 44px;
-	}
 }

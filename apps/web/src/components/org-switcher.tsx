@@ -4,7 +4,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronsUpDown, Plus } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -22,8 +21,8 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { authClient } from "@/lib/auth-client";
 import { toastError } from "@/lib/describe-error";
@@ -110,25 +109,27 @@ export function OrgSwitcher({ className }: { className?: string }) {
 					    shrink spilled over them between roughly 850 and 1000 px. */}
 					<Button
 						variant="ghost"
-						size="default"
-						className={cn("min-w-0 shrink gap-2 font-normal", className)}
+						size="sm"
+						className={cn("h-8 min-w-0 shrink gap-2 px-2 font-normal", className)}
 					>
 						{isPending ? (
 							<>
-								<Skeleton className="size-6 rounded-md" />
+								<Skeleton className="size-5 rounded" />
 								<Skeleton className="h-3.5 w-20" />
 							</>
 						) : (
 							<>
-								<Avatar className="size-6">
-									<AvatarImage src={logoUrl ?? undefined} alt="" />
-									<AvatarFallback className="text-xs">
+								{logoUrl ? (
+									// biome-ignore lint/performance/noImgElement: user-supplied white-label URL
+									<img src={logoUrl} alt="" className="size-5 shrink-0 rounded object-cover" />
+								) : (
+									<span className="flex size-5 shrink-0 items-center justify-center rounded bg-foreground text-[10px] font-semibold text-background">
 										{displayName?.charAt(0).toUpperCase() ?? "?"}
-									</AvatarFallback>
-								</Avatar>
+									</span>
+								)}
 								{/* A floor so the name ellipsises instead of shrinking to nothing;
 								    the search trigger next to it gives up the space instead. */}
-								<span className="min-w-0 max-w-24 truncate text-sm font-medium lg:max-w-48">
+								<span className="min-w-12 max-w-24 truncate text-sm font-medium lg:max-w-36">
 									{displayName ?? "Organization"}
 								</span>
 								<ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" />
@@ -146,7 +147,7 @@ export function OrgSwitcher({ className }: { className?: string }) {
 							onSelect={() => switchOrganization(org.id)}
 							className="gap-2"
 						>
-							<span className="flex size-5 shrink-0 items-center justify-center rounded border text-[11px] font-semibold">
+							<span className="flex size-5 shrink-0 items-center justify-center rounded border text-[10px] font-semibold">
 								{org.name.charAt(0).toUpperCase()}
 							</span>
 							<span className="truncate">{org.name}</span>
@@ -178,8 +179,8 @@ export function OrgSwitcher({ className }: { className?: string }) {
 						}}
 						className="flex flex-col gap-4"
 					>
-						<Field>
-							<FieldLabel htmlFor="org-name">Name</FieldLabel>
+						<div className="flex flex-col gap-2">
+							<Label htmlFor="org-name">Name</Label>
 							<Input
 								id="org-name"
 								placeholder="Acme Inc."
@@ -187,7 +188,7 @@ export function OrgSwitcher({ className }: { className?: string }) {
 								onChange={(event) => setName(event.target.value)}
 								autoFocus
 							/>
-						</Field>
+						</div>
 						<DialogFooter>
 							<Button type="submit" disabled={!name.trim() || isCreating}>
 								{isCreating ? "Creating..." : "Create"}

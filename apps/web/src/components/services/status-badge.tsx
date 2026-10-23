@@ -8,7 +8,7 @@ type ServiceStatus = "idle" | "running" | "done" | "error" | null | undefined;
 type ServiceStatusStyle = {
 	label: string;
 	status: StatusDotStatus;
-	variant: "secondary" | "default" | "outline";
+	variant: "secondary" | "success" | "destructive";
 };
 
 /** Also the fallback for a status the panel does not know yet. */
@@ -20,18 +20,18 @@ const SERVICE_STATUS_IDLE: ServiceStatusStyle = {
 
 const serviceStatusConfig: Record<string, ServiceStatusStyle> = {
 	idle: SERVICE_STATUS_IDLE,
-	running: { label: "Running", status: "success", variant: "default" },
+	running: { label: "Running", status: "success", variant: "success" },
 	// Legacy post-deploy status — treat as healthy/running in the UI.
-	done: { label: "Running", status: "success", variant: "default" },
-	error: { label: "Error", status: "error", variant: "outline" },
+	done: { label: "Running", status: "success", variant: "success" },
+	error: { label: "Error", status: "error", variant: "destructive" },
 };
 
 export function ServiceStatusBadge({ status }: { status: ServiceStatus }) {
 	const config = serviceStatusConfig[status ?? "idle"] ?? SERVICE_STATUS_IDLE;
 
 	return (
-		<Badge variant={config.variant} className="gap-1.5 font-medium">
-			<StatusDot status={config.status} className="bg-current ring-0 shadow-none" />
+		<Badge variant={config.variant} className="gap-1.5 font-normal">
+			<StatusDot status={config.status} className="ring-0" />
 			{config.label}
 		</Badge>
 	);
@@ -39,20 +39,21 @@ export function ServiceStatusBadge({ status }: { status: ServiceStatus }) {
 
 type DeploymentStatus = "queued" | "running" | "done" | "error" | "cancelled" | null | undefined;
 
-type BadgeVariant = "secondary" | "default" | "outline";
+type BadgeVariant = "secondary" | "success" | "destructive" | "info";
 
 /**
- * Only the badge treatment lives here — the words come from
+ * Only the badge colour lives here — the words come from
  * `deploymentStatusLabel`, so the badge, the dashboard list and the log drawer
  * cannot drift apart again (the badge used to say "Error" where the rest of
  * the panel said "Failed").
  */
 const deploymentBadgeVariant: Record<string, BadgeVariant> = {
 	queued: "secondary",
-	// Neutral tones and explicit labels keep the same status vocabulary as the dashboard.
-	running: "secondary",
-	done: "default",
-	error: "outline",
+	// Blue while it runs, green once it succeeded — the same reading as the dots
+	// in the dashboard list, which had the two colours the other way round here.
+	running: "info",
+	done: "success",
+	error: "destructive",
 	cancelled: "secondary",
 };
 
@@ -70,12 +71,9 @@ export function DeploymentStatusBadge({
 	const label = key === "queued" && queuePosition ? `${base} (#${queuePosition})` : base;
 
 	return (
-		<Badge variant={deploymentBadgeVariant[key] ?? "default"} className="gap-1.5 font-medium">
+		<Badge variant={deploymentBadgeVariant[key] ?? "success"} className="gap-1.5 font-normal">
 			{/* Only work in flight pulses; a finished deployment is a static fact. */}
-			<StatusDot
-				status={dot}
-				className={cn("bg-current ring-0 shadow-none", key === "running" && "animate-pulse")}
-			/>
+			<StatusDot status={dot} className={cn("ring-0", key === "running" && "animate-pulse")} />
 			{label}
 		</Badge>
 	);

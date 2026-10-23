@@ -1,15 +1,14 @@
 "use client";
 
-import { Download, Eye, EyeOff, Loader2, Pencil, Save, Search, Upload, X } from "lucide-react";
+import { Download, Eye, EyeOff, Loader2, Pencil, Save, Upload, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+
 import { capabilityHint } from "@/components/services/capability-hint";
 import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { CodeEditor } from "@/components/ui/code-editor";
 import { DisabledHint } from "@/components/ui/disabled-hint";
-import { Input } from "@/components/ui/input";
 import { type EnvEntry, mergeEnvText, parseEnvFile } from "@/lib/env-file";
 
 const MASK = "••••••••";
@@ -29,10 +28,6 @@ function EnvRows({
 	onEdit?: () => void;
 	editHint?: string;
 }) {
-	const [query, setQuery] = useState("");
-	const matching = entries.filter((entry) =>
-		entry.key.toLowerCase().includes(query.trim().toLowerCase()),
-	);
 	const [revealed, setRevealed] = useState<Set<string>>(() => new Set());
 	const allRevealed = entries.length > 0 && entries.every((entry) => revealed.has(entry.key));
 
@@ -45,93 +40,61 @@ function EnvRows({
 		});
 
 	return (
-		<Card className="min-w-0">
-			<CardContent className="overflow-hidden">
-				<div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
-					<p className="text-xs text-muted-foreground">
-						{entries.length} {entries.length === 1 ? "variable" : "variables"}
-					</p>
-					<div className="flex items-center gap-1">
-						<Button
-							type="button"
-							variant="ghost"
-							size="sm"
-							onClick={() =>
-								setRevealed(allRevealed ? new Set() : new Set(entries.map((entry) => entry.key)))
-							}
-						>
-							{allRevealed ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
-							{allRevealed ? "Hide all" : "Reveal all"}
+		<div className="overflow-hidden rounded-lg border border-border bg-card">
+			<div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
+				<p className="text-xs text-muted-foreground">
+					{entries.length} {entries.length === 1 ? "variable" : "variables"}
+				</p>
+				<div className="flex items-center gap-1">
+					<Button
+						type="button"
+						variant="ghost"
+						size="sm"
+						onClick={() =>
+							setRevealed(allRevealed ? new Set() : new Set(entries.map((entry) => entry.key)))
+						}
+					>
+						{allRevealed ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+						{allRevealed ? "Hide all" : "Reveal all"}
+					</Button>
+					<DisabledHint hint={onEdit ? undefined : editHint}>
+						<Button type="button" size="sm" onClick={onEdit} disabled={!onEdit}>
+							<Pencil className="size-3.5" />
+							Edit
 						</Button>
-						<DisabledHint hint={onEdit ? undefined : editHint}>
-							<Button type="button" size="sm" onClick={onEdit} disabled={!onEdit}>
-								<Pencil className="size-3.5" />
-								Edit
+					</DisabledHint>
+				</div>
+			</div>
+			<ul className="max-h-96 divide-y divide-border overflow-auto">
+				{entries.map((entry) => {
+					const shown = revealed.has(entry.key);
+					return (
+						<li key={entry.key} className="flex items-center gap-3 px-3 py-1.5 font-mono text-xs">
+							<span className="w-2/5 shrink-0 truncate text-foreground" title={entry.key}>
+								{entry.key}
+							</span>
+							<span
+								className="min-w-0 flex-1 truncate text-muted-foreground"
+								title={shown ? entry.value : undefined}
+							>
+								{shown ? entry.value || <span className="italic">(empty)</span> : MASK}
+							</span>
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon"
+								className="size-6 shrink-0"
+								aria-label={shown ? `Hide value of ${entry.key}` : `Reveal value of ${entry.key}`}
+								aria-pressed={shown}
+								onClick={() => toggle(entry.key)}
+							>
+								{shown ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
 							</Button>
-						</DisabledHint>
-					</div>
-				</div>
-				<div className="flex flex-wrap items-center gap-3 border-b px-4 py-3">
-					<div className="relative min-w-0 flex-1 sm:max-w-sm">
-						<Search
-							aria-hidden="true"
-							className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-						/>
-						<Input
-							type="search"
-							aria-label="Search variable names"
-							placeholder="Find a variable…"
-							value={query}
-							onChange={(event) => setQuery(event.target.value)}
-							className="pl-9"
-						/>
-					</div>
-					<p role="status" className="text-xs text-muted-foreground">
-						{matching.length} of {entries.length} shown · values stay hidden
-					</p>
-				</div>
-				{matching.length === 0 && (
-					<div className="px-4 py-8 text-center text-sm">
-						<p className="text-muted-foreground">No variable names match “{query}”.</p>
-						<Button variant="ghost" size="sm" onClick={() => setQuery("")}>
-							Clear search
-						</Button>
-					</div>
-				)}
-				<ul className="max-h-96 divide-y divide-border overflow-auto">
-					{matching.map((entry) => {
-						const shown = revealed.has(entry.key);
-						return (
-							<li key={entry.key} className="flex items-start gap-3 px-4 py-3 font-mono text-xs">
-								<span
-									className="w-2/5 shrink-0 break-all leading-6 text-foreground"
-									title={entry.key}
-								>
-									{entry.key}
-								</span>
-								<span
-									className="min-w-0 flex-1 whitespace-pre-wrap break-all leading-6 text-muted-foreground"
-									title={shown ? entry.value : undefined}
-								>
-									{shown ? entry.value || <span className="italic">(empty)</span> : MASK}
-								</span>
-								<Button
-									type="button"
-									variant="ghost"
-									size="icon"
-									className="size-8 shrink-0"
-									aria-label={shown ? `Hide value of ${entry.key}` : `Reveal value of ${entry.key}`}
-									aria-pressed={shown}
-									onClick={() => toggle(entry.key)}
-								>
-									{shown ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
-								</Button>
-							</li>
-						);
-					})}
-				</ul>
-			</CardContent>
-		</Card>
+						</li>
+					);
+				})}
+			</ul>
+		</div>
 	);
 }
 
@@ -265,7 +228,7 @@ export function EnvEditor({
 	return (
 		<div className="space-y-3">
 			<div className="flex flex-wrap items-center justify-end gap-2">
-				<Input
+				<input
 					ref={fileInputRef}
 					type="file"
 					accept=".env,text/plain"
@@ -302,7 +265,6 @@ export function EnvEditor({
 			</div>
 			{unlocked ? (
 				<CodeEditor
-					label="Environment variables"
 					value={draft}
 					onChange={setDraft}
 					protect={false}
@@ -324,7 +286,7 @@ export function EnvEditor({
 					editHint={`Read-only — ${capabilityHint("secrets.write")}.`}
 				/>
 			)}
-			<div className="flex flex-wrap items-center justify-between gap-3 gap-3">
+			<div className="flex items-center justify-between gap-3">
 				<p className="text-xs text-muted-foreground">
 					One <code className="font-mono">KEY=VALUE</code> pair per line. Lines starting with{" "}
 					<code className="font-mono">#</code> are comments.

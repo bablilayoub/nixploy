@@ -40,8 +40,8 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useSaveMutation } from "@/hooks/use-save-mutation";
@@ -251,7 +251,7 @@ export function EnvironmentActions({
 					</DropdownMenuItem>
 					<DropdownMenuSeparator />
 					<DropdownMenuItem
-						variant="default"
+						variant="destructive"
 						disabled={isOnlyEnvironment || !canDelete}
 						title={
 							!canDelete
@@ -295,17 +295,17 @@ export function EnvironmentActions({
 						}}
 						className="flex flex-col gap-4"
 					>
-						<Field>
-							<FieldLabel htmlFor="rename-environment-name">Name</FieldLabel>
+						<div className="flex flex-col gap-2">
+							<Label htmlFor="rename-environment-name">Name</Label>
 							<Input
 								id="rename-environment-name"
 								value={name}
 								onChange={(event) => setName(event.target.value)}
 								autoFocus
 							/>
-						</Field>
-						<Field>
-							<FieldLabel htmlFor="rename-environment-description">Description</FieldLabel>
+						</div>
+						<div className="flex flex-col gap-2">
+							<Label htmlFor="rename-environment-description">Description</Label>
 							<Textarea
 								id="rename-environment-description"
 								placeholder="Optional description"
@@ -313,7 +313,7 @@ export function EnvironmentActions({
 								onChange={(event) => setDescription(event.target.value)}
 								rows={3}
 							/>
-						</Field>
+						</div>
 						<DialogFooter>
 							<Button type="submit" disabled={!name.trim() || rename.isPending}>
 								{rename.isPending && <Loader2 className="size-4 animate-spin" />}
@@ -342,15 +342,15 @@ export function EnvironmentActions({
 						}}
 						className="flex flex-col gap-4"
 					>
-						<Field>
-							<FieldLabel htmlFor="duplicate-environment-name">New name</FieldLabel>
+						<div className="flex flex-col gap-2">
+							<Label htmlFor="duplicate-environment-name">New name</Label>
 							<Input
 								id="duplicate-environment-name"
 								value={duplicateName}
 								onChange={(event) => setDuplicateName(event.target.value)}
 								autoFocus
 							/>
-						</Field>
+						</div>
 						<DialogFooter>
 							<Button type="submit" disabled={!duplicateName.trim() || duplicate.isPending}>
 								{duplicate.isPending && <Loader2 className="size-4 animate-spin" />}
@@ -380,15 +380,15 @@ export function EnvironmentActions({
 						}}
 						className="flex flex-col gap-4"
 					>
-						<Field>
-							<FieldLabel htmlFor="clone-environment-name">New name</FieldLabel>
+						<div className="flex flex-col gap-2">
+							<Label htmlFor="clone-environment-name">New name</Label>
 							<Input
 								id="clone-environment-name"
 								value={cloneName}
 								onChange={(event) => setCloneName(event.target.value)}
 								autoFocus
 							/>
-						</Field>
+						</div>
 						<DialogFooter>
 							<Button type="submit" disabled={!cloneName.trim() || clone.isPending}>
 								{clone.isPending && <Loader2 className="size-4 animate-spin" />}
@@ -419,10 +419,10 @@ export function EnvironmentActions({
 						<li>Every domain, route and deployment history of those services</li>
 						<li>The environment's own variables</li>
 					</ul>
-					<Field className="space-y-1.5">
-						<FieldLabel htmlFor="delete-environment-confirm">
+					<div className="space-y-1.5">
+						<Label htmlFor="delete-environment-confirm">
 							Type <span className="font-mono font-semibold">{environment.name}</span> to confirm
-						</FieldLabel>
+						</Label>
 						<Input
 							id="delete-environment-confirm"
 							value={deleteConfirmation}
@@ -430,11 +430,11 @@ export function EnvironmentActions({
 							placeholder={environment.name}
 							autoComplete="off"
 						/>
-					</Field>
+					</div>
 					<AlertDialogFooter>
 						<AlertDialogCancel disabled={remove.isPending}>Cancel</AlertDialogCancel>
 						<AlertDialogAction
-							variant="outline"
+							variant="destructive"
 							onClick={(event) => {
 								// The cascade can take many seconds — keep the dialog (and its
 								// spinner) open until onSuccess closes it.

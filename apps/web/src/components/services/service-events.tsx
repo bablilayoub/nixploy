@@ -22,7 +22,6 @@ import { QueryState } from "@/components/query-state";
 import { EmptyState } from "@/components/services/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatDateTime, formatRelative } from "@/lib/format";
@@ -56,7 +55,7 @@ const KIND_ICONS: Record<string, LucideIcon> = {
 
 const SEVERITY_STYLES: Record<string, string> = {
 	error: "border-destructive/40 bg-destructive/10 text-destructive",
-	warning: "border-warning/40 bg-warning/10 text-warning",
+	warning: "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400",
 	info: "border-border bg-muted text-muted-foreground",
 };
 
@@ -115,10 +114,10 @@ function EventRow({ event }: { event: ServiceEventItem }) {
 	const Icon = KIND_ICONS[event.kind] ?? CircleDot;
 	const severity = SEVERITY_STYLES[event.severity] ?? SEVERITY_STYLES.info;
 	return (
-		<li className="flex gap-4 px-5 py-5">
+		<li className="flex gap-3 px-4 py-3">
 			<div
 				className={cn(
-					"mt-0.5 flex size-8 flex-none items-center justify-center rounded-full border",
+					"mt-0.5 flex size-7 flex-none items-center justify-center rounded-full border",
 					severity,
 				)}
 			>
@@ -182,67 +181,64 @@ export function ServiceEvents({
 	const events = query.data?.pages.flatMap((page) => page.events) ?? [];
 
 	return (
-		<Card className="min-w-0">
-			<CardContent className="flex flex-col gap-4 overflow-hidden">
-				<div className="flex flex-wrap gap-1 rounded-lg border bg-muted p-1">
-					{FILTER_GROUPS.map((entry) => (
-						<Button
-							key={entry.id}
-							size="sm"
-							variant={group === entry.id ? "secondary" : "ghost"}
-							className="h-9 px-3 text-xs"
-							aria-pressed={group === entry.id}
-							onClick={() => setGroup(entry.id)}
-						>
-							{entry.label}
-						</Button>
-					))}
-				</div>
+		<div className="flex flex-col gap-3">
+			<div className="flex flex-wrap gap-1">
+				{FILTER_GROUPS.map((entry) => (
+					<Button
+						key={entry.id}
+						size="sm"
+						variant={group === entry.id ? "secondary" : "ghost"}
+						className="h-7 px-2.5 text-xs"
+						onClick={() => setGroup(entry.id)}
+					>
+						{entry.label}
+					</Button>
+				))}
+			</div>
 
-				<QueryState
-					isPending={query.isPending}
-					isError={query.isError}
-					error={query.error}
-					onRetry={() => void query.refetch()}
-					skeleton={
-						<div className="divide-y rounded-lg border">
-							<Skeleton className="h-14 w-full" />
-							<Skeleton className="h-14 w-full" />
-							<Skeleton className="h-14 w-full" />
-						</div>
-					}
-					isEmpty={events.length === 0}
-					empty={
-						<EmptyState
-							icon={History}
-							title="No events yet"
-							description={
-								group === "all"
-									? "Deploys, restarts, failed tasks and config changes will show up here as they happen."
-									: "Nothing of this kind has happened to this service yet."
-							}
-						/>
-					}
-				>
-					<ul className="divide-y rounded-lg border">
-						{events.map((event) => (
-							<EventRow key={event.serviceEventId} event={event} />
-						))}
-					</ul>
-					{query.hasNextPage ? (
-						<Button
-							variant="outline"
-							size="sm"
-							className="self-center"
-							disabled={query.isFetchingNextPage}
-							onClick={() => void query.fetchNextPage()}
-						>
-							{query.isFetchingNextPage ? <Loader2 className="size-4 animate-spin" /> : null}
-							Load older events
-						</Button>
-					) : null}
-				</QueryState>
-			</CardContent>
-		</Card>
+			<QueryState
+				isPending={query.isPending}
+				isError={query.isError}
+				error={query.error}
+				onRetry={() => void query.refetch()}
+				skeleton={
+					<div className="divide-y rounded-lg border">
+						<Skeleton className="h-14 w-full" />
+						<Skeleton className="h-14 w-full" />
+						<Skeleton className="h-14 w-full" />
+					</div>
+				}
+				isEmpty={events.length === 0}
+				empty={
+					<EmptyState
+						icon={History}
+						title="No events yet"
+						description={
+							group === "all"
+								? "Deploys, restarts, failed tasks and config changes will show up here as they happen."
+								: "Nothing of this kind has happened to this service yet."
+						}
+					/>
+				}
+			>
+				<ul className="divide-y rounded-lg border">
+					{events.map((event) => (
+						<EventRow key={event.serviceEventId} event={event} />
+					))}
+				</ul>
+				{query.hasNextPage ? (
+					<Button
+						variant="outline"
+						size="sm"
+						className="self-center"
+						disabled={query.isFetchingNextPage}
+						onClick={() => void query.fetchNextPage()}
+					>
+						{query.isFetchingNextPage ? <Loader2 className="size-4 animate-spin" /> : null}
+						Load older events
+					</Button>
+				) : null}
+			</QueryState>
+		</div>
 	);
 }

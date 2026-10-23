@@ -16,7 +16,6 @@ import { useSaveBar } from "@/components/services/save-bar";
 import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
 import { Button } from "@/components/ui/button";
 import { DisabledHint } from "@/components/ui/disabled-hint";
-import { Field, FieldLabel } from "@/components/ui/field";
 import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -199,17 +198,6 @@ export function SourceConfig({ application }: { application: Application }) {
 	const bitbucketProviders = useQuery(trpc.bitbucket.all.queryOptions());
 	const giteaProviders = useQuery(trpc.gitea.all.queryOptions());
 
-	const providerQuery =
-		sourceType === "github"
-			? githubProviders
-			: sourceType === "gitlab"
-				? gitlabProviders
-				: sourceType === "bitbucket"
-					? bitbucketProviders
-					: sourceType === "gitea"
-						? giteaProviders
-						: null;
-
 	// Each provider router returns rows joined with the shared gitProvider
 	// record; normalize to { id, name } for the select.
 	const providerOptions: { id: string; name: string }[] =
@@ -322,11 +310,11 @@ export function SourceConfig({ application }: { application: Application }) {
 			title="Source"
 			description="Where the code or image for this application comes from."
 		>
-			<div className="flex min-w-0 flex-col gap-5">
-				<Field>
-					<FieldLabel>Source type</FieldLabel>
+			<div className="flex flex-col gap-4">
+				<div className="flex flex-col gap-2">
+					<Label>Source type</Label>
 					<Select value={sourceType} onValueChange={(v) => changeSourceType(v as SourceType)}>
-						<SelectTrigger aria-label="Source type" className="w-full sm:max-w-xs">
+						<SelectTrigger className="w-full sm:max-w-xs">
 							<SelectValue />
 						</SelectTrigger>
 						<SelectContent>
@@ -337,36 +325,36 @@ export function SourceConfig({ application }: { application: Application }) {
 							))}
 						</SelectContent>
 					</Select>
-				</Field>
+				</div>
 
 				{sourceType === "git" && (
 					<>
-						<Field>
-							<FieldLabel htmlFor="git-url">Repository URL</FieldLabel>
+						<div className="flex flex-col gap-2">
+							<Label htmlFor="git-url">Repository URL</Label>
 							<Input
 								id="git-url"
 								placeholder="https://github.com/user/repo.git"
 								value={gitUrl}
 								onChange={(e) => draft.patch({ gitUrl: e.target.value })}
 							/>
-						</Field>
+						</div>
 						<div className="grid gap-4 sm:grid-cols-2">
-							<Field>
-								<FieldLabel htmlFor="git-branch">Branch</FieldLabel>
+							<div className="flex flex-col gap-2">
+								<Label htmlFor="git-branch">Branch</Label>
 								<Input
 									id="git-branch"
 									placeholder="main"
 									value={gitBranch}
 									onChange={(e) => draft.patch({ gitBranch: e.target.value })}
 								/>
-							</Field>
-							<Field>
-								<FieldLabel>SSH key (optional)</FieldLabel>
+							</div>
+							<div className="flex flex-col gap-2">
+								<Label>SSH key (optional)</Label>
 								<Select
 									value={sshKeyId}
 									onValueChange={(value) => draft.patch({ sshKeyId: value })}
 								>
-									<SelectTrigger aria-label="SSH key (optional)" className="w-full">
+									<SelectTrigger className="w-full">
 										<SelectValue placeholder="None" />
 									</SelectTrigger>
 									<SelectContent>
@@ -378,26 +366,20 @@ export function SourceConfig({ application }: { application: Application }) {
 										))}
 									</SelectContent>
 								</Select>
-							</Field>
+							</div>
 						</div>
 					</>
 				)}
 
 				{isGitProviderSource(sourceType) && (
 					<>
-						<Field>
-							<FieldLabel htmlFor="application-source-provider">
-								{GIT_PROVIDER_LABELS[sourceType]} provider
-							</FieldLabel>
+						<div className="flex flex-col gap-2">
+							<Label>{GIT_PROVIDER_LABELS[sourceType]} Provider</Label>
 							<Select
 								value={providerId}
 								onValueChange={(value) => draft.patch({ providerId: value })}
 							>
-								<SelectTrigger
-									id="application-source-provider"
-									disabled={!providerQuery?.isSuccess}
-									className="w-full sm:max-w-xs"
-								>
+								<SelectTrigger className="w-full sm:max-w-xs">
 									<SelectValue placeholder="Select a provider" />
 								</SelectTrigger>
 								<SelectContent>
@@ -408,32 +390,13 @@ export function SourceConfig({ application }: { application: Application }) {
 									))}
 								</SelectContent>
 							</Select>
-							{providerQuery?.isError && (
-								<div
-									role="alert"
-									className="flex flex-wrap items-center gap-3 rounded-md border border-destructive/25 p-3 text-sm"
-								>
-									<p className="text-muted-foreground">
-										Couldn’t load Git providers. Your source settings are unchanged.
-									</p>
-									<Button
-										variant="outline"
-										size="sm"
-										disabled={providerQuery.isFetching}
-										onClick={() => void providerQuery.refetch()}
-									>
-										Retry providers
-									</Button>
-								</div>
-							)}
-
-							{providerQuery?.isSuccess && providerOptions.length === 0 && (
+							{providerOptions.length === 0 && (
 								<p className="text-xs text-muted-foreground">
 									No {GIT_PROVIDER_LABELS[sourceType]} providers configured. Add one under Settings
 									→ Git providers.
 								</p>
 							)}
-						</Field>
+						</div>
 						<GitProviderRepoPicker
 							sourceType={sourceType}
 							providerId={providerId}
@@ -447,22 +410,22 @@ export function SourceConfig({ application }: { application: Application }) {
 
 				{sourceType === "docker" && (
 					<>
-						<Field>
-							<FieldLabel htmlFor="docker-image">Docker image</FieldLabel>
+						<div className="flex flex-col gap-2">
+							<Label htmlFor="docker-image">Docker image</Label>
 							<Input
 								id="docker-image"
 								placeholder="nginx:latest"
 								value={dockerImage}
 								onChange={(e) => draft.patch({ dockerImage: e.target.value })}
 							/>
-						</Field>
-						<Field>
-							<FieldLabel>Registry (optional)</FieldLabel>
+						</div>
+						<div className="flex flex-col gap-2">
+							<Label>Registry (optional)</Label>
 							<Select
 								value={registryId}
 								onValueChange={(value) => draft.patch({ registryId: value })}
 							>
-								<SelectTrigger aria-label="Registry (optional)" className="w-full sm:max-w-xs">
+								<SelectTrigger className="w-full sm:max-w-xs">
 									<SelectValue placeholder="None" />
 								</SelectTrigger>
 								<SelectContent>
@@ -474,9 +437,9 @@ export function SourceConfig({ application }: { application: Application }) {
 									))}
 								</SelectContent>
 							</Select>
-						</Field>
-						<div className="flex items-center justify-between gap-4 rounded-lg bg-secondary p-4">
-							<div className="flex min-w-0 flex-col gap-1">
+						</div>
+						<div className="flex items-center justify-between rounded-md border p-3">
+							<div className="flex flex-col gap-1">
 								<Label htmlFor="auto-update-image">Auto-update image</Label>
 								<p className="text-xs text-muted-foreground">
 									Check this tag&apos;s digest hourly and redeploy when it moves. Public registries
@@ -491,16 +454,16 @@ export function SourceConfig({ application }: { application: Application }) {
 						</div>
 						{registryId === NONE && (
 							<div className="grid gap-4 sm:grid-cols-2">
-								<Field>
-									<FieldLabel htmlFor="docker-username">Username (optional)</FieldLabel>
+								<div className="flex flex-col gap-2">
+									<Label htmlFor="docker-username">Username (optional)</Label>
 									<Input
 										id="docker-username"
 										value={dockerUsername}
 										onChange={(e) => draft.patch({ dockerUsername: e.target.value })}
 									/>
-								</Field>
-								<Field>
-									<FieldLabel htmlFor="docker-password">Password (optional)</FieldLabel>
+								</div>
+								<div className="flex flex-col gap-2">
+									<Label htmlFor="docker-password">Password (optional)</Label>
 									<Input
 										id="docker-password"
 										type="password"
@@ -508,7 +471,7 @@ export function SourceConfig({ application }: { application: Application }) {
 										value={dockerPassword}
 										onChange={(e) => draft.patch({ dockerPassword: e.target.value })}
 									/>
-								</Field>
+								</div>
 							</div>
 						)}
 					</>
@@ -518,8 +481,8 @@ export function SourceConfig({ application }: { application: Application }) {
 
 				{isGitLike && (
 					<>
-						<Field>
-							<FieldLabel htmlFor="build-path">Build path</FieldLabel>
+						<div className="flex flex-col gap-2">
+							<Label htmlFor="build-path">Build path</Label>
 							<Input
 								id="build-path"
 								placeholder="/"
@@ -527,8 +490,8 @@ export function SourceConfig({ application }: { application: Application }) {
 								value={buildPath}
 								onChange={(e) => draft.patch({ buildPath: e.target.value })}
 							/>
-						</Field>
-						<div className="flex items-center justify-between gap-4 rounded-lg bg-secondary p-4">
+						</div>
+						<div className="flex items-center justify-between rounded-md border p-3">
 							<div className="flex flex-col gap-1">
 								<Label htmlFor="auto-deploy">Auto deploy</Label>
 								<p className="text-xs text-muted-foreground">
@@ -541,8 +504,8 @@ export function SourceConfig({ application }: { application: Application }) {
 								onCheckedChange={(checked) => draft.patch({ autoDeploy: checked })}
 							/>
 						</div>
-						<Field>
-							<FieldLabel htmlFor="watch-paths">Watch paths (optional)</FieldLabel>
+						<div className="flex flex-col gap-2">
+							<Label htmlFor="watch-paths">Watch paths (optional)</Label>
 							<Textarea
 								id="watch-paths"
 								className="min-h-24 font-mono text-xs sm:max-w-lg"
@@ -559,10 +522,10 @@ export function SourceConfig({ application }: { application: Application }) {
 								<HelpLink slug="git" />
 							</p>
 							{watchPathsProblem && <p className="text-xs text-destructive">{watchPathsProblem}</p>}
-						</Field>
+						</div>
 						{isGitProviderSource(sourceType) && (
 							<>
-								<div className="flex items-center justify-between gap-4 rounded-lg bg-secondary p-4">
+								<div className="flex items-center justify-between rounded-md border p-3">
 									<div className="flex flex-col gap-1">
 										<Label htmlFor="preview-deploys">Preview deployments</Label>
 										<p className="text-xs text-muted-foreground">
@@ -577,7 +540,7 @@ export function SourceConfig({ application }: { application: Application }) {
 										}
 									/>
 								</div>
-								<div className="flex items-center justify-between gap-4 rounded-lg bg-secondary p-4">
+								<div className="flex items-center justify-between rounded-md border p-3">
 									<div className="flex flex-col gap-1">
 										<Label htmlFor="preview-fork-gate">Fork PRs require approval</Label>
 										<p className="text-xs text-muted-foreground">

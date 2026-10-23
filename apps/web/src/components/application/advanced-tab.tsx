@@ -1,14 +1,6 @@
 "use client";
 
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/ui/select";
-
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { useSyncedTab } from "@/hooks/use-synced-tab";
 
 import { useApplication } from "./application-context";
@@ -20,16 +12,17 @@ import { RedirectsManager } from "./redirects-manager";
 import { RollbacksManager } from "./rollbacks-manager";
 import { SecurityManager } from "./security-manager";
 import { SwarmConfig } from "./swarm-config";
+import { UnderlineTabsList, UnderlineTabsTrigger } from "./underline-tabs";
 
-const ADVANCED_CATEGORIES = [
-	{ value: "mounts", label: "Mounts", description: "Volumes, files and bind mounts" },
-	{ value: "ports", label: "Ports", description: "Direct container connections" },
-	{ value: "redirects", label: "Redirects", description: "URL forwarding rules" },
-	{ value: "security", label: "Security", description: "Access and request protection" },
-	{ value: "healthcheck", label: "Healthcheck", description: "Container readiness checks" },
-	{ value: "placement", label: "Placement", description: "Where replicas can run" },
-	{ value: "swarm", label: "Swarm", description: "Updates, scaling and runtime" },
-	{ value: "rollbacks", label: "Rollbacks", description: "Restore a deployment snapshot" },
+const ADVANCED_TABS = [
+	"mounts",
+	"ports",
+	"redirects",
+	"security",
+	"healthcheck",
+	"placement",
+	"swarm",
+	"rollbacks",
 ];
 
 export function AdvancedTab() {
@@ -37,76 +30,44 @@ export function AdvancedTab() {
 	const applicationId = application.applicationId;
 	// Third level of the page's tabs: kept in its own `?advanced=` param so
 	// `?tab=advanced&advanced=swarm` deep-links without touching `?tab=`.
-	const [tab, selectTab] = useSyncedTab(
-		"mounts",
-		(value) => ADVANCED_CATEGORIES.some((category) => category.value === value),
-		{
-			param: "advanced",
-		},
-	);
+	const [tab, selectTab] = useSyncedTab("mounts", (value) => ADVANCED_TABS.includes(value), {
+		param: "advanced",
+	});
 
 	return (
-		<Tabs
-			value={tab}
-			onValueChange={selectTab}
-			orientation="vertical"
-			className="flex-col lg:grid lg:grid-cols-[14rem_minmax(0,1fr)] lg:items-start lg:gap-6 w-full"
-		>
-			<div className="grid gap-2 text-sm font-medium lg:hidden">
-				Advanced section
-				<Select value={tab} onValueChange={selectTab}>
-					<SelectTrigger aria-label="Advanced section" className="w-full min-w-0">
-						<SelectValue />
-					</SelectTrigger>
-					<SelectContent>
-						{ADVANCED_CATEGORIES.map((category) => (
-							<SelectItem key={category.value} value={category.value}>
-								{category.label}
-							</SelectItem>
-						))}
-					</SelectContent>
-				</Select>
-				<span className="text-xs font-normal text-muted-foreground">
-					{ADVANCED_CATEGORIES.find((category) => category.value === tab)?.description}
-				</span>
-			</div>
-			<TabsList
-				aria-label="Advanced configuration categories"
-				className="hidden lg:flex lg:w-full lg:items-stretch"
-			>
-				{ADVANCED_CATEGORIES.map((category) => (
-					<TabsTrigger key={category.value} value={category.value}>
-						<span className="min-w-0">
-							<span className="block text-sm font-medium">{category.label}</span>
-							<span className="mt-1 block text-xs font-normal leading-relaxed text-muted-foreground">
-								{category.description}
-							</span>
-						</span>
-					</TabsTrigger>
-				))}
-			</TabsList>
-			<TabsContent value="mounts" className="mt-2">
+		<Tabs value={tab} onValueChange={selectTab} className="w-full">
+			<UnderlineTabsList>
+				<UnderlineTabsTrigger value="mounts">Mounts</UnderlineTabsTrigger>
+				<UnderlineTabsTrigger value="ports">Ports</UnderlineTabsTrigger>
+				<UnderlineTabsTrigger value="redirects">Redirects</UnderlineTabsTrigger>
+				<UnderlineTabsTrigger value="security">Security</UnderlineTabsTrigger>
+				<UnderlineTabsTrigger value="healthcheck">Healthcheck</UnderlineTabsTrigger>
+				<UnderlineTabsTrigger value="placement">Placement</UnderlineTabsTrigger>
+				<UnderlineTabsTrigger value="swarm">Swarm</UnderlineTabsTrigger>
+				<UnderlineTabsTrigger value="rollbacks">Rollbacks</UnderlineTabsTrigger>
+			</UnderlineTabsList>
+			<TabsContent value="mounts" className="mt-6">
 				<MountsManager target={{ kind: "application", applicationId }} />
 			</TabsContent>
-			<TabsContent value="ports" className="mt-2">
+			<TabsContent value="ports" className="mt-6">
 				<PortsManager applicationId={applicationId} />
 			</TabsContent>
-			<TabsContent value="redirects" className="mt-2">
+			<TabsContent value="redirects" className="mt-6">
 				<RedirectsManager applicationId={applicationId} />
 			</TabsContent>
-			<TabsContent value="security" className="mt-2">
+			<TabsContent value="security" className="mt-6">
 				<SecurityManager applicationId={applicationId} />
 			</TabsContent>
-			<TabsContent value="healthcheck" className="mt-2">
+			<TabsContent value="healthcheck" className="mt-6">
 				<HealthcheckManager application={application} />
 			</TabsContent>
-			<TabsContent value="placement" className="mt-2">
+			<TabsContent value="placement" className="mt-6">
 				<PlacementManager application={application} />
 			</TabsContent>
-			<TabsContent value="swarm" className="mt-2">
+			<TabsContent value="swarm" className="mt-6">
 				<SwarmConfig application={application} />
 			</TabsContent>
-			<TabsContent value="rollbacks" className="mt-2">
+			<TabsContent value="rollbacks" className="mt-6">
 				<RollbacksManager applicationId={applicationId} />
 			</TabsContent>
 		</Tabs>

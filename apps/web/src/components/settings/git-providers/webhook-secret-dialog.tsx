@@ -87,7 +87,7 @@ export function WebhookSecretDialog({
 							{instructions} The secret is shown only while this dialog is open — copy it now.
 						</DialogDescription>
 					</DialogHeader>
-					<div className="grid gap-5">
+					<div className="grid gap-4">
 						<div className="grid gap-2">
 							<Label htmlFor="webhook-url">Payload URL</Label>
 							<div className="flex items-center gap-2">

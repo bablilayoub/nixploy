@@ -5,6 +5,7 @@ import type { inferRouterOutputs } from "@trpc/server";
 import { format } from "date-fns";
 import { HardDrive, Loader2, Pencil, Plug, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
+import { SettingsSection } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
 import { EmptyState } from "@/components/services/empty-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
@@ -20,8 +21,8 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@/components/ui/dialog";
-import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
 	Select,
 	SelectContent,
@@ -124,10 +125,20 @@ export function DestinationsView() {
 	});
 
 	return (
-		<div className="flex min-w-0 flex-col gap-7">
+		<div className="flex flex-col gap-6">
 			<PageHeader
 				title="Backup storage"
 				description="S3-compatible buckets — or this host's disk — for database and volume backups."
+			/>
+			<SettingsSection
+				wide
+				title={
+					<span className="flex items-center gap-2">
+						<HardDrive className="size-4 text-muted-foreground" />
+						Backup storage
+					</span>
+				}
+				description="Where database, volume and instance backups are stored. S3-compatible buckets for any org; the panel host's local disk (instance admin only)."
 				actions={
 					<Dialog open={open} onOpenChange={setOpen}>
 						<DialogTrigger asChild>
@@ -143,9 +154,9 @@ export function DestinationsView() {
 									Connect an S3-compatible bucket, or keep backups on this host's disk.
 								</DialogDescription>
 							</DialogHeader>
-							<div className="grid gap-5">
-								<Field>
-									<FieldLabel htmlFor="dest-provider">Storage</FieldLabel>
+							<div className="grid gap-4">
+								<div className="grid gap-2">
+									<Label htmlFor="dest-provider">Storage</Label>
 									<Select
 										value={provider}
 										onValueChange={(value) => setProvider(value as Provider)}
@@ -173,63 +184,63 @@ export function DestinationsView() {
 											</p>
 										)
 									)}
-								</Field>
-								<Field>
-									<FieldLabel htmlFor="dest-name">Name</FieldLabel>
+								</div>
+								<div className="grid gap-2">
+									<Label htmlFor="dest-name">Name</Label>
 									<Input
 										id="dest-name"
 										placeholder={provider === "local" ? "e.g. local-disk" : "e.g. backups-s3"}
 										value={name}
 										onChange={(e) => setName(e.target.value)}
 									/>
-								</Field>
+								</div>
 								{provider === "s3" && (
 									<>
-										<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-											<Field>
-												<FieldLabel htmlFor="dest-bucket">Bucket</FieldLabel>
+										<div className="grid grid-cols-2 gap-4">
+											<div className="grid gap-2">
+												<Label htmlFor="dest-bucket">Bucket</Label>
 												<Input
 													id="dest-bucket"
 													value={bucket}
 													onChange={(e) => setBucket(e.target.value)}
 												/>
-											</Field>
-											<Field>
-												<FieldLabel htmlFor="dest-region">Region</FieldLabel>
+											</div>
+											<div className="grid gap-2">
+												<Label htmlFor="dest-region">Region</Label>
 												<Input
 													id="dest-region"
 													placeholder="us-east-1"
 													value={region}
 													onChange={(e) => setRegion(e.target.value)}
 												/>
-											</Field>
+											</div>
 										</div>
-										<Field>
-											<FieldLabel htmlFor="dest-endpoint">Endpoint</FieldLabel>
+										<div className="grid gap-2">
+											<Label htmlFor="dest-endpoint">Endpoint</Label>
 											<Input
 												id="dest-endpoint"
 												placeholder="https://s3.us-east-1.amazonaws.com"
 												value={endpoint}
 												onChange={(e) => setEndpoint(e.target.value)}
 											/>
-										</Field>
-										<Field>
-											<FieldLabel htmlFor="dest-access-key">Access key ID</FieldLabel>
+										</div>
+										<div className="grid gap-2">
+											<Label htmlFor="dest-access-key">Access key ID</Label>
 											<Input
 												id="dest-access-key"
 												value={accessKey}
 												onChange={(e) => setAccessKey(e.target.value)}
 											/>
-										</Field>
-										<Field>
-											<FieldLabel htmlFor="dest-secret-key">Secret access key</FieldLabel>
+										</div>
+										<div className="grid gap-2">
+											<Label htmlFor="dest-secret-key">Secret access key</Label>
 											<Input
 												id="dest-secret-key"
 												type="password"
 												value={secretAccessKey}
 												onChange={(e) => setSecretAccessKey(e.target.value)}
 											/>
-										</Field>
+										</div>
 									</>
 								)}
 							</div>
@@ -263,8 +274,7 @@ export function DestinationsView() {
 						</DialogContent>
 					</Dialog>
 				}
-			/>
-			<div className="min-w-0">
+			>
 				<QueryState
 					isPending={isPending}
 					isError={isError}
@@ -368,7 +378,7 @@ export function DestinationsView() {
 						</TableBody>
 					</Table>
 				</QueryState>
-			</div>
+			</SettingsSection>
 			{isInstanceAdmin && <InstanceBackups />}
 			<Dialog open={editing !== null} onOpenChange={(isOpen) => !isOpen && setEditing(null)}>
 				<DialogContent>
@@ -400,54 +410,54 @@ export function DestinationsView() {
 								});
 							}
 						}}
-						className="grid gap-5"
+						className="grid gap-4"
 					>
-						<Field>
-							<FieldLabel htmlFor="edit-dest-name">Name</FieldLabel>
+						<div className="grid gap-2">
+							<Label htmlFor="edit-dest-name">Name</Label>
 							<Input
 								id="edit-dest-name"
 								value={editName}
 								onChange={(e) => setEditName(e.target.value)}
 							/>
-						</Field>
+						</div>
 						{!(editing && isLocal(editing)) && (
 							<>
-								<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-									<Field>
-										<FieldLabel htmlFor="edit-dest-bucket">Bucket</FieldLabel>
+								<div className="grid grid-cols-2 gap-4">
+									<div className="grid gap-2">
+										<Label htmlFor="edit-dest-bucket">Bucket</Label>
 										<Input
 											id="edit-dest-bucket"
 											value={editBucket}
 											onChange={(e) => setEditBucket(e.target.value)}
 										/>
-									</Field>
-									<Field>
-										<FieldLabel htmlFor="edit-dest-region">Region</FieldLabel>
+									</div>
+									<div className="grid gap-2">
+										<Label htmlFor="edit-dest-region">Region</Label>
 										<Input
 											id="edit-dest-region"
 											value={editRegion}
 											onChange={(e) => setEditRegion(e.target.value)}
 										/>
-									</Field>
+									</div>
 								</div>
-								<Field>
-									<FieldLabel htmlFor="edit-dest-endpoint">Endpoint</FieldLabel>
+								<div className="grid gap-2">
+									<Label htmlFor="edit-dest-endpoint">Endpoint</Label>
 									<Input
 										id="edit-dest-endpoint"
 										value={editEndpoint}
 										onChange={(e) => setEditEndpoint(e.target.value)}
 									/>
-								</Field>
-								<Field>
-									<FieldLabel htmlFor="edit-dest-access-key">Access key ID</FieldLabel>
+								</div>
+								<div className="grid gap-2">
+									<Label htmlFor="edit-dest-access-key">Access key ID</Label>
 									<Input
 										id="edit-dest-access-key"
 										value={editAccessKey}
 										onChange={(e) => setEditAccessKey(e.target.value)}
 									/>
-								</Field>
-								<Field>
-									<FieldLabel htmlFor="edit-dest-secret-key">Secret access key</FieldLabel>
+								</div>
+								<div className="grid gap-2">
+									<Label htmlFor="edit-dest-secret-key">Secret access key</Label>
 									<Input
 										id="edit-dest-secret-key"
 										type="password"
@@ -455,7 +465,7 @@ export function DestinationsView() {
 										value={editSecretAccessKey}
 										onChange={(e) => setEditSecretAccessKey(e.target.value)}
 									/>
-								</Field>
+								</div>
 							</>
 						)}
 						<DialogFooter>

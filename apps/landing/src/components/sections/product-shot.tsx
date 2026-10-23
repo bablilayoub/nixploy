@@ -1,102 +1,34 @@
-"use client";
+import { BorderBeam } from "@/components/ui/border-beam";
+import { Safari } from "@/components/ui/safari";
 
-import { ArrowUpRight } from "lucide-react";
-import Image from "next/image";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { productCaptures } from "@/lib/product-captures";
-
-const views = [
-	{
-		key: "workspace",
-		label: "Projects",
-		description: "Projects, environments and service health in one place.",
-		alt: "Project overview with environments, service health and recent deployment activity",
-	},
-	{
-		key: "deployments",
-		label: "Deployments",
-		description: "Follow a release from its commit through build logs and deployment history.",
-		alt: "Deployment history with commit details, release status and log actions",
-	},
-	{
-		key: "monitoring",
-		label: "Monitoring",
-		description: "Find a service, inspect its health and open the tools you need.",
-		alt: "Fleet monitoring with searchable services and a selected service detail",
-	},
-] as const;
-
-/** Browse real example captures, with tab keyboard behavior and no live-data claims. */
+/*
+ * The panel itself, in @magicui/safari, lit by @magicui/border-beam. The
+ * capture is a real instance taken by tools/screenshots.
+ */
 export function ProductShot() {
 	return (
-		<section
-			id="workspace"
-			aria-label="Explore the Nixploy workspace"
-			className="signal-product container-page scroll-mt-24"
-		>
-			<Tabs defaultValue="workspace" className="reference-product-frame">
-				<div className="flex flex-wrap items-center justify-between gap-x-5 rounded-t-2xl bg-background px-3 sm:px-5">
-					<TabsList
-						aria-label="Workspace preview"
-						className="flex min-w-0 flex-wrap gap-x-2 sm:gap-x-5"
-					>
-						{views.map((view) => (
-							<TabsTrigger
-								key={view.key}
-								value={view.key}
-								className="min-h-12 border-b-2 border-transparent px-2 text-sm focus-visible:-outline-offset-4 text-muted-foreground hover:text-foreground data-[state=active]:border-foreground data-[state=active]:font-medium data-[state=active]:text-foreground"
-							>
-								{view.label}
-							</TabsTrigger>
-						))}
-					</TabsList>
-					<p className="py-3 text-xs text-muted-foreground">Example workspace</p>
+		<section className="relative pb-24">
+			<div className="container-page">
+				{/* The frame's image area has a fixed aspect and the capture is taller,
+				    so `object-cover` slices the last row of the panel off with a hard
+				    edge. The fade ends the shot instead of cutting it — and it takes
+				    the beam with it, so the border does not stop in mid-air either. */}
+				<div className="relative overflow-hidden rounded-[22px] [mask-image:linear-gradient(to_bottom,#000_72%,transparent_99%)]">
+					<Safari
+						url="panel.acme.dev"
+						imageSrc="/screenshots/02-dashboard.png"
+						imageAlt="The Nixploy panel: projects, services with their state, deployments in the last 24 hours and Docker containers"
+						imageSizes="(min-width: 1360px) 1280px, 100vw"
+						priority
+						className="w-full"
+					/>
+					<BorderBeam
+						duration={9}
+						size={340}
+						className="from-transparent via-foreground/60 to-transparent"
+					/>
 				</div>
-				{views.map((view) => (
-					<TabsContent
-						key={view.key}
-						value={view.key}
-						className="m-0 focus-visible:-outline-offset-2"
-					>
-						<figure>
-							<section
-								aria-label={`${view.label} screenshot, horizontally scrollable on small screens`}
-								// biome-ignore lint/a11y/noNoninteractiveTabindex: keyboard users need to scroll the screenshot viewport
-								tabIndex={0}
-								className="max-h-[430px] overflow-auto bg-background sm:max-h-[620px]"
-							>
-								{(["light", "dark"] as const).map((theme) => (
-									<Image
-										key={theme}
-										src={productCaptures[view.key][theme]}
-										alt={`${view.alt}, ${theme} theme`}
-										width={1440}
-										height={1000}
-										priority={view.key === "workspace"}
-										sizes="(min-width:1360px) 1280px, (min-width:768px) 100vw, 760px"
-										className={`h-auto w-full min-w-[760px] ${theme === "light" ? "dark:hidden" : "hidden dark:block"}`}
-									/>
-								))}
-							</section>
-							<figcaption className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2 px-5 py-4 text-xs">
-								<p className="max-w-xl text-muted-foreground">{view.description}</p>
-								{(["light", "dark"] as const).map((theme) => (
-									<a
-										key={theme}
-										href={productCaptures[view.key][theme]}
-										target="_blank"
-										rel="noreferrer"
-										className={`min-h-11 items-center gap-2 underline-offset-4 hover:underline ${theme === "light" ? "inline-flex dark:hidden" : "hidden dark:inline-flex"}`}
-									>
-										View full size<span className="sr-only"> ({view.label}, opens a new tab)</span>
-										<ArrowUpRight aria-hidden="true" className="size-4" />
-									</a>
-								))}
-							</figcaption>
-						</figure>
-					</TabsContent>
-				))}
-			</Tabs>
+			</div>
 		</section>
 	);
 }

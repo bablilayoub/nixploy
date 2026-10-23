@@ -20,8 +20,8 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@/components/ui/dialog";
-import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
 	Table,
@@ -115,29 +115,29 @@ export function GiteaPanel() {
 							<DialogTitle>Add Gitea provider</DialogTitle>
 							<DialogDescription>Connect with a personal access token.</DialogDescription>
 						</DialogHeader>
-						<div className="grid gap-5">
-							<Field>
-								<FieldLabel htmlFor="gitea-name">Name</FieldLabel>
+						<div className="grid gap-4">
+							<div className="grid gap-2">
+								<Label htmlFor="gitea-name">Name</Label>
 								<Input id="gitea-name" value={name} onChange={(e) => setName(e.target.value)} />
-							</Field>
-							<Field>
-								<FieldLabel htmlFor="gitea-url">Gitea URL</FieldLabel>
+							</div>
+							<div className="grid gap-2">
+								<Label htmlFor="gitea-url">Gitea URL</Label>
 								<Input
 									id="gitea-url"
 									placeholder="https://gitea.com"
 									value={giteaUrl}
 									onChange={(e) => setGiteaUrl(e.target.value)}
 								/>
-							</Field>
-							<Field>
-								<FieldLabel htmlFor="gitea-token">Access token</FieldLabel>
+							</div>
+							<div className="grid gap-2">
+								<Label htmlFor="gitea-token">Access token</Label>
 								<Input
 									id="gitea-token"
 									type="password"
 									value={accessToken}
 									onChange={(e) => setAccessToken(e.target.value)}
 								/>
-							</Field>
+							</div>
 						</div>
 						<DialogFooter>
 							<Button

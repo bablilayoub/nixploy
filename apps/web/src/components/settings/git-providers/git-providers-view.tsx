@@ -9,7 +9,6 @@ import { GiteaPanel } from "@/components/settings/git-providers/gitea-panel";
 import { GithubPanel } from "@/components/settings/git-providers/github-panel";
 import { GitlabPanel } from "@/components/settings/git-providers/gitlab-panel";
 import { PageHeader } from "@/components/shell";
-import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSyncedTab } from "@/hooks/use-synced-tab";
 import { useTRPC } from "@/lib/trpc";
@@ -87,44 +86,42 @@ export function GitProvidersView() {
 	}, [searchParams, router, queryClient, trpc.github.all, syncInstallation.mutateAsync]);
 
 	return (
-		<Card className="min-w-0">
-			<CardContent className="flex flex-col gap-5">
-				<PageHeader
-					title="Git providers"
-					description="Connect GitHub, GitLab, Bitbucket, or Gitea for repository deploys."
-				/>
-				<Tabs value={tab} onValueChange={selectTab}>
-					<TabsList aria-label="Git provider type">
-						{(
-							[
-								["github", "GitHub"],
-								["gitlab", "GitLab"],
-								["bitbucket", "Bitbucket"],
-								["gitea", "Gitea"],
-							] as const
-						).map(([value, label]) => (
-							<TabsTrigger key={value} value={value}>
-								{label}
-								{counts[value] > 0 ? (
-									<span className="ms-1.5 tabular-nums text-muted-foreground">{counts[value]}</span>
-								) : null}
-							</TabsTrigger>
-						))}
-					</TabsList>
-					<TabsContent value="github" className="mt-4">
-						<GithubPanel />
-					</TabsContent>
-					<TabsContent value="gitlab" className="mt-4">
-						<GitlabPanel />
-					</TabsContent>
-					<TabsContent value="bitbucket" className="mt-4">
-						<BitbucketPanel />
-					</TabsContent>
-					<TabsContent value="gitea" className="mt-4">
-						<GiteaPanel />
-					</TabsContent>
-				</Tabs>
-			</CardContent>
-		</Card>
+		<div className="flex flex-col gap-4">
+			<PageHeader
+				title="Git providers"
+				description="Connect GitHub, GitLab, Bitbucket, or Gitea for repository deploys."
+			/>
+			<Tabs value={tab} onValueChange={selectTab}>
+				<TabsList>
+					{(
+						[
+							["github", "GitHub"],
+							["gitlab", "GitLab"],
+							["bitbucket", "Bitbucket"],
+							["gitea", "Gitea"],
+						] as const
+					).map(([value, label]) => (
+						<TabsTrigger key={value} value={value}>
+							{label}
+							{counts[value] > 0 ? (
+								<span className="ms-1.5 tabular-nums text-muted-foreground">{counts[value]}</span>
+							) : null}
+						</TabsTrigger>
+					))}
+				</TabsList>
+				<TabsContent value="github" className="mt-4">
+					<GithubPanel />
+				</TabsContent>
+				<TabsContent value="gitlab" className="mt-4">
+					<GitlabPanel />
+				</TabsContent>
+				<TabsContent value="bitbucket" className="mt-4">
+					<BitbucketPanel />
+				</TabsContent>
+				<TabsContent value="gitea" className="mt-4">
+					<GiteaPanel />
+				</TabsContent>
+			</Tabs>
+		</div>
 	);
 }

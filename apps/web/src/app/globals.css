@@ -1,20 +1,21 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "./component-states.css";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-	--radius-sm: calc(var(--radius) - 4px);
-	--radius-md: calc(var(--radius) - 2px);
-	--radius-lg: var(--radius);
-	--radius-xl: calc(var(--radius) + 4px);
-	--radius-2xl: calc(var(--radius) + 8px);
-	--radius-3xl: calc(var(--radius) + 12px);
-	--radius-4xl: calc(var(--radius) + 16px);
+	--radius-sm: calc(var(--radius) - 2px);
+	--radius-md: var(--radius);
+	--radius-lg: calc(var(--radius) + 2px);
+	--radius-xl: calc(var(--radius) + 6px);
+	--radius-2xl: calc(var(--radius) + 10px);
+	--radius-3xl: calc(var(--radius) + 14px);
+	--radius-4xl: calc(var(--radius) + 18px);
 	--font-sans:
-		var(--font-geist), ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+		var(--font-inter), ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
 	--font-mono:
-		var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+		var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 	--color-background: var(--background);
 	--color-foreground: var(--foreground);
 	--color-card: var(--card);
@@ -57,95 +58,85 @@
 }
 
 :root {
-	--background: oklch(1 0 0);
-	--foreground: oklch(0.145 0 0);
-	--card: oklch(1 0 0);
-	--card-foreground: oklch(0.145 0 0);
-	--popover: oklch(1 0 0);
-	--popover-foreground: oklch(0.145 0 0);
-	--primary: oklch(0.205 0 0);
-	--primary-foreground: oklch(0.985 0 0);
-	--secondary: oklch(0.97 0 0);
-	--secondary-foreground: oklch(0.205 0 0);
-	--muted: oklch(0.97 0 0);
-	--muted-foreground: oklch(0.556 0 0);
-	--accent: oklch(0.97 0 0);
-	--accent-foreground: oklch(0.205 0 0);
-	--destructive: var(--primary);
-	--border: oklch(0.922 0 0);
-	--input: oklch(0.922 0 0);
-	--ring: oklch(0.708 0 0);
-	--chart-1: oklch(0.87 0 0);
-	--chart-2: oklch(0.556 0 0);
-	--chart-3: oklch(0.439 0 0);
-	--chart-4: oklch(0.371 0 0);
-	--chart-5: oklch(0.269 0 0);
 	--radius: 0.625rem;
-	--sidebar: oklch(0.985 0 0);
-	--sidebar-foreground: oklch(0.145 0 0);
-	--sidebar-primary: var(--primary);
-	--sidebar-primary-foreground: var(--primary-foreground);
-	--sidebar-accent: oklch(0.97 0 0);
-	--sidebar-accent-foreground: oklch(0.205 0 0);
-	--sidebar-border: oklch(0.922 0 0);
-	--sidebar-ring: oklch(0.708 0 0);
-	--brand: var(--primary);
-	--control: var(--background);
+	/* Compatibility aliases keep new workflows on the familiar neutral palette. */
+	--control: var(--input);
 	--panel-inset: var(--muted);
 	--selection: var(--accent);
 	--chart-axis: var(--muted-foreground);
-	--success: var(--foreground);
-	--warning: var(--muted-foreground);
-	--info: var(--muted-foreground);
-	color-scheme: light;
+	--background: #fafafa;
+	--foreground: #1c1917;
+	--card: #ffffff;
+	--card-foreground: #1c1917;
+	--popover: #ffffff;
+	--popover-foreground: #1c1917;
+	--primary: #1c1917;
+	--primary-foreground: #fafaf9;
+	/* Organization accent (UX audit F34). Defaults to --primary, so the panel
+	   stays monochrome until a white-label accent is saved; OrgBrandingProvider
+	   overrides it on the root element. */
+	--brand: var(--primary);
+	--secondary: #f5f5f4;
+	--secondary-foreground: #1c1917;
+	--muted: #f5f5f4;
+	--muted-foreground: #78716c;
+	--accent: #f5f5f4;
+	--accent-foreground: #1c1917;
+	--destructive: #dc2626;
+	--border: #e7e5e4;
+	--input: #e7e5e4;
+	--ring: #a8a29e;
+	--success: #16a34a;
+	--warning: #d97706;
+	--info: #2563eb;
+	/* Monochrome series: steps of the foreground, readable on both themes. */
+	--chart-1: var(--foreground);
+	--chart-2: color-mix(in oklab, var(--foreground) 70%, transparent);
+	--chart-3: color-mix(in oklab, var(--foreground) 55%, transparent);
+	--chart-4: color-mix(in oklab, var(--foreground) 40%, transparent);
+	--chart-5: color-mix(in oklab, var(--foreground) 25%, transparent);
+	/* Match shadcn-admin: sidebar tracks page bg so inset gutters read as one canvas */
+	--sidebar: var(--background);
+	--sidebar-foreground: var(--foreground);
+	--sidebar-primary: var(--primary);
+	--sidebar-primary-foreground: var(--primary-foreground);
+	--sidebar-accent: var(--accent);
+	--sidebar-accent-foreground: var(--accent-foreground);
+	--sidebar-border: var(--border);
+	--sidebar-ring: var(--ring);
 }
 
 .dark {
-	--background: oklch(0.145 0 0);
-	--foreground: oklch(0.985 0 0);
-	--card: oklch(0.205 0 0);
-	--card-foreground: oklch(0.985 0 0);
-	--popover: oklch(0.205 0 0);
-	--popover-foreground: oklch(0.985 0 0);
-	--primary: oklch(0.922 0 0);
-	--primary-foreground: oklch(0.205 0 0);
-	--secondary: oklch(0.269 0 0);
-	--secondary-foreground: oklch(0.985 0 0);
-	--muted: oklch(0.269 0 0);
-	--muted-foreground: oklch(0.708 0 0);
-	--accent: oklch(0.269 0 0);
-	--accent-foreground: oklch(0.985 0 0);
-	--destructive: var(--primary);
-	--border: oklch(1 0 0 / 10%);
-	--input: oklch(1 0 0 / 15%);
-	--ring: oklch(0.556 0 0);
-	--chart-1: oklch(0.87 0 0);
-	--chart-2: oklch(0.556 0 0);
-	--chart-3: oklch(0.439 0 0);
-	--chart-4: oklch(0.371 0 0);
-	--chart-5: oklch(0.269 0 0);
-	--sidebar: oklch(0.205 0 0);
-	--sidebar-foreground: oklch(0.985 0 0);
-	--sidebar-primary: var(--primary);
-	--sidebar-primary-foreground: var(--primary-foreground);
-	--sidebar-accent: oklch(0.269 0 0);
-	--sidebar-accent-foreground: oklch(0.985 0 0);
-	--sidebar-border: oklch(1 0 0 / 10%);
-	--sidebar-ring: oklch(0.556 0 0);
+	/* Deeper canvas so cards actually lift (Vercel zinc-ish). */
+	--background: #09090b;
+	--foreground: #fafafa;
+	--card: #121214;
+	--card-foreground: #fafafa;
+	--popover: #18181b;
+	--popover-foreground: #fafafa;
+	--primary: #fafafa;
+	--primary-foreground: #09090b;
 	--brand: var(--primary);
-	--control: var(--background);
-	--panel-inset: var(--muted);
-	--selection: var(--accent);
-	--chart-axis: var(--muted-foreground);
-	--success: var(--foreground);
-	--warning: var(--muted-foreground);
-	--info: var(--muted-foreground);
-	color-scheme: dark;
+	--secondary: #1c1c1f;
+	--secondary-foreground: #fafafa;
+	--muted: #1c1c1f;
+	--muted-foreground: #a1a1aa;
+	--accent: #1c1c1f;
+	--accent-foreground: #fafafa;
+	--destructive: #f87171;
+	--border: rgb(255 255 255 / 10%);
+	--input: rgb(255 255 255 / 12%);
+	--ring: #71717a;
+	--success: #4ade80;
+	--warning: #fbbf24;
+	--info: #60a5fa;
 }
 
 @layer base {
 	* {
 		@apply border-border outline-ring/50;
+		scrollbar-width: thin;
+		scrollbar-color: var(--border) transparent;
 	}
 	html {
 		@apply overflow-x-hidden;
@@ -158,12 +149,29 @@
 	}
 	body {
 		@apply min-h-svh w-full bg-background text-foreground antialiased;
-		line-height: 1.5;
 	}
 	button:not(:disabled),
 	[role="button"]:not(:disabled) {
 		cursor: pointer;
 	}
+}
+
+/*
+ * Horizontal scroll hint for tables. The `local` gradients travel with the
+ * content and the `scroll` shadows stay pinned to the edges, so a shadow shows
+ * up exactly when there is more table in that direction and disappears at the
+ * ends — no JS, no measuring, and nothing to see when the table fits.
+ */
+@utility scroll-shadow-x {
+	background:
+		linear-gradient(to right, var(--background) 40%, transparent) left center / 2rem 100% no-repeat
+		local,
+		linear-gradient(to left, var(--background) 40%, transparent) right center / 2rem 100% no-repeat
+		local,
+		radial-gradient(farthest-side at 0 50%, rgb(0 0 0 / 14%), transparent) left center / 0.75rem
+		100% no-repeat scroll,
+		radial-gradient(farthest-side at 100% 50%, rgb(0 0 0 / 14%), transparent) right center / 0.75rem
+		100% no-repeat scroll;
 }
 
 @utility no-scrollbar {
@@ -229,18 +237,6 @@ body[data-activity-tray="1"] [data-sonner-toaster][data-y-position="bottom"] {
 }
 
 @media (prefers-reduced-motion: reduce) {
-	*,
-	*::before,
-	*::after {
-		/* biome-ignore lint/complexity/noImportantStyles: honor the user preference over component motion */
-		animation-duration: 0.01ms !important;
-		/* biome-ignore lint/complexity/noImportantStyles: honor the user preference over component motion */
-		animation-iteration-count: 1 !important;
-		/* biome-ignore lint/complexity/noImportantStyles: honor the user preference over component motion */
-		transition-duration: 0.01ms !important;
-		/* biome-ignore lint/complexity/noImportantStyles: honor the user preference over component motion */
-		scroll-behavior: auto !important;
-	}
 	.animate-pulse,
 	.animate-ping {
 		animation: none;
@@ -264,68 +260,15 @@ body[data-activity-tray="1"] [data-sonner-toaster][data-y-position="bottom"] {
 	[data-slot="dialog-close"],
 	[data-slot="dropdown-menu-item"],
 	[data-slot="select-item"] {
-		min-height: 44px;
+		min-height: 2.75rem;
 	}
 	[data-slot="button"][data-size^="icon"],
 	[data-slot="dialog-close"],
 	[data-slot="command-palette-trigger-mobile"] {
-		min-width: 44px;
-		min-height: 44px;
+		min-width: 2.75rem;
+		min-height: 2.75rem;
 	}
 	[data-slot="input"] {
-		min-height: 44px;
-	}
-}
-
-@media (pointer: coarse) {
-	[data-ui="button"],
-	[role="checkbox"],
-	[role="switch"],
-	[data-slot="sheet-close"],
-	[data-slot="dialog-close"] {
-		min-height: 44px;
-		min-width: 44px;
-	}
-}
-
-@media (pointer: coarse) {
-	[data-slot="tabs-list"] {
-		min-height: 3.25rem;
-	}
-}
-
-[data-slot="chart"] .recharts-surface:focus-visible {
-	outline: 2px solid var(--ring);
-	outline-offset: 3px;
-	border-radius: var(--radius);
-}
-
-@layer base {
-	form,
-	fieldset {
-		min-width: 0;
-	}
-	p,
-	h1,
-	h2,
-	h3 {
-		overflow-wrap: anywhere;
-	}
-}
-
-html {
-	scroll-padding-top: var(--app-chrome-height, 0px);
-	scroll-padding-bottom: var(--app-savebar-height, 0px);
-}
-@media (pointer: coarse) {
-	[data-slot="command-item"],
-	[data-slot="sidebar-menu-button"] {
-		min-height: 44px;
-	}
-}
-
-@media (pointer: coarse) {
-	[data-slot="slider"] {
-		min-height: 44px;
+		min-height: 2.75rem;
 	}
 }

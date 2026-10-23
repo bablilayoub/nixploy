@@ -20,8 +20,8 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@/components/ui/dialog";
-import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
 	Table,
@@ -139,15 +139,15 @@ export function GithubPanel() {
 								Create a provider, then register a GitHub App for it.
 							</DialogDescription>
 						</DialogHeader>
-						<Field>
-							<FieldLabel htmlFor="github-name">Name</FieldLabel>
+						<div className="grid gap-2">
+							<Label htmlFor="github-name">Name</Label>
 							<Input
 								id="github-name"
 								placeholder="e.g. my-org"
 								value={name}
 								onChange={(e) => setName(e.target.value)}
 							/>
-						</Field>
+						</div>
 						<DialogFooter>
 							<Button
 								disabled={createMutation.isPending || !name}
@@ -220,9 +220,9 @@ export function GithubPanel() {
 										{format(new Date(github.createdAt), "MMM d, yyyy")}
 									</TableCell>
 									<TableCell>
-										<div className="flex flex-wrap items-center justify-end gap-2">
+										<div className="flex items-center justify-end gap-1">
 											<Button
-												variant={configured ? "outline" : "default"}
+												variant="outline"
 												size="sm"
 												title={manageHint}
 												disabled={

@@ -3,15 +3,15 @@ import { cn } from "@/lib/utils";
 export type StatusDotStatus = "success" | "warning" | "error" | "info" | "neutral";
 
 const statusColors: Record<StatusDotStatus, string> = {
-	success: "bg-foreground",
-	warning: "border border-foreground bg-transparent rounded-sm",
-	error: "bg-foreground rounded-none rotate-45",
-	info: "bg-muted-foreground",
-	neutral: "border border-muted-foreground bg-transparent",
+	success: "bg-success",
+	warning: "bg-warning",
+	error: "bg-destructive",
+	info: "bg-info",
+	neutral: "bg-muted-foreground/50",
 };
 
 /**
- * Status indicator — a neutral shape instead of a pill
+ * Status indicator — a small colored dot instead of a pill
  * badge. Pair with a text label.
  */
 export function StatusDot({ status, className }: { status: StatusDotStatus; className?: string }) {

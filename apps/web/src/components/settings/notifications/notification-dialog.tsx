@@ -459,21 +459,18 @@ export function NotificationDialog({
 						event.preventDefault();
 						submit();
 					}}
-					className="grid min-w-0 grid-cols-1 gap-5"
+					className="grid gap-4"
 				>
-					<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-						<div className="grid min-w-0 grid-cols-1 gap-2">
-							<Label htmlFor="notification-name">
-								Name <span className="text-xs font-normal text-muted-foreground">(required)</span>
-							</Label>
+					<div className="grid grid-cols-2 gap-4">
+						<div className="grid gap-2">
+							<Label htmlFor="notification-name">Name</Label>
 							<Input
 								id="notification-name"
-								required
 								value={name}
 								onChange={(e) => setName(e.target.value)}
 							/>
 						</div>
-						<div className="grid min-w-0 grid-cols-1 gap-2">
+						<div className="grid gap-2">
 							<Label>Type</Label>
 							<Select
 								value={type}
@@ -483,7 +480,7 @@ export function NotificationDialog({
 									setValues({});
 								}}
 							>
-								<SelectTrigger aria-label="Type" className="w-full">
+								<SelectTrigger>
 									<SelectValue />
 								</SelectTrigger>
 								<SelectContent>
@@ -505,16 +502,10 @@ export function NotificationDialog({
 					)}
 
 					{fields.map((field) => (
-						<div key={field.key} className="grid min-w-0 grid-cols-1 gap-2">
-							<Label htmlFor={`notification-${field.key}`}>
-								{field.label}
-								{field.required && !keepStoredConfig && (
-									<span className="text-xs font-normal text-muted-foreground"> (required)</span>
-								)}
-							</Label>
+						<div key={field.key} className="grid gap-2">
+							<Label htmlFor={`notification-${field.key}`}>{field.label}</Label>
 							<Input
 								id={`notification-${field.key}`}
-								required={field.required && !keepStoredConfig}
 								type={field.type ?? "text"}
 								placeholder={field.placeholder}
 								value={values[field.key] ?? ""}
@@ -530,11 +521,11 @@ export function NotificationDialog({
 
 					<Separator />
 
-					<div className="grid min-w-0 grid-cols-1 gap-2">
+					<div className="grid gap-2">
 						<Label>Notify on</Label>
-						<div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+						<div className="grid grid-cols-2 gap-2">
 							{EVENT_TOGGLES.map((eventToggle) => (
-								<div key={eventToggle.key} className="flex min-w-0 items-center gap-2">
+								<div key={eventToggle.key} className="flex items-center gap-2">
 									<Checkbox
 										id={`event-${eventToggle.key}`}
 										checked={Boolean(events[eventToggle.key])}
@@ -545,26 +536,15 @@ export function NotificationDialog({
 											}))
 										}
 									/>
-									<Label
-										htmlFor={`event-${eventToggle.key}`}
-										className="block break-words font-normal"
-									>
+									<Label htmlFor={`event-${eventToggle.key}`} className="font-normal">
 										{eventToggle.label}
 									</Label>
 								</div>
 							))}
 						</div>
 					</div>
-					{missingRequired && (
-						<p className="text-xs text-muted-foreground" role="status">
-							Complete the required channel fields to continue.
-						</p>
-					)}
 					<DialogFooter>
-						<Button type="button" variant="outline" disabled={saving} onClick={close}>
-							Cancel
-						</Button>
-						<Button type="submit" disabled={saving || !name.trim() || missingRequired}>
+						<Button type="submit" disabled={saving || !name || missingRequired}>
 							{saving && <Loader2 className="size-4 animate-spin" />}
 							{editing ? "Save" : "Add channel"}
 						</Button>

@@ -28,8 +28,8 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@/components/ui/dialog";
-import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
 	Select,
 	SelectContent,
@@ -169,7 +169,7 @@ export function ApiKeysCard() {
 		const { error } = await authClient.apiKey.delete({ keyId });
 		if (error) {
 			toastError(error, "Failed to delete API key");
-			throw error;
+			return;
 		}
 		toast.success("API key deleted");
 		await loadKeys();
@@ -253,23 +253,23 @@ export function ApiKeysCard() {
 											Pick the narrowest scope the client needs.
 										</DialogDescription>
 									</DialogHeader>
-									<div className="grid gap-5">
-										<Field>
-											<FieldLabel htmlFor="api-key-name">Name</FieldLabel>
+									<div className="grid gap-4">
+										<div className="grid gap-2">
+											<Label htmlFor="api-key-name">Name</Label>
 											<Input
 												id="api-key-name"
 												placeholder="e.g. CLI on my laptop"
 												value={name}
 												onChange={(e) => setName(e.target.value)}
 											/>
-										</Field>
-										<Field>
-											<FieldLabel>Scope</FieldLabel>
+										</div>
+										<div className="grid gap-2">
+											<Label>Scope</Label>
 											<Select
 												value={scope}
 												onValueChange={(value) => setScope(value as ApiKeyScope)}
 											>
-												<SelectTrigger aria-label="Scope">
+												<SelectTrigger>
 													<SelectValue />
 												</SelectTrigger>
 												<SelectContent>
@@ -283,11 +283,11 @@ export function ApiKeysCard() {
 											<p className="text-xs text-muted-foreground">
 												{API_KEY_SCOPE_DESCRIPTIONS[scope]}
 											</p>
-										</Field>
-										<Field>
-											<FieldLabel>Organization</FieldLabel>
+										</div>
+										<div className="grid gap-2">
+											<Label>Organization</Label>
 											<Select value={organizationId} onValueChange={setOrganizationId}>
-												<SelectTrigger aria-label="Organization">
+												<SelectTrigger>
 													<SelectValue placeholder="Select an organization" />
 												</SelectTrigger>
 												<SelectContent>
@@ -301,11 +301,11 @@ export function ApiKeysCard() {
 											<p className="text-xs text-muted-foreground">
 												The key can only act for this organization.
 											</p>
-										</Field>
-										<Field>
-											<FieldLabel>Expires</FieldLabel>
+										</div>
+										<div className="grid gap-2">
+											<Label>Expires</Label>
 											<Select value={expiration} onValueChange={setExpiration}>
-												<SelectTrigger aria-label="Expires">
+												<SelectTrigger>
 													<SelectValue />
 												</SelectTrigger>
 												<SelectContent>
@@ -321,7 +321,7 @@ export function ApiKeysCard() {
 													Keys always expire — only the instance admin can create one that does not.
 												</p>
 											)}
-										</Field>
+										</div>
 									</div>
 									<DialogFooter>
 										<Button disabled={isPending || !name || !organizationId} onClick={createKey}>

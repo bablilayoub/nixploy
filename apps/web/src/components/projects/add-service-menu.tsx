@@ -3,7 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { capabilityHint } from "@/components/services/capability-hint";
 import { CopyButton } from "@/components/services/copy-button";
@@ -24,7 +24,6 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Field, FieldLabel } from "@/components/ui/field";
 import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -143,13 +142,6 @@ export function AddServiceMenu({
 	const canManageDomains = can("domains.manage");
 
 	const [dialog, setDialog] = useState<ServiceDialog | null>(null);
-	const serviceTrigger = useRef<HTMLButtonElement>(null);
-	const restoreServiceTrigger = (event: Event) => {
-		if (serviceTrigger.current?.isConnected) {
-			event.preventDefault();
-			serviceTrigger.current.focus({ preventScroll: true });
-		}
-	};
 
 	useEffect(() => {
 		if (!openDialog) return;
@@ -378,11 +370,7 @@ export function AddServiceMenu({
 		<>
 			<DropdownMenu>
 				<DropdownMenuTrigger asChild>
-					<Button
-						ref={serviceTrigger}
-						disabled={disabled}
-						title={disabled ? disabledReason : undefined}
-					>
+					<Button disabled={disabled} title={disabled ? disabledReason : undefined}>
 						<Plus className="size-4" />
 						Add service
 						<ChevronDown className="size-4" />
@@ -416,7 +404,6 @@ export function AddServiceMenu({
 					environmentId={environmentId}
 					environmentName={environmentName}
 					onClose={closeDialog}
-					onCloseAutoFocus={restoreServiceTrigger}
 					disabled={disabled}
 					disabledReason={disabledReason}
 				/>
@@ -431,7 +418,7 @@ export function AddServiceMenu({
 					}
 				}}
 			>
-				<DialogContent className="sm:max-w-md" onCloseAutoFocus={restoreServiceTrigger}>
+				<DialogContent className="sm:max-w-md">
 					<DialogHeader>
 						<DialogTitle>{dialogTitle}</DialogTitle>
 						<DialogDescription>
@@ -449,8 +436,8 @@ export function AddServiceMenu({
 						}}
 						className="flex flex-col gap-4"
 					>
-						<Field>
-							<FieldLabel htmlFor="service-name">Name</FieldLabel>
+						<div className="flex flex-col gap-2">
+							<Label htmlFor="service-name">Name</Label>
 							<Input
 								id="service-name"
 								placeholder="my-service"
@@ -458,11 +445,11 @@ export function AddServiceMenu({
 								onChange={(event) => setName(event.target.value)}
 								autoFocus
 							/>
-						</Field>
+						</div>
 						{dialog === "application" && (
 							<>
-								<Field>
-									<FieldLabel htmlFor="service-source">Source</FieldLabel>
+								<div className="flex flex-col gap-2">
+									<Label htmlFor="service-source">Source</Label>
 									<Select
 										value={sourceKind}
 										onValueChange={(value) => setSourceKind(value as SourceKind)}
@@ -476,10 +463,10 @@ export function AddServiceMenu({
 											<SelectItem value="later">Set up later</SelectItem>
 										</SelectContent>
 									</Select>
-								</Field>
+								</div>
 								{sourceKind === "docker" && (
-									<Field>
-										<FieldLabel htmlFor="service-image">Docker image</FieldLabel>
+									<div className="flex flex-col gap-2">
+										<Label htmlFor="service-image">Docker image</Label>
 										<Input
 											id="service-image"
 											placeholder="nginx:alpine"
@@ -487,12 +474,12 @@ export function AddServiceMenu({
 											onChange={(event) => setDockerImage(event.target.value)}
 											autoComplete="off"
 										/>
-									</Field>
+									</div>
 								)}
 								{sourceKind === "git" && (
 									<>
-										<Field>
-											<FieldLabel htmlFor="service-git-url">Repository URL</FieldLabel>
+										<div className="flex flex-col gap-2">
+											<Label htmlFor="service-git-url">Repository URL</Label>
 											<Input
 												id="service-git-url"
 												placeholder="https://github.com/user/repo.git"
@@ -500,9 +487,9 @@ export function AddServiceMenu({
 												onChange={(event) => setGitUrl(event.target.value)}
 												autoComplete="off"
 											/>
-										</Field>
-										<Field>
-											<FieldLabel htmlFor="service-git-branch">Branch</FieldLabel>
+										</div>
+										<div className="flex flex-col gap-2">
+											<Label htmlFor="service-git-branch">Branch</Label>
 											<Input
 												id="service-git-branch"
 												placeholder="main"
@@ -514,15 +501,15 @@ export function AddServiceMenu({
 												A repository behind a connected provider (private repos, pull-request
 												previews) is picked on the service's General tab instead.
 											</p>
-										</Field>
+										</div>
 									</>
 								)}
 							</>
 						)}
 						{dialog === "upstream" && (
 							<>
-								<Field>
-									<FieldLabel htmlFor="upstream-target-url">Target URL</FieldLabel>
+								<div className="flex flex-col gap-2">
+									<Label htmlFor="upstream-target-url">Target URL</Label>
 									<Input
 										id="upstream-target-url"
 										placeholder="https://old-host.example.com"
@@ -535,7 +522,7 @@ export function AddServiceMenu({
 										are refused; a LAN address needs private egress enabled by the instance admin.{" "}
 										<HelpLink slug="domains" />
 									</p>
-								</Field>
+								</div>
 								<div className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5">
 									<div>
 										<Label htmlFor="upstream-pass-host">Pass the public Host header</Label>
@@ -553,8 +540,8 @@ export function AddServiceMenu({
 							</>
 						)}
 						{(dialog === "application" || dialog === "compose" || dialog === "upstream") && (
-							<Field>
-								<FieldLabel htmlFor="service-description">Description</FieldLabel>
+							<div className="flex flex-col gap-2">
+								<Label htmlFor="service-description">Description</Label>
 								<Textarea
 									id="service-description"
 									placeholder="Optional description"
@@ -562,12 +549,12 @@ export function AddServiceMenu({
 									onChange={(event) => setDescription(event.target.value)}
 									rows={3}
 								/>
-							</Field>
+							</div>
 						)}
 						{isDatabaseDialog &&
 							DATABASE_CREDENTIAL_FIELDS[dialog as DatabaseType].map((field) => (
-								<Field key={field.key}>
-									<FieldLabel htmlFor={`credential-${field.key}`}>{field.label}</FieldLabel>
+								<div key={field.key} className="flex flex-col gap-2">
+									<Label htmlFor={`credential-${field.key}`}>{field.label}</Label>
 									<Input
 										id={`credential-${field.key}`}
 										placeholder={field.secret ? "Auto-generated" : slugify(name).replace(/-/g, "_")}
@@ -580,7 +567,7 @@ export function AddServiceMenu({
 										}
 										autoComplete="off"
 									/>
-								</Field>
+								</div>
 							))}
 						<DialogFooter>
 							<Button
@@ -601,7 +588,7 @@ export function AddServiceMenu({
 					if (!open) setCreatedDatabase(null);
 				}}
 			>
-				<DialogContent className="sm:max-w-md" onCloseAutoFocus={restoreServiceTrigger}>
+				<DialogContent className="sm:max-w-md">
 					<DialogHeader>
 						<DialogTitle>
 							{createdDatabase

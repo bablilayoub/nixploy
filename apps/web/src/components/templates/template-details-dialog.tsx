@@ -2,10 +2,10 @@
 
 import { useQuery } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
-import { Box, ChevronDown, ExternalLink, Loader2 } from "lucide-react";
+import { Box, ExternalLink, Loader2 } from "lucide-react";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
 	Dialog,
 	DialogContent,
@@ -16,15 +16,6 @@ import {
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-	Table,
-	TableBody,
-	TableCaption,
-	TableCell,
-	TableHead,
-	TableHeader,
-	TableRow,
-} from "@/components/ui/table";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
@@ -36,22 +27,25 @@ type TemplateDetails = inferRouterOutputs<AppRouter>["template"]["one"];
 
 function LinkChip({ href, label }: { href: string; label: string }) {
 	return (
-		<Button asChild variant="outline" size="sm">
-			<a href={href} target="_blank" rel="noreferrer">
-				{label}
-				<ExternalLink className="size-3" />
-			</a>
-		</Button>
+		<a
+			href={href}
+			target="_blank"
+			rel="noreferrer"
+			className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+		>
+			{label}
+			<ExternalLink className="size-3" />
+		</a>
 	);
 }
 
 function ServiceCard({ service }: { service: TemplateDetails["services"][number] }) {
 	return (
-		<div className="flex min-w-0 flex-col gap-2 rounded-md border p-3">
-			<div className="flex flex-wrap items-center justify-between gap-2">
-				<div className="flex min-w-0 items-center gap-2">
+		<div className="flex flex-col gap-2 rounded-md border p-3">
+			<div className="flex items-center justify-between gap-2">
+				<div className="flex items-center gap-2">
 					<Box className="size-3.5 text-muted-foreground" />
-					<span className="break-all font-mono text-sm font-medium">{service.name}</span>
+					<span className="font-mono text-sm font-medium">{service.name}</span>
 				</div>
 				{service.isDomainTarget && (
 					<Badge variant="secondary" className="text-xs">
@@ -60,9 +54,7 @@ function ServiceCard({ service }: { service: TemplateDetails["services"][number]
 				)}
 			</div>
 			{service.image ? (
-				<p title={service.image} className="truncate font-mono text-xs text-muted-foreground">
-					{service.image}
-				</p>
+				<p className="truncate font-mono text-xs text-muted-foreground">{service.image}</p>
 			) : (
 				<p className="text-xs text-muted-foreground">No image (build context)</p>
 			)}
@@ -81,11 +73,7 @@ function ServiceCard({ service }: { service: TemplateDetails["services"][number]
 					<span className="text-xs font-medium text-muted-foreground">Volumes</span>
 					<ul className="space-y-0.5">
 						{service.volumes.map((volume) => (
-							<li
-								key={volume}
-								title={volume}
-								className="truncate font-mono text-xs text-muted-foreground"
-							>
+							<li key={volume} className="truncate font-mono text-xs text-muted-foreground">
 								{volume}
 							</li>
 						))}
@@ -95,11 +83,7 @@ function ServiceCard({ service }: { service: TemplateDetails["services"][number]
 			{service.envKeys.length > 0 && (
 				<div className="flex flex-wrap gap-1">
 					{service.envKeys.map((key) => (
-						<Badge
-							key={key}
-							variant="outline"
-							className="max-w-full break-all whitespace-normal font-mono text-xs"
-						>
+						<Badge key={key} variant="outline" className="font-mono text-xs">
 							{key}
 						</Badge>
 					))}
@@ -127,7 +111,7 @@ function DetailsBody({
 
 	return (
 		<>
-			<div className="flex min-w-0 flex-col items-start gap-3 sm:flex-row">
+			<div className="flex items-start gap-3">
 				<TemplateLogo name={template.name} logo={template.logo} className="size-10" />
 				<div className="flex min-w-0 flex-col gap-1">
 					<p className="text-sm text-muted-foreground">{template.description}</p>
@@ -196,7 +180,7 @@ function DetailsBody({
 			<Separator />
 
 			<div className="flex flex-col gap-2">
-				<div className="flex flex-wrap items-center justify-between gap-3">
+				<div className="flex items-center justify-between">
 					<h3 className="text-sm font-medium">
 						Services{" "}
 						<span className="font-normal text-muted-foreground">({template.services.length})</span>
@@ -208,7 +192,7 @@ function DetailsBody({
 						</span>
 					</p>
 				</div>
-				<div className="grid grid-cols-[minmax(0,1fr)] gap-2 sm:grid-cols-2">
+				<div className="grid gap-2 sm:grid-cols-2">
 					{template.services.map((service) => (
 						<ServiceCard key={service.name} service={service} />
 					))}
@@ -223,66 +207,44 @@ function DetailsBody({
 							Environment variables{" "}
 							<span className="font-normal text-muted-foreground">({template.env.length})</span>
 						</h3>
-						<div className="rounded-lg border bg-card">
-							<Table className="w-full min-w-[30rem] text-left text-sm">
-								<TableCaption className="sr-only">Template environment variables</TableCaption>
-								<TableHeader className="border-b bg-muted text-xs text-muted-foreground">
-									<TableRow>
-										<TableHead scope="col" className="px-3 py-3 font-medium">
-											Key
-										</TableHead>
-										<TableHead scope="col" className="px-3 py-3 font-medium">
-											Default
-										</TableHead>
-										<TableHead scope="col" className="px-3 py-3 font-medium">
-											Description
-										</TableHead>
-									</TableRow>
-								</TableHeader>
-								<TableBody>
+						<div className="overflow-hidden rounded-md border">
+							<table className="w-full text-left text-sm">
+								<thead className="border-b bg-secondary/40 text-xs text-muted-foreground">
+									<tr>
+										<th className="px-3 py-2 font-medium">Key</th>
+										<th className="px-3 py-2 font-medium">Default</th>
+										<th className="px-3 py-2 font-medium">Description</th>
+									</tr>
+								</thead>
+								<tbody>
 									{template.env.map((entry) => (
-										<TableRow key={entry.key} className="border-b last:border-0">
-											<TableCell className="whitespace-normal px-3 py-2 align-top font-mono text-xs">
-												{entry.key}
-											</TableCell>
-											<TableCell className="whitespace-normal px-3 py-2 align-top font-mono text-xs text-muted-foreground">
+										<tr key={entry.key} className="border-b last:border-0">
+											<td className="px-3 py-2 align-top font-mono text-xs">{entry.key}</td>
+											<td className="px-3 py-2 align-top font-mono text-xs text-muted-foreground">
 												{entry.default.includes("{{generateSecret}}")
 													? "auto-generated"
 													: entry.default || "—"}
-											</TableCell>
-											<TableCell className="whitespace-normal px-3 py-2 align-top text-xs text-muted-foreground">
+											</td>
+											<td className="px-3 py-2 align-top text-xs text-muted-foreground">
 												{entry.description}
-											</TableCell>
-										</TableRow>
+											</td>
+										</tr>
 									))}
-								</TableBody>
-							</Table>
+								</tbody>
+							</table>
 						</div>
 					</div>
 				</>
 			)}
 
-			<Collapsible className="rounded-md border">
-				<CollapsibleTrigger asChild>
-					<Button
-						type="button"
-						variant="ghost"
-						size="sm"
-						className="group cursor-pointer px-3 py-2 text-xs leading-relaxed font-medium text-muted-foreground hover:text-foreground"
-					>
-						View compose file
-						<ChevronDown
-							aria-hidden="true"
-							className="size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-180"
-						/>
-					</Button>
-				</CollapsibleTrigger>
-				<CollapsibleContent forceMount className="data-[state=closed]:hidden">
-					<pre className="max-h-64 overflow-auto border-t bg-secondary/30 p-3 font-mono text-xs leading-relaxed">
-						{template.compose}
-					</pre>
-				</CollapsibleContent>
-			</Collapsible>
+			<details className="rounded-md border">
+				<summary className="cursor-pointer px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+					View compose file
+				</summary>
+				<pre className="max-h-64 overflow-auto border-t bg-secondary/30 p-3 font-mono text-xs leading-relaxed">
+					{template.compose}
+				</pre>
+			</details>
 
 			<DialogFooter className="items-center gap-3">
 				{deployBlocker ? (
