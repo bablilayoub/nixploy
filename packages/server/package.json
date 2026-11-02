@@ -45,7 +45,7 @@
 		"node-schedule": "^2.1.1",
 		"nodemailer": "^10.0.10",
 		"octokit": "^5.0.5",
-		"postgres": "^3.4.5",
+		"postgres": "^4.0.0",
 		"simple-git": "^4.0.2",
 		"ssh2": "^1.16.0",
 		"superjson": "^2.2.6",
