@@ -48,11 +48,11 @@
 		"prepublishOnly": "pnpm run typecheck && pnpm run build"
 	},
 	"dependencies": {
-		"commander": "^15.0.0"
+		"commander": "^15.1.0"
 	},
 	"devDependencies": {
-		"@types/node": "^22.20.2",
+		"@types/node": "^22.20.5",
 		"typescript": "^7.0.2",
-		"vitest": "^5.0.0"
+		"vitest": "^5.1.1"
 	}
 }
